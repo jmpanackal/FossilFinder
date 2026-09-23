@@ -5,9 +5,8 @@
 [resource]
 script = ExtResource("1_foss")
 name = "Triceratops Skull"
-piece_id = "triceratops_skull"
 shape_width = 4
 shape = PackedInt32Array(0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0)
 min_layer = 7
 max_layer = 15
-base_value = 90
+base_value = 100

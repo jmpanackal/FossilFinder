@@ -2,7 +2,6 @@ class_name FossilData
 extends Resource
 
 @export var name: String = "Fossil"
-@export var piece_id: String = ""
 @export var shape_width: int = 4
 @export var shape: PackedInt32Array = PackedInt32Array()
 @export var min_layer: int = 6
