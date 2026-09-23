@@ -1,0 +1,60 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://main.gd" id="1_main"]
+[ext_resource type="Script" path="res://dig_site.gd" id="2_dig"]
+[ext_resource type="Script" path="res://hud.gd" id="3_hud"]
+[ext_resource type="Script" path="res://summary.gd" id="4_sum"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+
+[node name="DigSite" type="Node2D" parent="."]
+script = ExtResource("2_dig")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("3_hud")
+
+[node name="Summary" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("4_sum")
+
+[node name="ExtractFlash" type="CanvasLayer" parent="."]
+layer = 15
+visible = false
+
+[node name="Flash" type="ColorRect" parent="ExtractFlash"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 1, 1, 0.45)
+
+[node name="ExtractLabel" type="Label" parent="ExtractFlash"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -70.0
+offset_right = 260.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(0.15, 0.1, 0.06, 1)
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+layer = 30
+visible = false
+
+[node name="DebugLabel" type="Label" parent="DebugOverlay"]
+offset_left = 16.0
+offset_top = 64.0
+offset_right = 620.0
+offset_bottom = 280.0
+theme_override_colors/font_color = Color(0.85, 1, 0.7, 1)
+theme_override_font_sizes/font_size = 14
