@@ -92,10 +92,10 @@ func _ready() -> void:
 	extras.add_child(_small_nav("Upgrades", func() -> void: open_shop.emit()))
 
 
-func show_summary(fossil_pay: int, dirt_pay: int, fossil_line: String, stars: int = 0) -> void:
-	var shift_pay: int = fossil_pay + dirt_pay
+func show_summary(fossil_pay: int, finds_pay: int, fossil_line: String, stars: int = 0) -> void:
+	var shift_pay: int = fossil_pay + finds_pay
 	_pay.text = pay_headline(shift_pay)
-	_breakdown.text = pay_breakdown(fossil_pay, dirt_pay)
+	_breakdown.text = pay_breakdown(fossil_pay, finds_pay)
 	_breakdown.visible = not _breakdown.text.is_empty()
 	_body.text = fossil_line
 	if _stars.has_method("set_rating"):
@@ -109,13 +109,13 @@ static func pay_headline(shift_pay: int) -> String:
 	return "$%d" % shift_pay
 
 
-static func pay_breakdown(fossil_pay: int, dirt_pay: int) -> String:
-	if fossil_pay > 0 and dirt_pay > 0:
-		return "Fossil $%d · dirt $%d" % [fossil_pay, dirt_pay]
+static func pay_breakdown(fossil_pay: int, finds_pay: int) -> String:
+	if fossil_pay > 0 and finds_pay > 0:
+		return "Finds $%d · Fossils $%d" % [finds_pay, fossil_pay]
 	if fossil_pay > 0:
-		return "Fossil $%d" % fossil_pay
-	if dirt_pay > 0:
-		return "dirt $%d" % dirt_pay
+		return "Fossils $%d" % fossil_pay
+	if finds_pay > 0:
+		return "Finds $%d" % finds_pay
 	return ""
 
 

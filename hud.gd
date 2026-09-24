@@ -12,8 +12,10 @@ const ToolIcon := preload("res://tool_icon.gd")
 
 var _clock
 var _money: Label
+var _pouch: Control
 var _income: Label
 var _money_flash: float = 0.0
+var _pouch_pop: float = 0.0
 var _shown_money: int = -1
 var _chip: Button
 var _goal_key: String = ""
@@ -120,12 +122,23 @@ func _ready() -> void:
 	)
 	root.add_child(finish)
 
+	_pouch = Control.new()
+	_pouch.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_pouch.offset_left = 16
+	_pouch.offset_top = 20
+	_pouch.offset_right = 48
+	_pouch.offset_bottom = 58
+	_pouch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pouch.pivot_offset = Vector2(16, 19)
+	_pouch.draw.connect(_draw_pouch)
+	root.add_child(_pouch)
+
 	_money = Label.new()
 	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_money.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_money.offset_left = 24
-	_money.offset_right = 280
+	_money.offset_left = 50
+	_money.offset_right = 300
 	_money.offset_top = 22
 	_money.offset_bottom = 70
 	_money.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -273,10 +286,49 @@ func _process(delta: float) -> void:
 		var heat: bool = not shop_id.is_empty() and GameState.can_buy(shop_id)
 		var pulse: float = 0.72 + 0.28 * absf(sin(float(Time.get_ticks_msec()) * 0.008))
 		_chip.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - pulse) if heat else Color(0.82, 0.78, 0.72)
+	if _pouch_pop > 0.0:
+		_pouch_pop = maxf(0.0, _pouch_pop - delta * 5.5)
+		if _pouch != null:
+			var squash: float = 1.0 + _pouch_pop * 0.22
+			_pouch.scale = Vector2(squash, 1.0 + _pouch_pop * 0.1)
+			_pouch.queue_redraw()
+	elif _pouch != null and _pouch.scale != Vector2.ONE:
+		_pouch.scale = Vector2.ONE
 	if _money_flash <= 0.0:
 		return
 	_money_flash = maxf(0.0, _money_flash - delta * 4.0)
 	_money.modulate = Color("FFF4D2").lerp(Color.WHITE, 1.0 - _money_flash)
+
+
+func money_catch_pos() -> Vector2:
+	if _pouch != null:
+		return _pouch.global_position + _pouch.size * 0.5
+	if _money != null:
+		return _money.global_position + Vector2(18, 16)
+	return Vector2(40, 40)
+
+
+func catch_loot() -> void:
+	_money_flash = 1.0
+	_pouch_pop = 1.0
+	if _money != null:
+		_money.modulate = Color("FFF6D8")
+	if _pouch != null:
+		_pouch.queue_redraw()
+
+
+func _draw_pouch() -> void:
+	if _pouch == null:
+		return
+	var glow: float = _pouch_pop
+	var body := Color("C47A3A").lerp(Color("FFE08A"), glow * 0.35)
+	var mouth := Color("6B4423")
+	var cord := Color("E4B75A")
+	var center := Vector2(16, 22)
+	_pouch.draw_circle(center + Vector2(0, 2), 11.0, mouth)
+	_pouch.draw_circle(center + Vector2(0, 3), 9.0, body)
+	_pouch.draw_arc(center + Vector2(0, -3), 6.5, PI + 0.15, TAU - 0.15, 12, cord, 2.0)
+	_pouch.draw_circle(center + Vector2(0, -8), 2.2, cord)
 
 
 func _on_money_changed() -> void:

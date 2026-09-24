@@ -2,6 +2,9 @@ extends Node2D
 
 const FloatingTextScene := preload("res://floating_text.gd")
 const RevealPing := preload("res://reveal_ping.gd")
+const LootFlyScene := preload("res://loot_fly.gd")
+const Matrix := preload("res://matrix_find.gd")
+const Lucky := preload("res://lucky_strike.gd")
 
 @onready var camera: Camera2D = $Camera2D
 @onready var dig_site = $DigSite
@@ -21,7 +24,7 @@ var _timer_armed: bool = false
 var _last_fossil_line: String = ""
 var _last_fossil_stars: int = 0
 var _round_finds: Array = []
-var _round_dirt_pay: int = 0
+var _round_finds_pay: int = 0
 var _round_fossil_pay: int = 0
 var _pending_tool_notices: Dictionary = {}
 var _boosted_tools: Array[int] = []
@@ -62,7 +65,7 @@ func start_round() -> void:
 	show_screen("dig")
 	dig_site.input_enabled = true
 	_round_finds.clear()
-	_round_dirt_pay = 0
+	_round_finds_pay = 0
 	_round_fossil_pay = 0
 	_last_fossil_line = ""
 	_last_fossil_stars = 0
@@ -182,13 +185,30 @@ func _end_round() -> void:
 func _show_summary() -> void:
 	if dig_site != null:
 		dig_site.visible = false
-	summary.show_summary(_round_fossil_pay, _round_dirt_pay, _last_fossil_line, _last_fossil_stars)
+	summary.show_summary(_round_fossil_pay, _round_finds_pay, _last_fossil_line, _last_fossil_stars)
 
 
 func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 	GameState.add_money(amount)
-	_round_dirt_pay += amount
-	_spawn_float("+$%d" % amount, world_pos, Color("E4B75A"))
+	_round_finds_pay += amount
+	var juice: Array = []
+	if dig_site.has_method("take_matrix_juice"):
+		juice = dig_site.take_matrix_juice()
+	if juice.is_empty():
+		_spawn_float("+$%d" % amount, world_pos, Color("E4B75A"))
+		return
+	for i in juice.size():
+		var find: Dictionary = juice[i]
+		var origin: Vector2 = _find_origin(find, world_pos)
+		var offset := Vector2((float(i) - float(juice.size() - 1) * 0.5) * 18.0, float(i) * -10.0)
+		var color := Color("E4B75A")
+		match int(find.get("rarity", 0)):
+			1:
+				color = Color("F0D078")
+			2:
+				color = Color("FFE08A")
+		_spawn_float(Matrix.float_text(find), origin + offset, color)
+		_spawn_loot_fly(Matrix.icon_kind(find), origin, float(i) * 0.045, int(find.get("rarity", 0)))
 
 
 func _on_fossil_exposed(world_pos: Vector2, first: bool) -> void:
@@ -270,8 +290,10 @@ func _arm_upgrade_notices() -> void:
 
 func _on_lucky_struck(amount: int, world_pos: Vector2) -> void:
 	GameState.add_money(amount)
-	_spawn_float("+$%d" % amount, world_pos, Color("FFE08A"), 28)
-	toast.show_toast("Lucky strike!", "+$%d" % amount)
+	_round_finds_pay += amount
+	_spawn_float(Lucky.float_text(amount), world_pos, Color("FFE08A"), 28)
+	_spawn_loot_fly(Lucky.icon_kind(), world_pos, 0.0, 2)
+	toast.show_toast(Lucky.toast_title(), Lucky.float_text(amount))
 	Sfx.play("unlock")
 
 
@@ -295,6 +317,33 @@ func _on_tool_used(tool: int) -> void:
 	_spawn_float(title, pit_top, Color("FFE08A"), 26)
 	if hud.has_method("flash_upgraded_tools"):
 		hud.flash_upgraded_tools([tool])
+
+
+func _find_origin(find: Dictionary, fallback: Vector2) -> Vector2:
+	var raw: Variant = find.get("origin", fallback)
+	if raw is Vector2:
+		return raw
+	if raw is Vector2i:
+		return Vector2(raw)
+	return fallback
+
+
+func _world_to_hud(world_pos: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform() * world_pos
+
+
+func _spawn_loot_fly(kind: String, world_pos: Vector2, delay: float = 0.0, rarity: int = 0) -> void:
+	var dest := Vector2(40, 40)
+	if hud != null and hud.has_method("money_catch_pos"):
+		dest = hud.money_catch_pos()
+	var fly = LootFlyScene.new()
+	fly.setup(kind, _world_to_hud(world_pos), dest, delay, rarity)
+	if hud != null and hud.has_method("catch_loot"):
+		fly.arrived.connect(func() -> void: hud.catch_loot())
+	if hud != null:
+		hud.add_child(fly)
+	else:
+		add_child(fly)
 
 
 func _spawn_float(text: String, world_pos: Vector2, color: Color, font_size: int = 16) -> void:

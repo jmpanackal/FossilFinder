@@ -43,12 +43,12 @@ var catalog: Array[Dictionary] = [
 	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting the bone goes faster.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 220, "scale": 1.7, "max": 5, "requires": "pick_click"},
 	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Even faster dusting once the first brush is maxed.", "cost": 800, "scale": 1.8, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 55, "scale": 1.65, "max": 4},
-	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Dirt layers pay more.", "cost": 30, "scale": 1.65, "max": 5},
+	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more.", "cost": 30, "scale": 1.65, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 65, "scale": 1.85, "max": 3},
 	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Scraps", "desc": "More scraps can hide in the pit.", "unlock_name": "Scattered Scraps", "unlock_desc": "A second small bone can hide in the pit.", "unlock_action": "Unlock", "cost": 110, "scale": 1.75, "max": 2},
 	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra scraps too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 480, "scale": 1.8, "max": 3},
 	{"id": "site_expand", "cat": "Site", "tier": 2, "name": "Open Ground", "desc": "Stretch the claim much farther.", "cost": 520, "scale": 1.85, "max": 5},
-	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Clay and rock pay more.", "cost": 280, "scale": 1.7, "max": 6},
+	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Nodules and crystals in stone pay more.", "cost": 280, "scale": 1.7, "max": 6},
 	{"id": "money_mult", "cat": "Site", "tier": 2, "name": "Keen Eye", "desc": "Everything you dig is worth more.", "cost": 360, "scale": 1.75, "max": 6},
 	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 340, "scale": 1.75, "max": 6},
 	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
@@ -79,6 +79,8 @@ func _ready() -> void:
 		"exhibit_flat_income": 0.0,
 		"dirt_money_bonus": 0.0,
 		"rock_money_bonus": 0.0,
+		"matrix_dirt_chance": 0.94,
+		"matrix_stone_chance": 0.42,
 		"fossil_value_mult": 1.0,
 		"integrity_hit_cost": Tuning.integrity_hit_cost,
 	}
@@ -548,7 +550,7 @@ func upgrade_feel_line(id: String) -> String:
 		"round_time":
 			return "Clock starts fuller"
 		"dirt_pay":
-			return "Dirt pays more"
+			return "Richer matrix"
 		"site_size":
 			return "The pit is bigger"
 		"scrap_bed":
@@ -560,7 +562,7 @@ func upgrade_feel_line(id: String) -> String:
 		"passive_miner":
 			return "A helper is waiting"
 		"rock_pay":
-			return "Stone pays more"
+			return "Richer nodules"
 		"money_mult":
 			return "Everything is worth more"
 		"fossil_value":
@@ -625,6 +627,8 @@ func apply_upgrades() -> void:
 	Tuning.money_mult = float(_bases["money_mult"]) + 0.06 * _lv("money_mult")
 	Tuning.dirt_money_bonus = 0.35 * _lv("dirt_pay")
 	Tuning.rock_money_bonus = 1.1 * _lv("rock_pay")
+	Tuning.matrix_dirt_chance = float(_bases["matrix_dirt_chance"]) + 0.012 * _lv("dirt_pay")
+	Tuning.matrix_stone_chance = float(_bases["matrix_stone_chance"]) + 0.055 * _lv("rock_pay")
 	Tuning.fossil_value_mult = 1.0 + 0.08 * _lv("fossil_value")
 	Tuning.exhibit_flat_income = 0.06 * _lv("glass_case") + 0.04 * _lv("benches") + 0.10 * _lv("crowds")
 	Tuning.dirty_income_factor = 1.0 + 0.12 * _lv("restoration")

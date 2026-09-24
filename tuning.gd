@@ -146,6 +146,8 @@ var exhibit_flat_income: float = 0.0
 var duplicate_cash: float = 0.4
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0
+var matrix_dirt_chance: float = 0.94
+var matrix_stone_chance: float = 0.42
 var fossil_value_mult: float = 1.0
 var spotlight_mult: float = 2.0
 var unveil_burst_clean: int = 40
@@ -207,6 +209,7 @@ func hp_for_layer(layer: int) -> float:
 
 
 func money_for_layer(layer: int) -> int:
+	## Expected matrix-find value for this layer, not a dirt/rock sale.
 	var material := material_at_layer(layer)
 	var amount := float(material_money[material])
 	if material <= MAT_PACKED:

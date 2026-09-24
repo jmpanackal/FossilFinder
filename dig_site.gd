@@ -3,6 +3,7 @@ extends Node2D
 
 const FossilDataScript := preload("res://fossil_data.gd")
 const Lucky := preload("res://lucky_strike.gd")
+const Matrix := preload("res://matrix_find.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
@@ -56,6 +57,19 @@ var _lucky_flee: float = 0.0
 var _lucky_flee_cell := Vector2i(-1, -1)
 var _grid_dirty: bool = true
 var _fx: _FxOverlay
+var _punches: Dictionary = {}
+var _matrix_rng: RandomNumberGenerator
+var _strike_finds: Array = []
+var _matrix_juice: Array = []
+var _pending: Array = []
+
+const PUNCH_DIRT := 0
+const PUNCH_FIRM := 1
+const PUNCH_BONE := 2
+const PUNCH_ECHO_NEAR := 0.38
+const PUNCH_ECHO_FAR := 0.07
+const PUNCH_ECHO_TIME := 0.52
+const PUNCH_ECHO_TIME_FAR := 0.28
 
 
 func _ready() -> void:
@@ -124,6 +138,13 @@ func start_round() -> void:
 	_boost_flash = 0.0
 	_boosted_tools.clear()
 	_reset_lucky()
+	_punches.clear()
+	_strike_finds.clear()
+	_matrix_juice.clear()
+	if _matrix_rng == null:
+		_matrix_rng = RandomNumberGenerator.new()
+	_matrix_rng.randomize()
+	_seed_pending()
 	_grid_dirty = true
 	queue_redraw()
 
@@ -220,6 +241,45 @@ func lucky_is_active() -> bool:
 	return _lucky_cell.x >= 0
 
 
+func take_matrix_juice() -> Array:
+	var juice: Array = _matrix_juice.duplicate()
+	_matrix_juice.clear()
+	return juice
+
+
+func pending_find(cell: Vector2i) -> Dictionary:
+	if _pending.is_empty() or not _in_bounds(cell):
+		return {}
+	var raw: Variant = _pending[cell.x][cell.y]
+	if raw is Dictionary:
+		return (raw as Dictionary).duplicate()
+	return {}
+
+
+func _seed_pending() -> void:
+	_pending.clear()
+	_pending.resize(Tuning.grid_w)
+	for x in Tuning.grid_w:
+		var col: Array = []
+		col.resize(Tuning.grid_h)
+		for y in Tuning.grid_h:
+			var layer: int = 0
+			if not _top_layer.is_empty() and x < _top_layer.size() and y < _top_layer[x].size():
+				layer = int(_top_layer[x][y])
+			col[y] = _roll_matrix(layer)
+		_pending[x] = col
+
+
+func _refresh_pending(cell: Vector2i) -> void:
+	if _pending.is_empty() or not _in_bounds(cell):
+		return
+	var layer: int = int(_top_layer[cell.x][cell.y])
+	if layer >= Tuning.layer_count:
+		_pending[cell.x][cell.y] = {}
+		return
+	_pending[cell.x][cell.y] = _roll_matrix(layer)
+
+
 func _draw_lucky() -> void:
 	var cell := _lucky_cell
 	var pulse: float = 1.0
@@ -238,11 +298,11 @@ func _draw_lucky() -> void:
 	draw_rect(rect.grow(grow), amber)
 	draw_rect(rect, Color("FFCC44", 0.38 * pulse))
 	draw_rect(rect.grow(2.0 * pulse), gold, false, 2.5 + beat * 2.0)
-	var flake: float = minf(rect.size.x, rect.size.y) * (0.16 + beat * 0.04)
+	var flake: float = minf(rect.size.x, rect.size.y) * (0.10 + beat * 0.04)
 	var center := rect.get_center()
 	draw_circle(center, flake, Color("FFF6D0", pulse))
-	draw_circle(center + Vector2(-flake * 0.75, flake * 0.2), flake * 0.42, Color("FFB020", pulse))
-	draw_circle(center + Vector2(flake * 0.75, flake * 0.2), flake * 0.42, Color("FFB020", pulse))
+	draw_line(center + Vector2(-flake * 2.4, 0), center + Vector2(flake * 2.4, 0), gold, 1.6)
+	draw_line(center + Vector2(0, -flake * 2.4), center + Vector2(0, flake * 2.4), gold, 1.6)
 	draw_arc(center, flake * 1.8, 0.0, TAU, 22, Color("FFE08A", 0.85 * pulse), 2.0)
 
 
@@ -483,6 +543,7 @@ func _process(delta: float) -> void:
 	if _boost_flash > 0.0:
 		_boost_flash = maxf(0.0, _boost_flash - delta * 1.8)
 	_tick_lucky(delta)
+	_tick_punches(delta)
 	if not input_enabled:
 		_redraw_grid_if_dirty()
 		return
@@ -647,12 +708,14 @@ func _strike_current(is_click: bool) -> void:
 
 
 func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
+	_strike_finds.clear()
 	if not _in_bounds(center):
 		return
 	var heard := false
 	var juice_layer: int = _top_layer[center.x][center.y]
 	var struck: int = 0
 	var payout: int = 0
+	var punch_hits: Array[Vector3i] = []
 	var radius: float = 0.0
 	if not _using_hands() and not GameState.precision_on:
 		radius = Tuning.shovel_radius
@@ -672,16 +735,19 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 		var gained: int = _damage_cell(cell, Tuning.TOOL_SHOVEL, damage)
 		if gained < 0:
 			continue
+		punch_hits.append(Vector3i(cell.x, cell.y, _punch_kind_for_layer(layer)))
 		payout += gained
 		struck += 1
 		if not heard:
 			juice_layer = layer
 			heard = true
+	_begin_strike_punches(center, punch_hits)
 	_finish_strike(center, juice_layer, payout, struck, heard)
 	_mark_tool_used(current_tool, cell_center(center))
 
 
 func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void:
+	_strike_finds.clear()
 	if not _in_bounds(center):
 		return
 	var heard := false
@@ -701,6 +767,7 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 	var juice_layer: int = _top_layer[center.x][center.y]
 	var struck: int = 0
 	var payout: int = 0
+	var punch_hits: Array[Vector3i] = []
 	for offset in offsets:
 		var cell: Vector2i = center + offset
 		if not _in_bounds(cell):
@@ -717,11 +784,13 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 		var gained: int = _damage_cell(cell, Tuning.TOOL_PICKAXE, damage)
 		if gained < 0:
 			continue
+		punch_hits.append(Vector3i(cell.x, cell.y, _punch_kind_for_layer(layer)))
 		payout += gained
 		struck += 1
 		if not heard:
 			juice_layer = layer
 			heard = true
+	_begin_strike_punches(center, punch_hits)
 	_finish_strike(center, juice_layer, payout, struck, heard)
 	pickaxe_struck.emit()
 	_mark_tool_used(Tuning.TOOL_PICKAXE, cell_center(center))
@@ -797,12 +866,24 @@ func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0) -> i
 
 func _clear_layer(cell: Vector2i) -> int:
 	var layer: int = _top_layer[cell.x][cell.y]
-	var amount := Tuning.money_for_layer(layer)
+	var find: Dictionary = pending_find(cell)
 	_top_layer[cell.x][cell.y] = layer + 1
 	if _top_layer[cell.x][cell.y] > deepest_layer:
 		deepest_layer = _top_layer[cell.x][cell.y]
+	_refresh_pending(cell)
 	_grid_dirty = true
-	return amount
+	if find.is_empty():
+		return 0
+	find["origin"] = cell_center(cell)
+	_strike_finds.append(find)
+	return int(find.get("amount", 0))
+
+
+func _roll_matrix(layer: int) -> Dictionary:
+	if _matrix_rng == null:
+		_matrix_rng = RandomNumberGenerator.new()
+		_matrix_rng.randomize()
+	return Matrix.roll(_matrix_rng, layer)
 
 
 func _reveal_fossil_cell(cell: Vector2i) -> void:
@@ -864,6 +945,7 @@ func _hit_fossil(cell: Vector2i) -> void:
 		return
 	find["integrity"] = maxf(Tuning.integrity_floor, float(find["integrity"]) - cost)
 	_focus_find(find)
+	_begin_punch(cell, PUNCH_BONE)
 	_bone_pulse = maxf(_bone_pulse, 0.7)
 	_burst(cell_center(cell), int(find["layer"]))
 	Sfx.play("crack")
@@ -917,6 +999,8 @@ func _play_hit(layer: int) -> void:
 
 
 func _finish_strike(center: Vector2i, juice_layer: int, payout: int, struck: int, play_sfx: bool) -> void:
+	_matrix_juice = Matrix.batch_display(_strike_finds)
+	_strike_finds.clear()
 	if struck > 0:
 		_burst(cell_center(center), juice_layer, struck > 1)
 	if play_sfx:
@@ -928,8 +1012,125 @@ func _finish_strike(center: Vector2i, juice_layer: int, payout: int, struck: int
 		_grid_dirty = true
 
 
+func _begin_strike_punches(center: Vector2i, hits: Array[Vector3i]) -> void:
+	var n: int = hits.size()
+	if n <= 0:
+		return
+	var aim_weight: float = 1.0 + minf(0.16, maxf(0.0, float(n - 1)) * 0.018)
+	var reach: float = 0.0
+	for rec in hits:
+		var cell := Vector2i(rec.x, rec.y)
+		reach = maxf(reach, Vector2(cell).distance_to(Vector2(center)))
+	for rec in hits:
+		var cell := Vector2i(rec.x, rec.y)
+		var kind: int = rec.z
+		if cell == center:
+			_begin_punch(cell, kind, aim_weight)
+		else:
+			_begin_punch(cell, kind, _punch_echo_weight(center, cell, reach))
+
+
+func _punch_echo_weight(center: Vector2i, cell: Vector2i, reach: float) -> float:
+	var dist: float = Vector2(cell).distance_to(Vector2(center))
+	var span: float = maxf(reach - 1.0, 0.001)
+	var t: float = clampf((dist - 1.0) / span, 0.0, 1.0)
+	var eased: float = t * t * (3.0 - 2.0 * t)
+	return lerpf(PUNCH_ECHO_NEAR, PUNCH_ECHO_FAR, eased)
+
+
+func _begin_punch(cell: Vector2i, kind: int, weight: float = 1.0) -> void:
+	if not _in_bounds(cell):
+		return
+	_punches[cell] = Vector3(0.0, float(kind), weight)
+	_grid_dirty = true
+
+
+func _tick_punches(delta: float) -> void:
+	if _punches.is_empty():
+		return
+	var stale: Array[Vector2i] = []
+	for cell in _punches:
+		var rec: Vector3 = _punches[cell]
+		rec.x += delta
+		if rec.x >= _punch_duration(int(rec.y), rec.z):
+			stale.append(cell)
+		else:
+			_punches[cell] = rec
+	for cell in stale:
+		_punches.erase(cell)
+	_grid_dirty = true
+
+
+func _punch_kind_for_layer(layer: int) -> int:
+	if Tuning.material_at_layer(layer) == Tuning.MAT_LOOSE:
+		return PUNCH_DIRT
+	return PUNCH_FIRM
+
+
+func _punch_duration(kind: int, weight: float = 1.0) -> float:
+	var base: float = 0.11
+	match kind:
+		PUNCH_BONE:
+			base = 0.065
+		PUNCH_FIRM:
+			base = 0.09
+	if weight >= 0.99:
+		return base
+	var u: float = clampf(
+		(weight - PUNCH_ECHO_FAR) / maxf(PUNCH_ECHO_NEAR - PUNCH_ECHO_FAR, 0.001),
+		0.0,
+		1.0
+	)
+	return base * lerpf(PUNCH_ECHO_TIME_FAR, PUNCH_ECHO_TIME, u)
+
+
+func _punch_squash(kind: int, weight: float = 1.0) -> Vector2:
+	var squash := Vector2(0.16, 0.22)
+	match kind:
+		PUNCH_BONE:
+			squash = Vector2(0.04, 0.11)
+		PUNCH_FIRM:
+			squash = Vector2(0.07, 0.09)
+	return squash * maxf(weight, 0.0)
+
+
+func _punch_envelope(u: float) -> float:
+	if u <= 0.0 or u >= 1.0:
+		return 0.0
+	if u < 0.22:
+		var rise: float = u / 0.22
+		return 1.0 - (1.0 - rise) * (1.0 - rise)
+	if u < 0.58:
+		var mid: float = (u - 0.22) / 0.36
+		var smooth: float = mid * mid * (3.0 - 2.0 * mid)
+		return lerpf(1.0, -0.2, smooth)
+	var settle: float = (u - 0.58) / 0.42
+	return lerpf(-0.2, 0.0, 1.0 - (1.0 - settle) * (1.0 - settle))
+
+
+func _punch_scale(kind: int, age: float, weight: float = 1.0) -> Vector2:
+	var duration: float = _punch_duration(kind, weight)
+	if age < 0.0 or age >= duration:
+		return Vector2.ONE
+	var env: float = _punch_envelope(age / duration)
+	var squash: Vector2 = _punch_squash(kind, weight)
+	return Vector2(1.0 + squash.x * env, 1.0 - squash.y * env)
+
+
+func _punched_rect(rect: Rect2, cell: Vector2i) -> Rect2:
+	if not _punches.has(cell):
+		return rect
+	var rec: Vector3 = _punches[cell]
+	var punch: Vector2 = _punch_scale(int(rec.y), rec.x, rec.z)
+	if punch == Vector2.ONE:
+		return rect
+	var center: Vector2 = rect.get_center()
+	var size: Vector2 = Vector2(rect.size.x * punch.x, rect.size.y * punch.y)
+	return Rect2(center - size * 0.5, size)
+
+
 func _redraw_grid_if_dirty() -> void:
-	if _grid_dirty or _bone_pulse > 0.0 or _lucky_flee > 0.0 or lucky_is_active():
+	if _grid_dirty or _bone_pulse > 0.0 or _lucky_flee > 0.0 or lucky_is_active() or not _punches.is_empty():
 		_grid_dirty = false
 		queue_redraw()
 
@@ -1014,11 +1215,11 @@ func _draw_chunk() -> void:
 
 
 func _draw_cell_sides(x: int, y: int) -> void:
-	var top := _top_rect(x, y)
+	var top := _punched_rect(_top_rect(x, y), Vector2i(x, y))
 	var face := _cell_face_color(x, y)
 	if y + 1 >= Tuning.grid_h:
 		return
-	var below := _top_rect(x, y + 1)
+	var below := _punched_rect(_top_rect(x, y + 1), Vector2i(x, y + 1))
 	var drop := below.position.y - top.end.y
 	if drop <= Tuning.cell_gap + 1.0:
 		return
@@ -1039,7 +1240,7 @@ func _cell_face_color(x: int, y: int) -> Color:
 
 func _draw_top(x: int, y: int) -> void:
 	var cell := Vector2i(x, y)
-	var rect := _top_rect(x, y)
+	var rect := _punched_rect(_top_rect(x, y), cell)
 	var layer: int = _top_layer[x][y]
 	var color: Color
 	if _is_exposed_fossil(cell):
@@ -1057,6 +1258,8 @@ func _draw_top(x: int, y: int) -> void:
 		edge += float(cleanliness.get(cell, 0.0)) * 0.22
 	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
 	_draw_cracks(rect, cell, layer)
+	if not _is_exposed_fossil(cell) and layer < Tuning.layer_count:
+		_draw_inclusion(rect, cell)
 	if _is_exposed_fossil(cell):
 		_draw_bone_mark(rect, float(cleanliness.get(cell, 0.0)))
 		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
@@ -1067,7 +1270,7 @@ func _draw_bone_pulse() -> void:
 		return
 	var glow := Color("FFF1C4", 0.15 + _bone_pulse * 0.55)
 	for cell in exposed_cells:
-		var rect := _top_rect(cell.x, cell.y).grow(2.0 + _bone_pulse * 3.0)
+		var rect := _punched_rect(_top_rect(cell.x, cell.y), cell).grow(2.0 + _bone_pulse * 3.0)
 		draw_rect(rect, glow, false, 2.0 + _bone_pulse * 2.5)
 	var center := fossil_centroid()
 	var ring := 18.0 + (1.0 - _bone_pulse) * 56.0
@@ -1114,6 +1317,26 @@ func _draw_bone_mark(rect: Rect2, clean: float) -> void:
 	var inset := rect.grow(-8)
 	var mark := Color("8A7355").lerp(Color("FFF4D6"), clean)
 	draw_rect(inset, mark, false, 2.0)
+
+
+func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
+	var find: Dictionary = pending_find(cell)
+	if find.is_empty():
+		return
+	var rarity: int = int(find.get("rarity", 0))
+	var strength: float = Matrix.tell_strength(rarity)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(cell.x * 91 + cell.y * 53 + rarity * 17 + int(find.get("amount", 0)))
+	var pos := rect.position + Vector2(
+		5.0 + rng.randf() * maxf(6.0, rect.size.x - 10.0),
+		5.0 + rng.randf() * maxf(6.0, rect.size.y - 10.0)
+	)
+	if rarity <= Matrix.RARITY_COMMON:
+		draw_circle(pos, 1.35, Color(0.22, 0.15, 0.1, 0.38 + strength * 0.2))
+		return
+	var kind: String = Matrix.icon_kind(find)
+	var radius: float = 2.4 + strength * 3.2
+	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 
 
 func _draw_dust_specks(rect: Rect2, cell: Vector2i, clean: float) -> void:

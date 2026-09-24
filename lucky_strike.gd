@@ -1,7 +1,7 @@
 class_name LuckyStrike
 extends RefCounted
 
-## Mid-shift amber flake. Cash burst only — no hired diggers.
+## Mid-shift glint in the matrix. Cash burst only — no hired diggers.
 
 
 static func plan_shift(rng: RandomNumberGenerator, round_seconds: float) -> PackedFloat32Array:
@@ -39,8 +39,20 @@ static func pick_cell(rng: RandomNumberGenerator, grid_w: int, grid_h: int, bloc
 	return open[rng.randi_range(0, open.size() - 1)]
 
 
-static func burst_payout(dirt_money: int) -> int:
-	return maxi(12, dirt_money * Tuning.lucky_burst_mult)
+static func burst_payout(base_money: int) -> int:
+	return maxi(12, base_money * Tuning.lucky_burst_mult)
+
+
+static func toast_title() -> String:
+	return "Glint in the matrix"
+
+
+static func float_text(amount: int) -> String:
+	return "+$%d" % amount
+
+
+static func icon_kind() -> String:
+	return "glint"
 
 
 static func can_hit_with(tool: int) -> bool:
