@@ -6,7 +6,7 @@ var total: int = 5
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(168, 30)
+	custom_minimum_size = Vector2(140, 20)
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 
@@ -17,8 +17,8 @@ func set_rating(count: int, out_of: int = 5) -> void:
 
 
 func _draw() -> void:
-	var star_size := 22.0
-	var gap := 8.0
+	var star_size := 16.0
+	var gap := 6.0
 	var row := float(total) * star_size + float(total - 1) * gap
 	var start := Vector2((size.x - row) * 0.5 + star_size * 0.5, size.y * 0.5)
 	for i in total:

@@ -12,13 +12,19 @@ const ToolIcon := preload("res://tool_icon.gd")
 
 var _clock
 var _money: Label
+var _income: Label
 var _money_flash: float = 0.0
 var _shown_money: int = -1
+var _chip: Button
+var _goal_key: String = ""
+var _goal_pop: float = 0.0
+var _tool_role: Label
 var _precision: Button
 var _tool_buttons: Array[Button] = []
 var _tool_slots: Array[Control] = []
 var _slot_tools: Array[int] = []
 var _stars
+var _headline: Label
 var _grade: Label
 var _value: Label
 var _dirt_label: Label
@@ -32,6 +38,7 @@ var _tool_colors := [
 ]
 var _tool_flash: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 var _clock_flash: float = 0.0
+var _equipped_tool: int = Tuning.TOOL_HANDS
 
 
 func _ready() -> void:
@@ -42,10 +49,10 @@ func _ready() -> void:
 
 	var tools := HBoxContainer.new()
 	tools.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	tools.offset_left = -200
-	tools.offset_right = 200
-	tools.offset_top = 10
-	tools.offset_bottom = 92
+	tools.offset_left = -220
+	tools.offset_right = 220
+	tools.offset_top = 8
+	tools.offset_bottom = 78
 	tools.add_theme_constant_override("separation", 18)
 	tools.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(tools)
@@ -53,6 +60,17 @@ func _ready() -> void:
 	_add_tool_slot(tools, Tuning.TOOL_SHOVEL)
 	_add_tool_slot(tools, Tuning.TOOL_PICKAXE)
 	_add_tool_slot(tools, Tuning.TOOL_BRUSH)
+	_tool_role = Label.new()
+	_tool_role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tool_role.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_tool_role.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_tool_role.offset_left = -180
+	_tool_role.offset_right = 180
+	_tool_role.offset_top = 76
+	_tool_role.offset_bottom = 94
+	_tool_role.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(_tool_role, 12, Ui.MUTED)
+	root.add_child(_tool_role)
 
 	_precision = Button.new()
 	_precision.text = "P"
@@ -75,10 +93,11 @@ func _ready() -> void:
 	menu.text = "Menu"
 	menu.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	menu.offset_left = 16
-	menu.offset_right = 120
-	menu.offset_top = -52
-	menu.offset_bottom = -16
-	menu.custom_minimum_size = Vector2(100, 32)
+	menu.offset_right = 132
+	menu.offset_top = -48
+	menu.offset_bottom = -12
+	menu.custom_minimum_size = Vector2(112, 32)
+	menu.clip_text = false
 	menu.add_theme_font_size_override("font_size", 13)
 	Ui.apply_button(menu)
 	menu.pressed.connect(func() -> void: Settings.toggle_menu())
@@ -87,11 +106,12 @@ func _ready() -> void:
 	var finish := Button.new()
 	finish.text = "End shift"
 	finish.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	finish.offset_left = -120
+	finish.offset_left = -140
 	finish.offset_right = -16
-	finish.offset_top = -52
-	finish.offset_bottom = -16
-	finish.custom_minimum_size = Vector2(100, 32)
+	finish.offset_top = -48
+	finish.offset_bottom = -12
+	finish.custom_minimum_size = Vector2(120, 32)
+	finish.clip_text = false
 	finish.add_theme_font_size_override("font_size", 13)
 	Ui.apply_button(finish)
 	finish.pressed.connect(func() -> void:
@@ -112,36 +132,72 @@ func _ready() -> void:
 	Ui.apply_label(_money, 28, Ui.GOLD)
 	root.add_child(_money)
 
+	_income = Label.new()
+	_income.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_income.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_income.offset_left = 26
+	_income.offset_right = 280
+	_income.offset_top = 64
+	_income.offset_bottom = 84
+	_income.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_income.visible = false
+	Ui.apply_label(_income, 14, Ui.MUTED)
+	root.add_child(_income)
+
+	_chip = Button.new()
+	_chip.text = ""
+	_chip.custom_minimum_size = Vector2(360, 44)
+	_chip.clip_contents = true
+	_chip.clip_text = true
+	_chip.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_chip.add_theme_font_size_override("font_size", 13)
+	Ui.apply_button(_chip)
+	_chip.pressed.connect(_on_next_chip)
+	root.add_child(_chip)
+	_chip.visible = false
+
 	_find_box = VBoxContainer.new()
-	_find_box.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_find_box.offset_left = 80
-	_find_box.offset_right = -80
-	_find_box.offset_top = -156
-	_find_box.offset_bottom = -72
-	_find_box.add_theme_constant_override("separation", 4)
 	_find_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_find_box.clip_contents = true
+	_find_box.add_theme_constant_override("separation", 0)
 	_find_box.visible = false
 	root.add_child(_find_box)
+	var title_row := HBoxContainer.new()
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	title_row.add_theme_constant_override("separation", 10)
+	_find_box.add_child(title_row)
+	_headline = Label.new()
+	_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_headline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_headline.custom_minimum_size = Vector2(0, 18)
+	_headline.visible = false
+	Ui.apply_label(_headline, 18, Ui.GOLD)
+	title_row.add_child(_headline)
 	_value = Label.new()
 	_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_value.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_value, 22, Ui.GOLD)
-	_find_box.add_child(_value)
+	_value.custom_minimum_size = Vector2(0, 18)
+	Ui.apply_label(_value, 16, Ui.GOLD)
+	title_row.add_child(_value)
 	_grade = Label.new()
 	_grade.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_grade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_grade, 16, Ui.MUTED)
+	_grade.custom_minimum_size = Vector2(0, 14)
+	Ui.apply_label(_grade, 12, Ui.MUTED)
 	_find_box.add_child(_grade)
 	_stars = Control.new()
 	_stars.set_script(StarRating)
+	_stars.custom_minimum_size = Vector2(140, 16)
 	_find_box.add_child(_stars)
 	_dirt_label = Label.new()
 	_dirt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_dirt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_dirt_label, 14, Ui.MUTED)
+	_dirt_label.custom_minimum_size = Vector2(0, 12)
+	Ui.apply_label(_dirt_label, 11, Ui.MUTED)
 	_find_box.add_child(_dirt_label)
 	var track := ColorRect.new()
-	track.custom_minimum_size = Vector2(220, 10)
+	track.custom_minimum_size = Vector2(220, 6)
 	track.color = Color("2A2118")
 	track.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -149,7 +205,7 @@ func _ready() -> void:
 	_dirt_fill = ColorRect.new()
 	_dirt_fill.color = Color("C9B8A2")
 	_dirt_fill.position = Vector2(1, 1)
-	_dirt_fill.size = Vector2(0, 8)
+	_dirt_fill.size = Vector2(0, 4)
 	_dirt_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	track.add_child(_dirt_fill)
 
@@ -160,6 +216,7 @@ func _ready() -> void:
 
 func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_find: bool = false, stars: int = 0, grade: String = "", clean: float = 0.0, value: int = 0) -> void:
 	visible = digging
+	_equipped_tool = tool
 	if _clock.has_method("set_time"):
 		_clock.set_time(time_left, time_max)
 	_set_money_text(false)
@@ -174,7 +231,16 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 		_stars.set_rating(stars)
 	_dirt_label.text = Tuning.dirt_label(clean)
 	_dirt_fill.size.x = 218.0 * clampf(clean, 0.0, 1.0)
+	_dirt_fill.size.y = 4.0
 	_dirt_fill.color = Color("E4B75A") if clean >= 0.99 else Color("C9B8A2")
+	_refresh_goal_chrome()
+
+
+func set_find_headline(text: String) -> void:
+	if _headline == null:
+		return
+	_headline.text = text
+	_headline.visible = not text.is_empty()
 
 
 func flash_upgraded_tools(tools: Array) -> void:
@@ -198,6 +264,15 @@ func _process(delta: float) -> void:
 		_clock.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - _clock_flash * pulse)
 	elif _clock.modulate != Color.WHITE:
 		_clock.modulate = Color.WHITE
+	if _goal_pop > 0.0:
+		_goal_pop = maxf(0.0, _goal_pop - delta * 2.4)
+	if _chip != null:
+		_chip.scale = Vector2(1.0 + _goal_pop * 0.12, 1.0 + _goal_pop * 0.12)
+	if _chip != null and _chip.visible:
+		var shop_id: String = GameState.next_shop_id(_equipped_tool)
+		var heat: bool = not shop_id.is_empty() and GameState.can_buy(shop_id)
+		var pulse: float = 0.72 + 0.28 * absf(sin(float(Time.get_ticks_msec()) * 0.008))
+		_chip.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - pulse) if heat else Color(0.82, 0.78, 0.72)
 	if _money_flash <= 0.0:
 		return
 	_money_flash = maxf(0.0, _money_flash - delta * 4.0)
@@ -217,6 +292,10 @@ func _set_money_text(flash: bool) -> void:
 		_money_flash = 1.0
 		_money.modulate = Color("FFF6D8")
 	_shown_money = next
+	if _income != null:
+		var rate_line: String = GameState.museum_rate_line()
+		_income.visible = not rate_line.is_empty()
+		_income.text = rate_line
 
 
 func _add_tool_slot(parent: HBoxContainer, tool: int) -> void:
@@ -228,7 +307,7 @@ func _add_tool_slot(parent: HBoxContainer, tool: int) -> void:
 	_slot_tools.append(tool)
 
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(72, 56)
+	button.custom_minimum_size = Vector2(72, 50)
 	button.text = ""
 	Ui.apply_button(button)
 	button.pressed.connect(_on_tool_pressed.bind(tool))
@@ -270,6 +349,9 @@ func _highlight_tool(tool: int) -> void:
 		_tool_buttons[i].disabled = false
 		Ui.apply_button(_tool_buttons[i], on)
 		_tool_buttons[i].modulate = Color.WHITE if on else Color(0.78, 0.74, 0.68)
+	if _tool_role != null:
+		_tool_role.text = GameState.tool_role_line(tool)
+		_tool_role.visible = visible and not _tool_role.text.is_empty()
 
 
 func _apply_tool_flashes() -> void:
@@ -280,3 +362,66 @@ func _apply_tool_flashes() -> void:
 		var glow: float = _tool_flash[id]
 		var pulse: float = 0.55 + 0.45 * absf(sin(glow * TAU * 2.2))
 		_tool_buttons[i].modulate = Color("FFE08A").lerp(_tool_buttons[i].modulate, 1.0 - glow * pulse)
+
+
+func _refresh_goal_chrome() -> void:
+	if _chip == null:
+		return
+	var shop_id: String = GameState.next_shop_id(_equipped_tool)
+	var show_chip: bool = visible and not shop_id.is_empty()
+	_chip.visible = show_chip
+	if show_chip:
+		var cost: int = GameState.cost_of(shop_id)
+		var caption: String = GameState.next_goal_chip_text(shop_id, cost)
+		_chip.text = caption
+		var can_buy: bool = GameState.can_buy(shop_id)
+		_chip.disabled = not can_buy
+		Ui.apply_button(_chip, can_buy)
+		_chip.add_theme_font_size_override("font_size", 13)
+		_chip.add_theme_color_override("font_color", Ui.INK)
+		_chip.add_theme_color_override("font_disabled_color", Ui.MUTED)
+		if not _goal_key.is_empty() and shop_id != _goal_key:
+			_goal_pop = 1.0
+		_goal_key = shop_id
+	else:
+		_chip.text = ""
+		_chip.disabled = true
+		_goal_key = ""
+	_layout_footer()
+
+
+func _layout_footer() -> void:
+	var footer: float = Tuning.footer_top()
+	var row_h: float = Tuning.footer_goal_h()
+	var side: float = 16.0
+	var chip_w: float = 360.0
+	var available: float = maxf(360.0, Tuning.view_w - side * 2.0)
+	chip_w = minf(chip_w, available)
+	var chip_x: float = (Tuning.view_w - chip_w) * 0.5
+	_chip.anchor_left = 0.0
+	_chip.anchor_top = 0.0
+	_chip.anchor_right = 0.0
+	_chip.anchor_bottom = 0.0
+	_chip.position = Vector2(chip_x, footer)
+	_chip.size = Vector2(chip_w, row_h)
+	_chip.pivot_offset = Vector2(chip_w * 0.5, row_h * 0.5)
+	var gutter: float = Tuning.footer_menu_gutter()
+	var find_top: float = Tuning.footer_find_top()
+	var find_bottom: float = Tuning.view_h - 8.0
+	_find_box.anchor_left = 0.0
+	_find_box.anchor_top = 0.0
+	_find_box.anchor_right = 0.0
+	_find_box.anchor_bottom = 0.0
+	var find_h: float = maxf(1.0, find_bottom - find_top)
+	_find_box.custom_minimum_size = Vector2(0, 0)
+	_find_box.position = Vector2(gutter, find_top)
+	_find_box.size = Vector2(maxf(160.0, Tuning.view_w - gutter * 2.0), find_h)
+
+
+func _on_next_chip() -> void:
+	var shop_id: String = GameState.next_shop_id(_equipped_tool)
+	if shop_id.is_empty() or not GameState.buy(shop_id):
+		return
+	GameState.save_game()
+	_goal_pop = 1.0
+	_refresh_goal_chrome()

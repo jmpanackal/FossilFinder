@@ -22,8 +22,22 @@ const _FANFARES := {
 }
 
 const BUS_SFX := "SFX"
+const HIT_GAP_MSEC := 55
+const _THROTTLED_IDS: PackedStringArray = [
+	"hit_dirt",
+	"hit_packed",
+	"hit_clay",
+	"hit_rock",
+	"layer_clear",
+]
 
 var _players: Dictionary = {}
+var hit_plays: int = 0
+var _last_hit_msec: int = -99999
+
+
+func reset_throttle() -> void:
+	_last_hit_msec = -99999
 
 
 func _init() -> void:
@@ -45,6 +59,12 @@ func ensure_bus() -> void:
 
 func play(id: String) -> void:
 	ensure_bus()
+	if _THROTTLED_IDS.has(id):
+		var now: int = Time.get_ticks_msec()
+		if now - _last_hit_msec < HIT_GAP_MSEC:
+			return
+		_last_hit_msec = now
+		hit_plays += 1
 	var player: AudioStreamPlayer = _players.get(id) as AudioStreamPlayer
 	if player == null:
 		player = AudioStreamPlayer.new()

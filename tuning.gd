@@ -40,6 +40,12 @@ var extra_find_chance: float = 0.0
 var extra_fossil_paths: PackedStringArray = ["res://tooth.tres", "res://vertebra.tres"]
 var big_finds_unlocked: bool = false
 var passive_miner_owned: bool = false
+var lucky_shift_chance: float = 0.70
+var lucky_second_chance: float = 0.35
+var lucky_first_delay_min: float = 6.0
+var lucky_duration: float = 8.0
+var lucky_max_per_shift: int = 2
+var lucky_burst_mult: int = 16
 ## Rank 0 is a small search pit (20 cells). Later ranks grow toward the old 16×10 site.
 var site_layouts: Array[Vector2i] = [
 	Vector2i(5, 4),
@@ -71,7 +77,7 @@ const DESIGN_H := 720.0
 var view_w: float = 1280.0
 var view_h: float = 720.0
 var hud_h: float = 96.0
-var find_bar_h: float = 58.0
+var find_bar_h: float = 130.0
 var fossil_grace: float = 0.55
 var fossil_hold_tick_rate: float = 1.6
 var base_round_seconds: float = 40.0
@@ -113,9 +119,12 @@ var pickaxe_click_mult: float = 0.85
 var pickaxe_hold_mult: float = 1.0
 var pickaxe_hold_tick_rate: float = 1.4
 var pickaxe_splash_mult: float = 0.4
+## Floor so max Steady Shoveling stays snappy without 60 ticks/sec.
+var hold_min_interval: float = 0.065
 
 var round_seconds: float = 40.0
 var integrity_hit_cost: float = 0.10
+var hands_integrity_mult: float = 0.0
 var integrity_floor: float = 0.25
 var unbrushed_value: float = 0.5
 var clean_extract_threshold: float = 0.999
@@ -246,6 +255,10 @@ func play_view_size(visible: Vector2) -> Vector2:
 	return visible
 
 
+func hold_interval(tick_rate: float) -> float:
+	return maxf(hold_min_interval, 1.0 / maxf(tick_rate, 0.2))
+
+
 func shovel_hit_cells(center: Vector2i, radius: float, precision: bool = false) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	if precision or radius <= 0.0:
@@ -287,11 +300,38 @@ func apply_site_layout() -> void:
 func center_grid() -> void:
 	var pit: Vector2 = fitted_pit_size()
 	var width := pit.x + cell_side
-	var pit_h := pit.y + chunk_front + chunk_pad
 	var top := hud_h + 10.0
-	var bottom := view_h - find_bar_h - 8.0
-	var y := top + maxf(0.0, (bottom - top - pit_h) * 0.5)
-	grid_origin = Vector2((view_w - width) * 0.5 + chunk_pad * 0.25, y)
+	grid_origin = Vector2((view_w - width) * 0.5 + chunk_pad * 0.25, top)
+
+
+func pit_face_bottom() -> float:
+	return grid_origin.y + float(grid_h) * cell_h
+
+
+func footer_top() -> float:
+	return pit_face_bottom() + chunk_front + 8.0
+
+
+func footer_menu_gutter() -> float:
+	return 140.0
+
+
+func footer_goal_h() -> float:
+	return 44.0
+
+
+func footer_find_gap() -> float:
+	return 2.0
+
+
+func footer_find_top() -> float:
+	return footer_top() + footer_goal_h() + footer_find_gap()
+
+
+func integrity_hit_for(tool: int) -> float:
+	if tool == TOOL_HANDS:
+		return integrity_hit_cost * hands_integrity_mult
+	return integrity_hit_cost
 
 
 func chunk_top_color() -> Color:

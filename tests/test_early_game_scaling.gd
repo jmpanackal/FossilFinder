@@ -31,6 +31,13 @@ func _run() -> void:
 	_test_passive_miner_is_catalogued()
 	_test_wider_scoop_rank_2_hits_more_than_one_cell()
 	_test_fullscreen_pixels_do_not_become_play_view()
+	_test_footer_chrome_stays_below_pit()
+	_test_find_footer_and_next_chip_stay_on_screen()
+	_test_extracted_preview_keeps_fossil_value()
+	_test_find_toast_does_not_cover_footer()
+	_test_find_footer_shows_one_extract_readout()
+	_test_extract_does_not_stack_a_found_toast()
+	_test_hands_stay_the_careful_one_cell_tool()
 	print("early_game_scaling %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -268,6 +275,211 @@ func _test_fullscreen_pixels_do_not_become_play_view() -> void:
 	TN.apply_site_layout()
 
 
+func _test_footer_chrome_stays_below_pit() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	_assert(TN.has_method("pit_face_bottom"), "Tuning exposes the 1024x400 face bottom")
+	_assert(TN.has_method("footer_top"), "Tuning exposes the reserved HUD footer")
+	if not TN.has_method("pit_face_bottom") or not TN.has_method("footer_top"):
+		return
+	var face: float = float(TN.pit_face_bottom())
+	var chunk_end: float = face + float(TN.chunk_front)
+	var footer: float = float(TN.footer_top())
+	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "footer layout keeps the 1024px pit")
+	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "footer layout keeps the 400px pit")
+	_assert(footer >= chunk_end, "goal/NEXT/find chrome starts below the dirt chunk")
+	_assert(footer + 130.0 <= TN.view_h - 8.0, "goal, NEXT, and find grade/stars fit under the pit")
+
+
+func _test_find_footer_and_next_chip_stay_on_screen() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	_assert(TN.has_method("footer_find_top"), "Tuning exposes the find-band top")
+	_assert(TN.has_method("footer_menu_gutter"), "Tuning exposes the Menu/End gutter")
+	if not TN.has_method("footer_find_top") or not TN.has_method("footer_menu_gutter"):
+		return
+	var find_top: float = float(TN.footer_find_top())
+	var find_bottom: float = TN.view_h - 8.0
+	var gutter: float = float(TN.footer_menu_gutter())
+	_assert(find_top >= float(TN.footer_top()), "find band stays below the goal/NEXT row")
+	_assert(find_bottom - find_top >= 88.0, "find band is tall enough for value, grade, and stars")
+	_assert(find_bottom <= TN.view_h - 4.0, "find band stays above the window bottom")
+	_assert(gutter >= 124.0, "Menu and End shift keep a side gutter")
+	var hud_script: Script = load("res://hud.gd") as Script
+	_assert(hud_script != null, "HUD script loads")
+	if hud_script == null:
+		return
+	var hud: Node = hud_script.new()
+	root.add_child(hud)
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 0.4, 80)
+	var find_box: VBoxContainer = hud.get("_find_box") as VBoxContainer
+	var chip: Button = hud.get("_chip") as Button
+	_assert(find_box != null and chip != null, "HUD exposes the find footer and NEXT chip")
+	if find_box == null or chip == null:
+		hud.queue_free()
+		return
+	_assert(is_equal_approx(find_box.position.y, find_top), "HUD parks the find footer in the reserved band")
+	_assert(find_box.position.y + find_box.size.y <= TN.view_h - 4.0, "HUD find footer stays above the window bottom")
+	_assert(find_box.position.x >= gutter, "HUD find text stays clear of the Menu button")
+	_assert(find_box.position.x + find_box.size.x <= TN.view_w - gutter, "HUD find text stays clear of End shift")
+	var content_h: float = 0.0
+	var visible_kids: int = 0
+	for child in find_box.get_children():
+		var item: Control = child as Control
+		if item == null or not item.visible:
+			continue
+		content_h += item.get_combined_minimum_size().y
+		visible_kids += 1
+	if visible_kids > 1:
+		content_h += float(find_box.get_theme_constant("separation")) * float(visible_kids - 1)
+	_assert(content_h <= find_box.size.y + 1.0, "value, grade, stars, and dirt fit inside the find band")
+	_assert(chip.position.x + chip.size.x <= TN.view_w - 8.0, "NEXT chip stays on screen")
+	_assert(chip.clip_contents, "NEXT chip keeps its label inside the box")
+	_assert(chip.clip_text, "NEXT chip does not paint its buy onto the dirt")
+	hud.queue_free()
+
+
+func _make_focused_find(extracted: bool, value: int = 80) -> Node:
+	var script: Script = load("res://dig_site.gd") as Script
+	var site: Node = script.new()
+	var data: Resource = FossilData.new()
+	data.set("name", "Tooth")
+	data.set("base_value", value)
+	var cell := Vector2i(0, 0)
+	site.set("finds", [{
+		"data": data,
+		"extracted": extracted,
+		"integrity": 1.0,
+		"cells": {cell: true},
+	}])
+	site.set("cleanliness", {cell: 1.0})
+	site.set("exposed_cells", {cell: true})
+	site.set("_focus_index", 0)
+	return site
+
+
+func _test_extracted_preview_keeps_fossil_value() -> void:
+	var site: Node = _make_focused_find(true, 80)
+	_assert(int(site.call("preview_value")) == 80, "extracted find still shows the fossil payout")
+	_assert(bool(site.call("has_visible_find")), "extracted find stays in the footer band")
+	site.free()
+
+
+func _test_find_toast_does_not_cover_footer() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	var hud_script: Script = load("res://hud.gd") as Script
+	var toast_script: Script = load("res://toast_layer.gd") as Script
+	_assert(hud_script != null and toast_script != null, "HUD and toast scripts load")
+	if hud_script == null or toast_script == null:
+		return
+	var hud: Node = hud_script.new()
+	var toast: Node = toast_script.new()
+	root.add_child(hud)
+	root.add_child(toast)
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 80)
+	if hud.has_method("set_find_headline"):
+		hud.call("set_find_headline", "Tooth found!")
+	toast.call("show_toast", "Tooth found!", "Well preserved")
+	var find_box: Control = hud.get("_find_box") as Control
+	var toast_box: Control = toast.get("_box") as Control
+	var chip: Button = hud.get("_chip") as Button
+	_assert(find_box != null and toast_box != null, "find footer and toast expose their boxes")
+	if find_box == null or toast_box == null:
+		hud.queue_free()
+		toast.queue_free()
+		return
+	var find_rect := Rect2(find_box.global_position, find_box.size)
+	var toast_rect := Rect2(toast_box.global_position, toast_box.size)
+	var stacked: bool = find_box.visible and toast_box.modulate.a > 0.05 and find_rect.intersects(toast_rect)
+	_assert(not stacked, "find toast and live footer do not share the same pixels")
+	_assert(toast_box.position.y + toast_box.size.y <= float(TN.footer_top()) + 0.5, "toast stays above NEXT and the goal bar")
+	_assert(toast_box.position.y >= float(TN.pit_face_bottom()) - 0.5, "toast stays off the dirt cells")
+	if chip != null:
+		var chip_rect := Rect2(chip.global_position, chip.size)
+		_assert(not chip_rect.intersects(toast_rect), "toast does not draw through NEXT")
+		_assert(not chip_rect.intersects(find_rect), "find readout stays below NEXT")
+	hud.queue_free()
+	toast.queue_free()
+
+
+func _test_find_footer_shows_one_extract_readout() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	var hud_script: Script = load("res://hud.gd") as Script
+	_assert(hud_script != null, "HUD script loads for extract readout")
+	if hud_script == null:
+		return
+	var hud: Node = hud_script.new()
+	root.add_child(hud)
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 80)
+	if hud.has_method("set_find_headline"):
+		hud.call("set_find_headline", "Tooth found!")
+	var headline: Label = hud.get("_headline") as Label
+	var value: Label = hud.get("_value") as Label
+	var grade: Label = hud.get("_grade") as Label
+	var dirt: Label = hud.get("_dirt_label") as Label
+	var find_box: VBoxContainer = hud.get("_find_box") as VBoxContainer
+	_assert(headline != null and headline.visible, "extract footer shows a Tooth found headline")
+	if headline != null:
+		_assert(headline.text == "Tooth found!", "extract headline is Tooth found!")
+	_assert(value != null and value.text == "$80", "extract footer shows the fossil value")
+	_assert(grade != null and grade.text == "Well preserved", "extract footer shows one condition line")
+	if find_box != null:
+		var grades: int = 0
+		for child in find_box.get_children():
+			var label: Label = child as Label
+			if label != null and label.visible and label.text == "Well preserved":
+				grades += 1
+		_assert(grades == 1, "Well preserved appears once in the find footer")
+	_assert(dirt != null and dirt.text == "Clean", "extract footer shows dirt/clean once")
+	if find_box != null:
+		_assert(is_equal_approx(find_box.position.y, float(TN.footer_find_top())), "extract readout stays in the reserved find band")
+		var content_h: float = 0.0
+		var visible_kids: int = 0
+		for child in find_box.get_children():
+			var item: Control = child as Control
+			if item == null or not item.visible:
+				continue
+			content_h += item.get_combined_minimum_size().y
+			visible_kids += 1
+		if visible_kids > 1:
+			content_h += float(find_box.get_theme_constant("separation")) * float(visible_kids - 1)
+		_assert(content_h <= find_box.size.y + 1.0, "headline, value, grade, stars, and dirt fit in the find band")
+	hud.queue_free()
+
+
+func _test_extract_does_not_stack_a_found_toast() -> void:
+	var src: String = FileAccess.get_file_as_string("res://main.gd")
+	_assert(not src.is_empty(), "main.gd loads")
+	_assert(src.find("show_toast(\"%s found!\"") < 0, "extract does not fire a found toast on top of the footer")
+
+
+func _test_hands_stay_the_careful_one_cell_tool() -> void:
+	_reset()
+	GS.levels["shovel_click"] = 1
+	GS.levels["shovel_radius"] = 1
+	GS.apply_upgrades()
+	_assert(TN.hands_click_mult < TN.shovel_click_mult, "hands scrape dirt weaker than the shovel")
+	_assert(TN.has_method("integrity_hit_for"), "Tuning exposes per-tool bone cost")
+	if not TN.has_method("integrity_hit_for"):
+		return
+	_assert(float(TN.integrity_hit_for(TN.TOOL_HANDS)) < float(TN.integrity_hit_for(TN.TOOL_SHOVEL)), "hands are safer on bone than the shovel")
+	_assert(is_zero_approx(float(TN.integrity_hit_for(TN.TOOL_HANDS))), "hands do not chip integrity")
+	_assert(TN.shovel_hit_cells(Vector2i(2, 2), 0.0).size() == 1, "hands stay a one-cell scrape")
+
+
 func _test_passive_miner_is_catalogued() -> void:
 	_reset()
 	var item: Dictionary = _item("passive_miner")
@@ -275,6 +487,15 @@ func _test_passive_miner_is_catalogued() -> void:
 	_assert(int(item.get("tier", 0)) >= 3, "Hired Hand sits at the end of Site")
 	_assert(int(item.get("cost", 0)) >= 2000, "Hired Hand is a late purchase")
 	_assert(not bool(GS.tier_unlocked("passive_miner")), "Hired Hand waits behind Site II")
+	_assert(not bool(GS.requirements_met("passive_miner")), "Hired Hand waits for Super tools / Rich Bed")
+	GS.money = 99999
+	_assert(not bool(GS.can_buy("passive_miner")), "Hired Hand cannot be bought at the start")
+	GS.levels["shovel_super"] = 1
+	GS.levels["rich_bed"] = 1
+	GS.apply_upgrades()
+	_assert(bool(GS.requirements_met("passive_miner")), "Hired Hand requires Super Shovel and Rich Bed")
+	_assert(not bool(GS.can_buy("passive_miner")), "Hired Hand still waits for Site II even with those ranks")
+	_assert(not GS.has_method("tick_hired_hands"), "Hired Hand does not auto-dig this pass")
 
 
 func _assert(ok: bool, label: String) -> void:

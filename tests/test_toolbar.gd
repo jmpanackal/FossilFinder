@@ -19,6 +19,8 @@ func _run() -> void:
 	_test_start_owned_tools_are_hands_only()
 	_test_buying_tools_appends_without_replacing_hands()
 	_test_toolbar_hotkeys_are_fixed()
+	_test_tool_role_lines_are_short()
+	_test_hud_shows_selected_tool_role()
 	print("toolbar %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -84,6 +86,47 @@ func _test_toolbar_hotkeys_are_fixed() -> void:
 		_assert(int(full[1].get("id", -1)) == int(TN.TOOL_SHOVEL) and str(full[1].get("hotkey", "")) == "1", "shovel is 1")
 		_assert(int(full[2].get("id", -1)) == int(TN.TOOL_PICKAXE) and str(full[2].get("hotkey", "")) == "2", "pick is 2")
 		_assert(int(full[3].get("id", -1)) == int(TN.TOOL_BRUSH) and str(full[3].get("hotkey", "")) == "3", "brush is 3")
+
+
+func _test_tool_role_lines_are_short() -> void:
+	_reset()
+	_assert(GS.has_method("tool_role_line"), "GameState names each tool's job")
+	if not GS.has_method("tool_role_line"):
+		return
+	_assert(str(GS.tool_role_line(TN.TOOL_HANDS)) == "Precision · 1 cell", "hands are the precision tool")
+	_assert(str(GS.tool_role_line(TN.TOOL_SHOVEL)) == "Dirt", "shovel is for dirt")
+	_assert(str(GS.tool_role_line(TN.TOOL_PICKAXE)) == "Stone", "pickaxe is for stone")
+	_assert(str(GS.tool_role_line(TN.TOOL_BRUSH)) == "Fossil", "brush is for the fossil")
+
+
+func _test_hud_shows_selected_tool_role() -> void:
+	_reset()
+	GS.money = 5000
+	GS.buy("shovel_click")
+	GS.buy("pick_click")
+	GS.buy("brush_speed")
+	var hud_script: Script = load("res://hud.gd") as Script
+	_assert(hud_script != null, "HUD script loads")
+	if hud_script == null:
+		return
+	var hud: CanvasLayer = hud_script.new() as CanvasLayer
+	root.add_child(hud)
+	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
+	var role: Label = hud.get("_tool_role") as Label
+	_assert(role != null, "HUD exposes a selected-tool role line")
+	if role == null:
+		hud.queue_free()
+		return
+	_assert(role.visible, "role line shows for the equipped tool")
+	_assert(str(role.text) == "Precision · 1 cell", "hands show Precision · 1 cell")
+	_assert(role.position.y + role.size.y <= float(TN.hud_h) + 1.0, "role line stays in the top chrome and off the pit")
+	hud.call("refresh", 40.0, 40.0, TN.TOOL_SHOVEL, true)
+	_assert(str(role.text) == "Dirt", "shovel role updates to Dirt")
+	hud.call("refresh", 40.0, 40.0, TN.TOOL_PICKAXE, true)
+	_assert(str(role.text) == "Stone", "pickaxe role updates to Stone")
+	hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true)
+	_assert(str(role.text) == "Fossil", "brush role updates to Fossil")
+	hud.queue_free()
 
 
 func _assert(ok: bool, label: String) -> void:

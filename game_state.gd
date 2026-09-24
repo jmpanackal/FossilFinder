@@ -28,7 +28,7 @@ var _income_accum: float = 0.0
 var _bases: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
-	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "Bare hands scrape a little harder.", "cost": 8, "scale": 1.55, "max": 5},
+	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell scrape. Weaker dirt than a shovel, but they do not chip bone.", "cost": 8, "scale": 1.55, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 32, "scale": 1.55, "max": 4},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 20, "scale": 1.7, "max": 6},
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 55, "scale": 1.65, "max": 5, "requires": "shovel_click"},
@@ -51,7 +51,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Clay and rock pay more.", "cost": 280, "scale": 1.7, "max": 6},
 	{"id": "money_mult", "cat": "Site", "tier": 2, "name": "Keen Eye", "desc": "Everything you dig is worth more.", "cost": 360, "scale": 1.75, "max": 6},
 	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 340, "scale": 1.75, "max": 6},
-	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 3800, "scale": 1.0, "max": 1},
+	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
 	{"id": "lighting", "cat": "Exhibit", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 110, "scale": 1.7, "max": 5},
 	{"id": "benches", "cat": "Exhibit", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 100, "scale": 1.65, "max": 5},
 	{"id": "glass_case", "cat": "Exhibit", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 280, "scale": 1.7, "max": 6},
@@ -126,15 +126,30 @@ func tier_unlocked(id: String) -> bool:
 	return true
 
 
+func _required_ids(item: Dictionary) -> Array[String]:
+	var ids: Array[String] = []
+	var raw: Variant = item.get("requires", "")
+	if raw is Array:
+		for value in raw:
+			var req_id: String = str(value)
+			if not req_id.is_empty():
+				ids.append(req_id)
+	else:
+		var req_id: String = str(raw)
+		if not req_id.is_empty():
+			ids.append(req_id)
+	return ids
+
+
 func requirements_met(id: String) -> bool:
 	var item: Dictionary = _item(id)
 	if item.is_empty():
 		return false
-	var req_id: String = str(item.get("requires", ""))
-	if req_id.is_empty():
-		return true
 	var need: int = int(item.get("require_level", 1))
-	return int(levels.get(req_id, 0)) >= need
+	for req_id in _required_ids(item):
+		if int(levels.get(req_id, 0)) < need:
+			return false
+	return true
 
 
 func lock_reason(id: String) -> String:
@@ -142,9 +157,14 @@ func lock_reason(id: String) -> String:
 	if item.is_empty():
 		return ""
 	if not requirements_met(id):
-		var req: Dictionary = _item(str(item.get("requires", "")))
-		var req_name: String = str(req.get("unlock_name", req.get("name", "that upgrade")))
-		return "Buy %s first." % req_name
+		var need: int = int(item.get("require_level", 1))
+		for req_id in _required_ids(item):
+			if int(levels.get(req_id, 0)) >= need:
+				continue
+			var req: Dictionary = _item(req_id)
+			var req_name: String = str(req.get("unlock_name", req.get("name", "that upgrade")))
+			return "Buy %s first." % req_name
+		return "Locked"
 	if tier_unlocked(id):
 		return ""
 	var needed: int = int(item.get("tier", 2)) - 1
@@ -303,6 +323,192 @@ func shop_button_label(id: String) -> String:
 			return "Unlock  $%d" % cost_of(id)
 		return "Buy %s  $%d" % [str(item["unlock_name"]), cost_of(id)]
 	return "Buy  $%d" % cost_of(id)
+
+
+func shop_row_heat(id: String) -> String:
+	var item: Dictionary = _item(id)
+	if item.is_empty():
+		return "locked"
+	if not requirements_met(id) or not tier_unlocked(id):
+		return "locked"
+	if int(levels.get(id, 0)) >= int(item["max"]):
+		return "maxed"
+	if can_buy(id):
+		return "glow"
+	return "dim"
+
+
+func museum_rate_line() -> String:
+	var rate: float = museum_income()
+	if rate < 0.005:
+		return ""
+	return "$%.2f/s" % rate
+
+
+func small_finds_count() -> int:
+	var count: int = 0
+	for piece_id in pieces:
+		if stand_for_piece(str(piece_id)) == STAND_SMALL_FINDS:
+			count += 1
+	return count
+
+
+func tool_display_name(tool: int) -> String:
+	match tool:
+		Tuning.TOOL_HANDS:
+			return "Hands"
+		Tuning.TOOL_SHOVEL:
+			return "Shovel"
+		Tuning.TOOL_PICKAXE:
+			return "Pickaxe"
+		Tuning.TOOL_BRUSH:
+			return "Brush"
+		_:
+			return "Tool"
+
+
+func tool_role_line(tool: int) -> String:
+	match tool:
+		Tuning.TOOL_HANDS:
+			return "Precision · 1 cell"
+		Tuning.TOOL_SHOVEL:
+			return "Dirt"
+		Tuning.TOOL_PICKAXE:
+			return "Stone"
+		Tuning.TOOL_BRUSH:
+			return "Fossil"
+		_:
+			return ""
+
+
+func next_upgrade_action(tool: int) -> String:
+	match tool:
+		Tuning.TOOL_HANDS:
+			return "Next hands upgrade"
+		Tuning.TOOL_SHOVEL:
+			return "Next shovel upgrade"
+		Tuning.TOOL_PICKAXE:
+			return "Next pick upgrade"
+		Tuning.TOOL_BRUSH:
+			return "Next brush upgrade"
+		_:
+			return "Next upgrade"
+
+
+func next_shop_id(tool: int = -1) -> String:
+	var filter_tool: int = tool if tool >= 0 else Tuning.TOOL_HANDS
+	var affordable_unlock: String = ""
+	var affordable_rank: String = ""
+	var cheapest_unlock: String = ""
+	var cheapest_rank: String = ""
+	var cheapest_unlock_cost: int = 1 << 30
+	var cheapest_rank_cost: int = 1 << 30
+	for item in catalog:
+		var id: String = str(item["id"])
+		if tool_for_upgrade(id) != filter_tool:
+			continue
+		if not requirements_met(id) or not tier_unlocked(id):
+			continue
+		if int(levels.get(id, 0)) >= int(item["max"]):
+			continue
+		var cost: int = cost_of(id)
+		var is_new: bool = int(levels.get(id, 0)) <= 0 or is_unlock_offer(id)
+		if can_buy(id):
+			if is_new and affordable_unlock.is_empty():
+				affordable_unlock = id
+			elif not is_new and affordable_rank.is_empty():
+				affordable_rank = id
+		if is_new:
+			if cost < cheapest_unlock_cost:
+				cheapest_unlock_cost = cost
+				cheapest_unlock = id
+		elif cost < cheapest_rank_cost:
+			cheapest_rank_cost = cost
+			cheapest_rank = id
+	if not affordable_unlock.is_empty():
+		return affordable_unlock
+	if not affordable_rank.is_empty():
+		return affordable_rank
+	if not cheapest_unlock.is_empty():
+		return cheapest_unlock
+	return cheapest_rank
+
+
+func next_goal(tool: int = -1) -> Dictionary:
+	var shop: Dictionary = _shop_goal(next_shop_id(tool))
+	var stand: Dictionary = _stand_goal()
+	if shop.is_empty():
+		return stand
+	if bool(shop.get("affordable", false)):
+		return shop
+	if not stand.is_empty() and float(stand.get("progress", 0.0)) > float(shop.get("progress", 0.0)):
+		return stand
+	return shop
+
+
+func try_buy_next_goal(tool: int = -1) -> bool:
+	var goal: Dictionary = next_goal(tool)
+	if str(goal.get("kind", "")) != "shop":
+		return false
+	var id: String = str(goal.get("id", ""))
+	if id.is_empty() or not can_buy(id):
+		return false
+	return buy(id)
+
+
+func next_goal_label(id: String) -> String:
+	var tool: int = tool_for_upgrade(id)
+	if tool < 0:
+		return shop_display_name(id)
+	return "%s · %s" % [tool_display_name(tool), shop_display_name(id)]
+
+
+func next_goal_rank_name(id: String) -> String:
+	var item: Dictionary = _item(id)
+	var rank: String = str(item.get("name", ""))
+	if rank.is_empty():
+		return shop_display_name(id)
+	return rank
+
+
+func next_goal_chip_lines(id: String, cost: int) -> PackedStringArray:
+	return PackedStringArray(["Next upgrade", next_goal_rank_name(id), "$%d" % cost])
+
+
+func next_goal_chip_text(id: String, cost: int) -> String:
+	return "Next upgrade · %s · $%d" % [next_goal_rank_name(id), cost]
+
+
+func _shop_goal(id: String) -> Dictionary:
+	if id.is_empty():
+		return {}
+	var cost: int = cost_of(id)
+	var affordable: bool = can_buy(id)
+	var progress: float = 1.0 if affordable else clampf(float(money) / float(maxi(cost, 1)), 0.0, 0.999)
+	return {
+		"kind": "shop",
+		"id": id,
+		"title": "%s $%d" % [next_goal_label(id), cost],
+		"current": float(money),
+		"target": float(cost),
+		"progress": progress,
+		"affordable": affordable,
+	}
+
+
+func _stand_goal() -> Dictionary:
+	var have: int = small_finds_count()
+	if have <= 0 or have >= 2:
+		return {}
+	return {
+		"kind": "stand",
+		"id": STAND_SMALL_FINDS,
+		"title": "Small Finds %d/2" % have,
+		"current": float(have),
+		"target": 2.0,
+		"progress": float(have) / 2.0,
+		"affordable": false,
+	}
 
 
 func is_site_upgrade(id: String) -> bool:

@@ -39,6 +39,7 @@ func _ready() -> void:
 	dig_site.fossil_ready_to_dust.connect(_on_ready_to_dust)
 	dig_site.pickaxe_struck.connect(_on_pickaxe)
 	dig_site.tool_used.connect(_on_tool_used)
+	dig_site.lucky_struck.connect(_on_lucky_struck)
 	hud.tool_selected.connect(dig_site.set_tool)
 	hud.precision_toggled.connect(_toggle_precision)
 	hud.end_shift.connect(_end_round)
@@ -135,6 +136,11 @@ func _process(delta: float) -> void:
 	var stars: int = Tuning.preservation_stars(float(dig_site.integrity), clean) if found else 0
 	var value: int = int(dig_site.preview_value()) if found else 0
 	hud.refresh(time_left, Tuning.round_seconds, dig_site.current_tool, round_active and screen == "dig", found, stars, grade, clean, value)
+	var headline := ""
+	if found and dig_site.has_method("focused_find_extracted") and bool(dig_site.focused_find_extracted()):
+		headline = "%s found!" % str(dig_site.focused_find_name())
+	if hud.has_method("set_find_headline"):
+		hud.set_find_headline(headline)
 	if debug_on:
 		_refresh_debug()
 
@@ -193,10 +199,6 @@ func _on_fossil_exposed(world_pos: Vector2, first: bool) -> void:
 func _on_ready_to_dust() -> void:
 	dig_site.pulse_bones()
 	_ping(dig_site.fossil_centroid())
-	if GameState.owns_tool(Tuning.TOOL_BRUSH):
-		toast.show_toast("Brush it clean")
-	else:
-		toast.show_toast("Bone is exposed", "End the shift to take it")
 	Sfx.play("fossil_ping")
 	if Tuning.shake_enabled:
 		_shake_left = maxf(_shake_left, 0.18)
@@ -218,8 +220,8 @@ func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cle
 		"stars": stars,
 		"dirt": dirt,
 	})
-	var toast_detail: String = grade if dirt.is_empty() else "%s · %s" % [grade, dirt]
-	toast.show_toast("%s found!" % fossil_name, toast_detail, stars)
+	if hud.has_method("set_find_headline"):
+		hud.set_find_headline("%s found!" % fossil_name)
 
 
 func _on_pickaxe() -> void:
@@ -264,6 +266,13 @@ func _arm_upgrade_notices() -> void:
 		if hud.has_method("flash_clock"):
 			hud.flash_clock()
 		break
+
+
+func _on_lucky_struck(amount: int, world_pos: Vector2) -> void:
+	GameState.add_money(amount)
+	_spawn_float("+$%d" % amount, world_pos, Color("FFE08A"), 28)
+	toast.show_toast("Lucky strike!", "+$%d" % amount)
+	Sfx.play("unlock")
 
 
 func _on_tool_used(tool: int) -> void:

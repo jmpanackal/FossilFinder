@@ -2,6 +2,7 @@ class_name DigSite
 extends Node2D
 
 const FossilDataScript := preload("res://fossil_data.gd")
+const Lucky := preload("res://lucky_strike.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
@@ -10,6 +11,8 @@ signal pickaxe_struck
 signal fossil_hit
 signal fossil_ready_to_dust
 signal tool_used(tool: int)
+signal lucky_struck(amount: int, world_pos: Vector2)
+signal lucky_fled
 
 var input_enabled: bool = true
 var current_tool: int = Tuning.TOOL_HANDS
@@ -44,6 +47,15 @@ var _dust_tex: ImageTexture
 var _boosted_tools: Array[int] = []
 var _boost_flash: float = 0.0
 var _boost_pos := Vector2.ZERO
+var _lucky_times: PackedFloat32Array = PackedFloat32Array()
+var _lucky_next: int = 0
+var _lucky_cell := Vector2i(-1, -1)
+var _lucky_left: float = 0.0
+var _lucky_elapsed: float = 0.0
+var _lucky_flee: float = 0.0
+var _lucky_flee_cell := Vector2i(-1, -1)
+var _grid_dirty: bool = true
+var _fx: _FxOverlay
 
 
 func _ready() -> void:
@@ -76,6 +88,10 @@ func _ready() -> void:
 	_dust_particles.texture = _dust_tex
 	_dust_particles.emitting = false
 	add_child(_dust_particles)
+	_fx = _FxOverlay.new()
+	_fx.host = self
+	_fx.z_index = 10
+	add_child(_fx)
 	Tuning.apply_cell_metrics()
 	start_round()
 
@@ -107,6 +123,8 @@ func start_round() -> void:
 	_brushing = false
 	_boost_flash = 0.0
 	_boosted_tools.clear()
+	_reset_lucky()
+	_grid_dirty = true
 	queue_redraw()
 
 
@@ -129,6 +147,105 @@ func has_boosted_tool(tool: int) -> bool:
 	return _boosted_tools.has(tool)
 
 
+func _reset_lucky() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	_lucky_times = Lucky.plan_shift(rng, Tuning.round_seconds)
+	_lucky_next = 0
+	_lucky_cell = Vector2i(-1, -1)
+	_lucky_left = 0.0
+	_lucky_elapsed = 0.0
+	_lucky_flee = 0.0
+	_lucky_flee_cell = Vector2i(-1, -1)
+
+
+func _tick_lucky(delta: float) -> void:
+	if _lucky_flee > 0.0:
+		_lucky_flee = maxf(0.0, _lucky_flee - delta * 3.5)
+	if not input_enabled:
+		if _lucky_cell.x >= 0:
+			_burrow_lucky()
+		return
+	_lucky_elapsed += delta
+	if _lucky_left > 0.0:
+		_lucky_left = maxf(0.0, _lucky_left - delta)
+		if _lucky_left <= 0.0:
+			_burrow_lucky()
+		return
+	if _lucky_next >= _lucky_times.size():
+		return
+	if _lucky_elapsed < _lucky_times[_lucky_next]:
+		return
+	_spawn_lucky()
+	_lucky_next += 1
+
+
+func _spawn_lucky() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var blocked: Array[Vector2i] = []
+	for cell in exposed_cells:
+		blocked.append(cell)
+	_lucky_cell = Lucky.pick_cell(rng, Tuning.grid_w, Tuning.grid_h, blocked)
+	if _lucky_cell.x < 0:
+		return
+	_lucky_left = Tuning.lucky_duration
+
+
+func _burrow_lucky() -> void:
+	if _lucky_cell.x < 0:
+		return
+	_lucky_flee_cell = _lucky_cell
+	_lucky_flee = 1.0
+	_lucky_cell = Vector2i(-1, -1)
+	_lucky_left = 0.0
+	lucky_fled.emit()
+
+
+func _collect_lucky(cells: Array[Vector2i]) -> void:
+	if _lucky_cell.x < 0 or not Lucky.can_hit_with(current_tool):
+		return
+	for cell in cells:
+		if cell != _lucky_cell:
+			continue
+		var amount: int = Lucky.burst_payout(Tuning.money_for_layer(0))
+		var pos := cell_center(_lucky_cell)
+		_lucky_cell = Vector2i(-1, -1)
+		_lucky_left = 0.0
+		lucky_struck.emit(amount, pos)
+		return
+
+
+func lucky_is_active() -> bool:
+	return _lucky_cell.x >= 0
+
+
+func _draw_lucky() -> void:
+	var cell := _lucky_cell
+	var pulse: float = 1.0
+	if cell.x < 0:
+		if _lucky_flee <= 0.0:
+			return
+		cell = _lucky_flee_cell
+		pulse = _lucky_flee
+	if not _in_bounds(cell):
+		return
+	var rect := _top_rect(cell.x, cell.y)
+	var beat: float = 0.55 + 0.45 * absf(sin(float(Time.get_ticks_msec()) * 0.012))
+	var grow: float = (3.0 + beat * 3.0) * pulse
+	var amber := Color("FFB020", (0.55 + beat * 0.4) * pulse)
+	var gold := Color("FFE08A", (0.7 + beat * 0.3) * pulse)
+	draw_rect(rect.grow(grow), amber)
+	draw_rect(rect, Color("FFCC44", 0.38 * pulse))
+	draw_rect(rect.grow(2.0 * pulse), gold, false, 2.5 + beat * 2.0)
+	var flake: float = minf(rect.size.x, rect.size.y) * (0.16 + beat * 0.04)
+	var center := rect.get_center()
+	draw_circle(center, flake, Color("FFF6D0", pulse))
+	draw_circle(center + Vector2(-flake * 0.75, flake * 0.2), flake * 0.42, Color("FFB020", pulse))
+	draw_circle(center + Vector2(flake * 0.75, flake * 0.2), flake * 0.42, Color("FFB020", pulse))
+	draw_arc(center, flake * 1.8, 0.0, TAU, 22, Color("FFE08A", 0.85 * pulse), 2.0)
+
+
 func fossil_exposure() -> float:
 	if fossil_cells.is_empty():
 		return 0.0
@@ -141,7 +258,7 @@ func fossil_cleanliness() -> float:
 
 func preview_value() -> int:
 	var find := _focused_find()
-	if find.is_empty() or bool(find.get("extracted", false)):
+	if find.is_empty():
 		return 0
 	var data = find.get("data", null)
 	if data == null:
@@ -161,13 +278,22 @@ func is_fully_exposed() -> bool:
 
 func has_visible_find() -> bool:
 	for find in finds:
-		if bool(find.get("extracted", false)):
-			continue
 		var cells: Dictionary = find.get("cells", {})
 		for cell in cells:
 			if exposed_cells.has(cell):
 				return true
 	return false
+
+
+func focused_find_name() -> String:
+	var data = _focused_find().get("data", null)
+	if data == null:
+		return ""
+	return str(data.name)
+
+
+func focused_find_extracted() -> bool:
+	return bool(_focused_find().get("extracted", false))
 
 
 func set_tool(tool: int) -> void:
@@ -356,8 +482,9 @@ func _process(delta: float) -> void:
 		_bone_pulse = maxf(0.0, _bone_pulse - delta * 0.85)
 	if _boost_flash > 0.0:
 		_boost_flash = maxf(0.0, _boost_flash - delta * 1.8)
+	_tick_lucky(delta)
 	if not input_enabled:
-		queue_redraw()
+		_redraw_grid_if_dirty()
 		return
 	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	var aiming := _cell_at(_mouse_world())
@@ -366,18 +493,18 @@ func _process(delta: float) -> void:
 			_hold_time = 0.0
 			if _can_harm_fossil():
 				_fossil_hold += delta
-				var gap := 1.0 / maxf(Tuning.fossil_hold_tick_rate, 0.2)
-				while _fossil_hold >= gap:
-					_fossil_hold -= gap
+				var gap := Tuning.hold_interval(Tuning.fossil_hold_tick_rate)
+				if _fossil_hold >= gap:
+					_fossil_hold = minf(_fossil_hold - gap, gap * 0.5)
 					_hit_fossil(aiming)
 			else:
 				_fossil_hold = 0.0
 		else:
 			_fossil_hold = 0.0
 			_hold_time += delta
-			var interval := 1.0 / _hold_rate()
-			while _hold_time >= interval:
-				_hold_time -= interval
+			var interval := Tuning.hold_interval(_hold_rate())
+			if _hold_time >= interval:
+				_hold_time = minf(_hold_time - interval, interval * 0.5)
 				_strike_current(false)
 	else:
 		_holding_dig = false
@@ -393,7 +520,7 @@ func _process(delta: float) -> void:
 		_brushing = true
 	else:
 		_brushing = false
-	queue_redraw()
+	_redraw_grid_if_dirty()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -523,10 +650,14 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 	if not _in_bounds(center):
 		return
 	var heard := false
+	var juice_layer: int = _top_layer[center.x][center.y]
+	var struck: int = 0
+	var payout: int = 0
 	var radius: float = 0.0
 	if not _using_hands() and not GameState.precision_on:
 		radius = Tuning.shovel_radius
 	var targets: Array[Vector2i] = Tuning.shovel_hit_cells(center, radius, GameState.precision_on)
+	_collect_lucky(targets)
 	for cell in targets:
 		if not _in_bounds(cell):
 			continue
@@ -538,9 +669,15 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 		var damage := Tuning.damage_for(Tuning.TOOL_SHOVEL, layer) * style_mult
 		if GameState.precision_on:
 			damage *= 1.0 + Tuning.precision_damage_bonus
-		_damage_cell(cell, Tuning.TOOL_SHOVEL, damage, not heard)
-		if not heard and layer < Tuning.layer_count:
+		var gained: int = _damage_cell(cell, Tuning.TOOL_SHOVEL, damage)
+		if gained < 0:
+			continue
+		payout += gained
+		struck += 1
+		if not heard:
+			juice_layer = layer
 			heard = true
+	_finish_strike(center, juice_layer, payout, struck, heard)
 	_mark_tool_used(current_tool, cell_center(center))
 
 
@@ -557,6 +694,13 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 			Vector2i(-1, 0),
 			Vector2i(1, 0),
 		]
+	var pick_cells: Array[Vector2i] = []
+	for offset in offsets:
+		pick_cells.append(center + offset)
+	_collect_lucky(pick_cells)
+	var juice_layer: int = _top_layer[center.x][center.y]
+	var struck: int = 0
+	var payout: int = 0
 	for offset in offsets:
 		var cell: Vector2i = center + offset
 		if not _in_bounds(cell):
@@ -570,9 +714,15 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 		var damage := Tuning.pickaxe_cell_damage(layer, splash, style_mult)
 		if GameState.precision_on:
 			damage *= 1.0 + Tuning.precision_damage_bonus
-		_damage_cell(cell, Tuning.TOOL_PICKAXE, damage, not heard)
-		if not heard and layer < Tuning.layer_count:
+		var gained: int = _damage_cell(cell, Tuning.TOOL_PICKAXE, damage)
+		if gained < 0:
+			continue
+		payout += gained
+		struck += 1
+		if not heard:
+			juice_layer = layer
 			heard = true
+	_finish_strike(center, juice_layer, payout, struck, heard)
 	pickaxe_struck.emit()
 	_mark_tool_used(Tuning.TOOL_PICKAXE, cell_center(center))
 
@@ -586,6 +736,7 @@ func _apply_brush(world: Vector2, travel: float) -> void:
 		return
 	var after := clampf(before + travel * Tuning.brush_clean_per_pixel, 0.0, 1.0)
 	cleanliness[cell] = after
+	_grid_dirty = true
 	_puff_dust(cell_center(cell), after - before)
 	_mark_tool_used(Tuning.TOOL_BRUSH, cell_center(cell))
 	if travel > 4.0:
@@ -596,27 +747,26 @@ func _apply_brush(world: Vector2, travel: float) -> void:
 		_extract_find(find, true)
 
 
-func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0, play_sfx: bool = true) -> void:
+func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0) -> int:
 	if not _in_bounds(cell):
-		return
+		return -1
 	if _is_exposed_fossil(cell):
-		return
+		return -1
 	var layer: int = _top_layer[cell.x][cell.y]
 	if layer >= Tuning.layer_count:
-		return
+		return -1
 	var buried := _find_at(cell)
 	if not buried.is_empty() and layer >= int(buried["layer"]):
-		return
+		return -1
 	var damage := override_damage
 	if damage < 0.0:
 		damage = Tuning.damage_for(tool, layer)
 	if damage <= 0.0:
-		return
+		return -1
 	var start_material := Tuning.material_at_layer(layer)
 	_hp[cell.x][cell.y] -= damage
-	_burst(cell_center(cell), layer)
-	if play_sfx:
-		_play_hit(layer)
+	_grid_dirty = true
+	var payout: int = 0
 	var cleared := 0
 	while _hp[cell.x][cell.y] <= 0.0:
 		layer = _top_layer[cell.x][cell.y]
@@ -627,7 +777,7 @@ func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0, play
 			_reveal_fossil_cell(cell)
 			_hp[cell.x][cell.y] = 9999.0
 			break
-		_clear_layer(cell)
+		payout += _clear_layer(cell)
 		cleared += 1
 		layer = _top_layer[cell.x][cell.y]
 		if layer >= Tuning.layer_count:
@@ -642,16 +792,17 @@ func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0, play
 		if tool == Tuning.TOOL_PICKAXE and start_material <= Tuning.MAT_PACKED and cleared >= 1:
 			_hp[cell.x][cell.y] = Tuning.hp_for_layer(layer)
 			break
+	return payout
 
 
-func _clear_layer(cell: Vector2i) -> void:
+func _clear_layer(cell: Vector2i) -> int:
 	var layer: int = _top_layer[cell.x][cell.y]
 	var amount := Tuning.money_for_layer(layer)
 	_top_layer[cell.x][cell.y] = layer + 1
 	if _top_layer[cell.x][cell.y] > deepest_layer:
 		deepest_layer = _top_layer[cell.x][cell.y]
-	Sfx.play("layer_clear")
-	layer_cleared.emit(amount, cell_center(cell))
+	_grid_dirty = true
+	return amount
 
 
 func _reveal_fossil_cell(cell: Vector2i) -> void:
@@ -669,6 +820,7 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	if layer > deepest_layer:
 		deepest_layer = layer
 	_focus_find(find)
+	_grid_dirty = true
 	fossil_cell_exposed.emit(cell_center(cell), first)
 	if first:
 		Sfx.play("fossil_ping")
@@ -688,6 +840,7 @@ func _can_harm_fossil() -> bool:
 
 func pulse_bones() -> void:
 	_bone_pulse = 1.0
+	_grid_dirty = true
 	queue_redraw()
 
 
@@ -706,12 +859,16 @@ func _hit_fossil(cell: Vector2i) -> void:
 	var find := _find_at(cell)
 	if find.is_empty() or bool(find.get("extracted", false)):
 		return
-	find["integrity"] = maxf(Tuning.integrity_floor, float(find["integrity"]) - Tuning.integrity_hit_cost)
+	var cost: float = Tuning.integrity_hit_for(current_tool)
+	if cost <= 0.0:
+		return
+	find["integrity"] = maxf(Tuning.integrity_floor, float(find["integrity"]) - cost)
 	_focus_find(find)
 	_bone_pulse = maxf(_bone_pulse, 0.7)
 	_burst(cell_center(cell), int(find["layer"]))
 	Sfx.play("crack")
 	fossil_hit.emit()
+	_grid_dirty = true
 	queue_redraw()
 
 
@@ -759,12 +916,30 @@ func _play_hit(layer: int) -> void:
 			Sfx.play("hit_rock")
 
 
-func _burst(world_pos: Vector2, layer: int) -> void:
+func _finish_strike(center: Vector2i, juice_layer: int, payout: int, struck: int, play_sfx: bool) -> void:
+	if struck > 0:
+		_burst(cell_center(center), juice_layer, struck > 1)
+	if play_sfx:
+		_play_hit(juice_layer)
+	if payout > 0:
+		Sfx.play("layer_clear")
+		layer_cleared.emit(payout, cell_center(center))
+	if struck > 0 or payout > 0:
+		_grid_dirty = true
+
+
+func _redraw_grid_if_dirty() -> void:
+	if _grid_dirty or _bone_pulse > 0.0 or _lucky_flee > 0.0 or lucky_is_active():
+		_grid_dirty = false
+		queue_redraw()
+
+
+func _burst(world_pos: Vector2, layer: int, fat: bool = false) -> void:
 	var rock := Tuning.material_at_layer(layer) == Tuning.MAT_ROCK
 	_particles.position = to_local(world_pos)
 	_particles.color = Tuning.particle_color_for_layer(layer)
 	_particles.texture = _rock_tex if rock else _dirt_tex
-	_particles.amount = 16 if rock else 10
+	_particles.amount = (22 if rock else 14) if fat else (16 if rock else 10)
 	_particles.scale_amount_min = 1.4 if rock else 0.8
 	_particles.scale_amount_max = 2.4 if rock else 1.4
 	_particles.lifetime = 0.5 if rock else 0.32
@@ -806,8 +981,7 @@ func _draw() -> void:
 			_draw_cell_sides(x, y)
 			_draw_top(x, y)
 	_draw_bone_pulse()
-	_draw_boost_ring()
-	_draw_tool_cursor()
+	_draw_lucky()
 
 
 func _chunk_top() -> Rect2:
@@ -953,48 +1127,64 @@ func _draw_dust_specks(rect: Rect2, cell: Vector2i, clean: float) -> void:
 		draw_circle(pos, 1.6, Color(0.28, 0.2, 0.12, 0.55))
 
 
-func _draw_boost_ring() -> void:
+func _draw_fx(c: CanvasItem) -> void:
+	_draw_boost_ring(c)
+	_draw_tool_cursor(c)
+
+
+func _draw_boost_ring(c: CanvasItem) -> void:
 	if _boost_flash <= 0.0:
 		return
 	var radius: float = 16.0 + (1.0 - _boost_flash) * 52.0
-	draw_arc(_boost_pos, radius, 0.0, TAU, 36, Color("FFE08A", _boost_flash * 0.9), 3.5)
-	draw_arc(_boost_pos, radius * 0.62, 0.0, TAU, 28, Color("FFF4D2", _boost_flash * 0.45), 2.0)
+	c.draw_arc(_boost_pos, radius, 0.0, TAU, 36, Color("FFE08A", _boost_flash * 0.9), 3.5)
+	c.draw_arc(_boost_pos, radius * 0.62, 0.0, TAU, 28, Color("FFF4D2", _boost_flash * 0.45), 2.0)
 
 
-func _draw_tool_cursor() -> void:
+func _draw_tool_cursor(c: CanvasItem) -> void:
 	var pos := _mouse_world()
 	var color := Color("F2E6C4")
 	var boosted := has_boosted_tool(current_tool)
 	if _using_hands():
 		color = Color("E8C9A0")
-		draw_circle(pos, 5.0, color)
-		draw_arc(pos, 9.0, 0.0, TAU, 16, color, 2.0)
-		draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), "HANDS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+		c.draw_circle(pos, 5.0, color)
+		c.draw_arc(pos, 9.0, 0.0, TAU, 16, color, 2.0)
+		c.draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), "HANDS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		return
 	match current_tool:
 		Tuning.TOOL_SHOVEL:
 			color = Color("FFE08A") if boosted else Color("D4A017")
-			draw_circle(pos, 6.0 if boosted else 5.0, color)
+			c.draw_circle(pos, 6.0 if boosted else 5.0, color)
 			if GameState.precision_on or Tuning.shovel_radius <= 0.0:
-				draw_arc(pos, 10.0, 0.0, TAU, 16, color, 2.0)
+				c.draw_arc(pos, 10.0, 0.0, TAU, 16, color, 2.0)
 			else:
 				var ring: float = Tuning.shovel_radius * Tuning.cell_w * 0.45
-				draw_arc(pos, ring, 0.0, TAU, 24, color, 3.2 if boosted else 2.0)
+				c.draw_arc(pos, ring, 0.0, TAU, 24, color, 3.2 if boosted else 2.0)
 				if boosted:
 					var wobble: float = 5.0 + sin(float(Time.get_ticks_msec()) * 0.012) * 2.0
-					draw_arc(pos, ring + wobble, 0.0, TAU, 28, Color("FFF4D2", 0.5), 2.0)
+					c.draw_arc(pos, ring + wobble, 0.0, TAU, 28, Color("FFF4D2", 0.5), 2.0)
 		Tuning.TOOL_PICKAXE:
 			color = Color("FF7A5C") if boosted else Color("D94A3D")
 			var reach: float = 14.0 if boosted else 10.0
 			if GameState.precision_on:
-				draw_circle(pos, 7.0 if boosted else 6.0, color, false, 2.5 if boosted else 2.0)
+				c.draw_circle(pos, 7.0 if boosted else 6.0, color, false, 2.5 if boosted else 2.0)
 			else:
-				draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
-				draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
+				c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
+				c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
 		Tuning.TOOL_BRUSH:
 			color = Color("A6E4F5") if boosted else Color("7EC8E3")
 			var puff: float = 11.0 if boosted else 7.0
-			draw_circle(pos, puff, Color(0.5, 0.8, 0.9, 0.28 if boosted else 0.25))
-			draw_arc(pos, puff + 2.0, 0.0, TAU, 20, color, 2.5 if boosted else 2.0)
+			c.draw_circle(pos, puff, Color(0.5, 0.8, 0.9, 0.28 if boosted else 0.25))
+			c.draw_arc(pos, puff + 2.0, 0.0, TAU, 20, color, 2.5 if boosted else 2.0)
 	var label: String = Tuning.TOOL_NAMES[current_tool]
-	draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+	c.draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+
+
+class _FxOverlay extends Node2D:
+	var host: Node2D
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		if host != null and host.has_method("_draw_fx"):
+			host.call("_draw_fx", self)

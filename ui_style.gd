@@ -50,6 +50,79 @@ static func apply_button(button: Button, prominent: bool = false) -> void:
 	button.add_theme_color_override("font_disabled_color", Color("7A6A58"))
 
 
+static func apply_tab(button: Button, selected: bool, affordable: bool = false) -> void:
+	var fill := Color("4A3420") if selected else Color("2A221C")
+	if affordable and not selected:
+		fill = Color("3A2A18")
+	var border := GOLD if selected or affordable else LINE
+	var hover := Color("5C4030") if selected else Color("3F3126")
+	button.add_theme_stylebox_override("normal", button_box(fill, border))
+	button.add_theme_stylebox_override("hover", button_box(hover, GOLD))
+	button.add_theme_stylebox_override("pressed", button_box(Color("6E3C1C"), GOLD))
+	button.add_theme_stylebox_override("focus", button_box(fill, GOLD))
+	button.add_theme_color_override("font_color", GOLD if selected else INK)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", GOLD)
+	button.add_theme_color_override("font_focus_color", GOLD)
+
+
+static func chapter_box() -> StyleBoxFlat:
+	var box := panel_box(Color("221A14"))
+	box.border_color = Color("8A6A40")
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(12)
+	box.content_margin_left = 14
+	box.content_margin_right = 14
+	box.content_margin_top = 12
+	box.content_margin_bottom = 12
+	return box
+
+
+static func gate_box() -> StyleBoxFlat:
+	var box := panel_box(Color("16110D"))
+	box.border_color = Color("4A3C30")
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(12)
+	box.content_margin_left = 18
+	box.content_margin_right = 18
+	box.content_margin_top = 18
+	box.content_margin_bottom = 18
+	return box
+
+
+static func row_box(heat: String) -> StyleBoxFlat:
+	var fill := Color("2A211A")
+	var border := LINE
+	var width := 2
+	var glow := 8
+	match heat:
+		"glow":
+			fill = Color("3A2A18")
+			border = GOLD
+			width = 3
+			glow = 14
+		"maxed":
+			fill = Color("3A2C18")
+			border = Color("C9A056")
+		"locked":
+			fill = Color("1E1914")
+			border = Color("4A3C30")
+		"dim":
+			fill = Color("261E18")
+			border = Color("5A4A3A")
+	var box := panel_box(fill)
+	box.border_color = border
+	box.set_border_width_all(width)
+	box.set_corner_radius_all(10)
+	box.content_margin_left = 10
+	box.content_margin_right = 10
+	box.content_margin_top = 8
+	box.content_margin_bottom = 8
+	box.shadow_color = Color(0.89, 0.72, 0.35, 0.5) if heat == "glow" else Color(0, 0, 0, 0.28)
+	box.shadow_size = glow
+	return box
+
+
 static func apply_panel(panel: Panel, fill: Color = PAPER) -> void:
 	panel.add_theme_stylebox_override("panel", panel_box(fill))
 
