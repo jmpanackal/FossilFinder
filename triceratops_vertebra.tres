@@ -4,10 +4,14 @@
 
 [resource]
 script = ExtResource("1_foss")
-name = "Vertebra"
-piece_id = "vertebra"
+name = "Triceratops Vertebra"
+piece_id = "triceratops_vertebra"
+stand_id = "triceratops"
+mount_region = "body"
 shape_width = 3
 shape = PackedInt32Array(0, 1, 0, 1, 0, 1)
 min_layer = 8
 max_layer = 16
 base_value = 24
+min_rank = 1
+needs_rich_bed = false

@@ -42,8 +42,6 @@ static func glyph_for(id: String) -> String:
 			return "super_pick"
 		"pick_soft":
 			return "soft"
-		"precision":
-			return "precision"
 		"brush_speed":
 			return "brush"
 		"brush_master":
@@ -139,8 +137,6 @@ func _draw() -> void:
 			_draw_scoop(c, k, ink)
 		"soft":
 			_draw_soft(c, k, ink)
-		"precision":
-			_draw_precision(c, k, ink)
 		"shift":
 			_draw_shift(c, k, ink)
 		"soil":
@@ -273,11 +269,6 @@ func _draw_soft(c: Vector2, k: float, ink: Color) -> void:
 	draw_circle(c + Vector2(-6, 2) * k, 3.2 * k, ink)
 	draw_circle(c + Vector2(0, 0) * k, 3.2 * k, ink)
 	draw_circle(c + Vector2(6, 2) * k, 3.2 * k, ink)
-
-
-func _draw_precision(c: Vector2, k: float, ink: Color) -> void:
-	draw_rect(Rect2(c + Vector2(-7, -7) * k, Vector2(14, 14) * k), ink, false, 2.4 * k)
-	draw_rect(Rect2(c + Vector2(-3, -3) * k, Vector2(6, 6) * k), ink)
 
 
 func _draw_shift(c: Vector2, k: float, ink: Color) -> void:

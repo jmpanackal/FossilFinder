@@ -394,8 +394,8 @@ func _place_fossils() -> void:
 	fossil_cells.clear()
 	var main_data: FossilDataScript = _choose_main_find()
 	if not _try_place_find(main_data):
-		var tooth: FossilDataScript = load("res://tooth.tres") as FossilDataScript
-		_try_place_find(tooth)
+		var starter: FossilDataScript = load("res://t_rex_tooth.tres") as FossilDataScript
+		_try_place_find(starter)
 	if not finds.is_empty():
 		fossil = finds[0]["data"]
 		fossil_origin = finds[0]["origin"]
@@ -407,7 +407,17 @@ func _place_fossils() -> void:
 	var pool: Array = []
 	for path in Tuning.extra_fossil_paths:
 		var extra: FossilDataScript = load(str(path)) as FossilDataScript
-		if extra != null and _find_fits(extra):
+		if extra != null and _can_spawn(extra):
+			pool.append(extra)
+	for path in Tuning.main_fossil_paths:
+		var extra: FossilDataScript = load(str(path)) as FossilDataScript
+		if extra == null or not _can_spawn(extra) or not _is_small_seasonal(extra):
+			continue
+		var extra_id: String = extra.piece_id if extra.piece_id != "" else extra.name.to_snake_case()
+		if GameState.piece_needs_more(extra_id):
+			pool.append(extra)
+			continue
+		if extra.occupied_cells() == 1 and randf() < Tuning.extra_complete_set_chance:
 			pool.append(extra)
 	for _j in extras:
 		if pool.is_empty():
@@ -416,28 +426,55 @@ func _place_fossils() -> void:
 
 
 func _choose_main_find() -> FossilDataScript:
-	var skull: FossilDataScript = load(Tuning.fossil_path) as FossilDataScript
-	if GameState.big_finds_unlocked() and _find_fits(skull):
-		return skull
 	var options: Array = []
-	for path in Tuning.extra_fossil_paths:
-		var extra: FossilDataScript = load(str(path)) as FossilDataScript
-		if extra != null and _find_fits(extra):
-			options.append(extra)
+	var seen: Dictionary = {}
+	for path in Tuning.main_fossil_paths:
+		_append_spawnable(options, seen, str(path))
+	_append_spawnable(options, seen, Tuning.fossil_path)
 	if options.is_empty():
-		return load("res://tooth.tres") as FossilDataScript
-	return options[randi() % options.size()]
+		return load("res://t_rex_tooth.tres") as FossilDataScript
+	var missing: Array = []
+	for data in options:
+		var piece: FossilDataScript = data as FossilDataScript
+		var id: String = piece.piece_id if piece.piece_id != "" else piece.name.to_snake_case()
+		if GameState.piece_needs_more(id):
+			missing.append(piece)
+	var pool: Array = missing if not missing.is_empty() else options
+	return pool[randi() % pool.size()] as FossilDataScript
 
 
-func _find_fits(data: FossilDataScript) -> bool:
+func _append_spawnable(options: Array, seen: Dictionary, path: String) -> void:
+	if path.is_empty() or seen.has(path):
+		return
+	seen[path] = true
+	var data: FossilDataScript = load(path) as FossilDataScript
+	if data != null and _can_spawn(data):
+		options.append(data)
+
+
+func _can_spawn(data: FossilDataScript) -> bool:
 	if data == null:
 		return false
-	var max_x: int = 0
-	var max_y: int = 0
-	for offset in data.cell_offsets():
-		max_x = maxi(max_x, offset.x)
-		max_y = maxi(max_y, offset.y)
-	return max_x < Tuning.grid_w and max_y < Tuning.grid_h
+	if not Tuning.piece_can_spawn(data, Tuning.site_size_rank, Tuning.big_finds_unlocked):
+		return false
+	var box: Vector2i = data.bounding_size()
+	if box.x > Tuning.grid_w or box.y > Tuning.grid_h:
+		return false
+	if box.x >= Tuning.grid_w and box.y >= Tuning.grid_h:
+		return false
+	return true
+
+
+func _is_scrap(data: FossilDataScript) -> bool:
+	if data == null:
+		return false
+	return not data.is_skull() and data.occupied_cells() < 6
+
+
+func _is_small_seasonal(data: FossilDataScript) -> bool:
+	if data == null or data.is_skull():
+		return false
+	return data.occupied_cells() <= 3
 
 
 func _try_place_find(data: FossilDataScript) -> bool:
@@ -717,9 +754,9 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 	var payout: int = 0
 	var punch_hits: Array[Vector3i] = []
 	var radius: float = 0.0
-	if not _using_hands() and not GameState.precision_on:
+	if not _using_hands():
 		radius = Tuning.shovel_radius
-	var targets: Array[Vector2i] = Tuning.shovel_hit_cells(center, radius, GameState.precision_on)
+	var targets: Array[Vector2i] = Tuning.shovel_hit_cells(center, radius)
 	_collect_lucky(targets)
 	for cell in targets:
 		if not _in_bounds(cell):
@@ -730,8 +767,6 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 			continue
 		var layer: int = _top_layer[cell.x][cell.y]
 		var damage := Tuning.damage_for(Tuning.TOOL_SHOVEL, layer) * style_mult
-		if GameState.precision_on:
-			damage *= 1.0 + Tuning.precision_damage_bonus
 		var gained: int = _damage_cell(cell, Tuning.TOOL_SHOVEL, damage)
 		if gained < 0:
 			continue
@@ -751,15 +786,13 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 	if not _in_bounds(center):
 		return
 	var heard := false
-	var offsets: Array[Vector2i] = [Vector2i.ZERO]
-	if not GameState.precision_on:
-		offsets = [
-			Vector2i(0, 0),
-			Vector2i(0, -1),
-			Vector2i(0, 1),
-			Vector2i(-1, 0),
-			Vector2i(1, 0),
-		]
+	var offsets: Array[Vector2i] = [
+		Vector2i(0, 0),
+		Vector2i(0, -1),
+		Vector2i(0, 1),
+		Vector2i(-1, 0),
+		Vector2i(1, 0),
+	]
 	var pick_cells: Array[Vector2i] = []
 	for offset in offsets:
 		pick_cells.append(center + offset)
@@ -779,8 +812,6 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 		var splash := offset != Vector2i.ZERO
 		var layer: int = _top_layer[cell.x][cell.y]
 		var damage := Tuning.pickaxe_cell_damage(layer, splash, style_mult)
-		if GameState.precision_on:
-			damage *= 1.0 + Tuning.precision_damage_bonus
 		var gained: int = _damage_cell(cell, Tuning.TOOL_PICKAXE, damage)
 		if gained < 0:
 			continue
@@ -866,7 +897,7 @@ func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0) -> i
 
 func _clear_layer(cell: Vector2i) -> int:
 	var layer: int = _top_layer[cell.x][cell.y]
-	var find: Dictionary = pending_find(cell)
+	var find: Dictionary = Matrix.harvest(pending_find(cell), layer, current_tool)
 	_top_layer[cell.x][cell.y] = layer + 1
 	if _top_layer[cell.x][cell.y] > deepest_layer:
 		deepest_layer = _top_layer[cell.x][cell.y]
@@ -1171,7 +1202,6 @@ func _make_square_texture(size: int) -> ImageTexture:
 
 
 func _draw() -> void:
-	_draw_void()
 	_draw_chunk()
 	if _top_layer.is_empty():
 		return
@@ -1193,10 +1223,6 @@ func _chunk_top() -> Rect2:
 		float(Tuning.grid_w) * Tuning.cell_w + pad * 2.0,
 		float(Tuning.grid_h) * Tuning.cell_h + pad
 	)
-
-
-func _draw_void() -> void:
-	draw_rect(Rect2(0, 0, Tuning.view_w, Tuning.view_h), Color("140F0C"))
 
 
 func _draw_chunk() -> void:
@@ -1261,7 +1287,7 @@ func _draw_top(x: int, y: int) -> void:
 	if not _is_exposed_fossil(cell) and layer < Tuning.layer_count:
 		_draw_inclusion(rect, cell)
 	if _is_exposed_fossil(cell):
-		_draw_bone_mark(rect, float(cleanliness.get(cell, 0.0)))
+		_draw_bone_mark(rect, cell, float(cleanliness.get(cell, 0.0)))
 		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
 
 
@@ -1313,10 +1339,14 @@ func _bone_color(cell: Vector2i) -> Color:
 	return color.lerp(Color("8A6A3E"), (1.0 - integrity) * 0.4)
 
 
-func _draw_bone_mark(rect: Rect2, clean: float) -> void:
-	var inset := rect.grow(-8)
+func _draw_bone_mark(rect: Rect2, cell: Vector2i, clean: float) -> void:
+	var find := _find_at(cell)
+	var data: FossilDataScript = find.get("data", fossil) as FossilDataScript
 	var mark := Color("8A7355").lerp(Color("FFF4D6"), clean)
-	draw_rect(inset, mark, false, 2.0)
+	if data != null:
+		data.draw_silhouette(self, rect.grow(-6.0), mark)
+		return
+	draw_rect(rect.grow(-8.0), mark, false, 2.0)
 
 
 func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
@@ -1377,7 +1407,7 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 		Tuning.TOOL_SHOVEL:
 			color = Color("FFE08A") if boosted else Color("D4A017")
 			c.draw_circle(pos, 6.0 if boosted else 5.0, color)
-			if GameState.precision_on or Tuning.shovel_radius <= 0.0:
+			if Tuning.shovel_radius <= 0.0:
 				c.draw_arc(pos, 10.0, 0.0, TAU, 16, color, 2.0)
 			else:
 				var ring: float = Tuning.shovel_radius * Tuning.cell_w * 0.45
@@ -1388,11 +1418,8 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 		Tuning.TOOL_PICKAXE:
 			color = Color("FF7A5C") if boosted else Color("D94A3D")
 			var reach: float = 14.0 if boosted else 10.0
-			if GameState.precision_on:
-				c.draw_circle(pos, 7.0 if boosted else 6.0, color, false, 2.5 if boosted else 2.0)
-			else:
-				c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
-				c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
+			c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
+			c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
 		Tuning.TOOL_BRUSH:
 			color = Color("A6E4F5") if boosted else Color("7EC8E3")
 			var puff: float = 11.0 if boosted else 7.0

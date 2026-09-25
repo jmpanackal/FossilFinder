@@ -26,9 +26,10 @@ var pending_unveils: Dictionary = {}
 var unveil_spike_left: float = 0.0
 var _income_accum: float = 0.0
 var _bases: Dictionary = {}
+var _fossil_by_id: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
-	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell scrape. Weaker dirt than a shovel, but they do not chip bone.", "cost": 8, "scale": 1.55, "max": 5},
+	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.55, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 32, "scale": 1.55, "max": 4},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 20, "scale": 1.7, "max": 6},
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 55, "scale": 1.65, "max": 5, "requires": "shovel_click"},
@@ -39,11 +40,10 @@ var catalog: Array[Dictionary] = [
 	{"id": "pick_hold", "cat": "Pickaxe", "tier": 1, "name": "Relentless Picking", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep striking.", "unlock_action": "Unlock", "cost": 160, "scale": 1.65, "max": 5, "requires": "pick_click"},
 	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 1100, "scale": 1.85, "max": 6},
 	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Blunted Point", "desc": "Takes more hits to crack bone.", "cost": 720, "scale": 1.75, "max": 5},
-	{"id": "precision", "cat": "Pickaxe", "tier": 2, "name": "Fine Point", "desc": "Hits harder in single-block mode.", "unlock_name": "Fine Point", "unlock_desc": "Unlock single-block mode.", "unlock_action": "Unlock", "cost": 650, "scale": 1.8, "max": 5},
 	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting the bone goes faster.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 220, "scale": 1.7, "max": 5, "requires": "pick_click"},
 	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Even faster dusting once the first brush is maxed.", "cost": 800, "scale": 1.8, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 55, "scale": 1.65, "max": 4},
-	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more.", "cost": 30, "scale": 1.65, "max": 5},
+	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more, especially by hand.", "cost": 30, "scale": 1.65, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 65, "scale": 1.85, "max": 3},
 	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Scraps", "desc": "More scraps can hide in the pit.", "unlock_name": "Scattered Scraps", "unlock_desc": "A second small bone can hide in the pit.", "unlock_action": "Unlock", "cost": 110, "scale": 1.75, "max": 2},
 	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra scraps too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 480, "scale": 1.8, "max": 3},
@@ -240,7 +240,7 @@ func tool_for_upgrade(id: String) -> int:
 		return Tuning.TOOL_HANDS
 	if id.begins_with("shovel"):
 		return Tuning.TOOL_SHOVEL
-	if id.begins_with("pick") or id == "precision":
+	if id.begins_with("pick"):
 		return Tuning.TOOL_PICKAXE
 	if id.begins_with("brush"):
 		return Tuning.TOOL_BRUSH
@@ -372,11 +372,11 @@ func tool_display_name(tool: int) -> String:
 func tool_role_line(tool: int) -> String:
 	match tool:
 		Tuning.TOOL_HANDS:
-			return "Precision · 1 cell"
+			return "Harvest · 1 cell"
 		Tuning.TOOL_SHOVEL:
-			return "Dirt"
+			return "Clear dirt"
 		Tuning.TOOL_PICKAXE:
-			return "Stone"
+			return "Clear stone"
 		Tuning.TOOL_BRUSH:
 			return "Fossil"
 		_:
@@ -520,7 +520,7 @@ func is_site_upgrade(id: String) -> bool:
 func upgrade_feel_line(id: String) -> String:
 	match id:
 		"hands_click":
-			return "Tougher fingers"
+			return "Richer harvest"
 		"hands_hold":
 			return "Hold to keep digging"
 		"shovel_click":
@@ -541,8 +541,6 @@ func upgrade_feel_line(id: String) -> String:
 			return "Super Pick"
 		"pick_soft":
 			return "Kinder to bone"
-		"precision":
-			return "Fine Point ready"
 		"brush_speed":
 			return "Faster dusting" if int(levels.get("brush_speed", 0)) > 1 else "You have a brush"
 		"brush_master":
@@ -603,15 +601,14 @@ func _queue_notice(id: String) -> void:
 	})
 
 
-func precision_unlocked() -> bool:
-	return int(levels.get("precision", 0)) > 0
-
-
 func apply_upgrades() -> void:
 	var shovel_ranks: float = maxf(0.0, _lv("shovel_click") - 1.0)
 	var pick_ranks: float = maxf(0.0, _lv("pick_click") - 1.0)
 	var brush_ranks: float = maxf(0.0, _lv("brush_speed") - 1.0)
 	Tuning.hands_click_mult = float(_bases["hands_click_mult"]) + 0.07 * _lv("hands_click")
+	Tuning.matrix_hands_quality = 0.10 * _lv("hands_click") + 0.045 * _lv("dirt_pay")
+	Tuning.matrix_hands_pay = 1.0 + 0.12 * _lv("hands_click") + 0.06 * _lv("dirt_pay")
+	Tuning.matrix_clear_pay = 0.50
 	Tuning.shovel_click_mult = float(_bases["shovel_click_mult"]) + 0.20 * shovel_ranks + 0.32 * _lv("shovel_super")
 	Tuning.shovel_hold_tick_rate = float(_bases["shovel_hold_tick_rate"]) + 0.55 * _lv("hands_hold") + 0.85 * _lv("shovel_hold") + 0.70 * _lv("shovel_super")
 	# Unlock is one cell of reach (a plus). Rank 2 is a 3-wide scoop.
@@ -623,7 +620,7 @@ func apply_upgrades() -> void:
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
 	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time")
 	Tuning.museum_income_mult = float(_bases["museum_income_mult"]) + 0.20 * _lv("lighting") + 0.14 * _lv("labels") + 0.28 * _lv("gift_shop") + 0.40 * _lv("crowds")
-	Tuning.precision_damage_bonus = 0.28 * maxf(0.0, _lv("precision") - 1.0)
+	Tuning.precision_damage_bonus = 0.0
 	Tuning.money_mult = float(_bases["money_mult"]) + 0.06 * _lv("money_mult")
 	Tuning.dirt_money_bonus = 0.35 * _lv("dirt_pay")
 	Tuning.rock_money_bonus = 1.1 * _lv("rock_pay")
@@ -640,21 +637,81 @@ func apply_upgrades() -> void:
 	Tuning.integrity_hit_cost = maxf(0.035, float(_bases["integrity_hit_cost"]) - 0.018 * (_lv("shovel_soft") + _lv("pick_soft")))
 
 
+func piece_need(piece_id: String) -> int:
+	var data: FossilData = fossil_data_for(piece_id)
+	if data != null:
+		return maxi(1, int(data.set_need))
+	return 1
+
+
+func piece_count(piece_id: String) -> int:
+	if not pieces.has(piece_id):
+		return 0
+	var piece: Dictionary = pieces[piece_id]
+	return maxi(0, int(piece.get("count", 1)))
+
+
+func piece_needs_more(piece_id: String) -> bool:
+	return piece_count(piece_id) < piece_need(piece_id)
+
+
+func piece_progress_label(piece_id: String) -> String:
+	var need: int = piece_need(piece_id)
+	if need <= 1:
+		return ""
+	return "%d/%d" % [piece_count(piece_id), need]
+
+
+func _duplicate_sale(cleanliness: float, set_bonus: bool) -> int:
+	var bonus: float = 100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult
+	if set_bonus:
+		bonus *= Tuning.set_complete_sale_mult
+	return int(round(bonus))
+
+
 func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
-	if pieces.has(piece_id):
-		var bonus := int(round(100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult))
+	var need: int = piece_need(piece_id)
+	var count: int = piece_count(piece_id)
+	if pieces.has(piece_id) and count >= need:
+		var set_bonus: bool = need > 1
+		var bonus: int = _duplicate_sale(cleanliness, set_bonus)
 		add_money(bonus)
 		collection_changed.emit()
+		if set_bonus:
+			return "Set complete for %s. Extra sold for $%d." % [display_name, bonus]
 		return "Already on display. Extra copy sold for $%d." % bonus
+	if pieces.has(piece_id):
+		var piece: Dictionary = pieces[piece_id]
+		piece["count"] = count + 1
+		if cleanliness >= float(piece.get("cleanliness", 0.0)):
+			piece["name"] = display_name
+			piece["cleanliness"] = cleanliness
+			piece["clean"] = clean
+		pieces[piece_id] = piece
+		collection_changed.emit()
+		hall_changed.emit()
+		return _mount_note(display_name, count + 1, need, bool(pieces[piece_id].get("clean", clean)))
 	pieces[piece_id] = {
 		"name": display_name,
 		"cleanliness": cleanliness,
 		"clean": clean,
+		"count": 1,
 	}
 	if stand_for_piece(piece_id) != "":
 		pending_unveils[piece_id] = true
 	collection_changed.emit()
 	hall_changed.emit()
+	return _mount_note(display_name, 1, need, clean)
+
+
+func _mount_note(display_name: String, count: int, need: int, clean: bool) -> String:
+	if need > 1:
+		if count >= need:
+			return "%s set complete (%d/%d)." % [display_name, count, need]
+		var note: String = "%s %d/%d is now on display." % [display_name, count, need]
+		if clean:
+			return note
+		return "%s It still looks dusty." % note
 	if clean:
 		return "%s is now on display." % display_name
 	return "%s is on display, but it still looks dusty." % display_name
@@ -663,25 +720,178 @@ func install_find(piece_id: String, display_name: String, cleanliness: float, cl
 func stand_for_piece(piece_id: String) -> String:
 	if piece_id.is_empty():
 		return ""
-	match piece_id:
-		"triceratops_skull":
-			return STAND_TRICERATOPS
-		_:
-			return STAND_SMALL_FINDS
+	if piece_id.begins_with("t_rex"):
+		return STAND_T_REX
+	if piece_id.begins_with("triceratops"):
+		return STAND_TRICERATOPS
+	if piece_id.begins_with("stegosaurus"):
+		return STAND_STEGOSAURUS
+	if piece_id.begins_with("brachiosaurus"):
+		return STAND_BRACHIOSAURUS
+	if piece_id.begins_with("velociraptor"):
+		return STAND_VELOCIRAPTOR
+	return STAND_SMALL_FINDS
 
 
 func stand_uses_exhibit_rate(stand_id: String) -> bool:
 	return stand_id == STAND_T_REX or stand_id == STAND_TRICERATOPS or stand_id == STAND_BRACHIOSAURUS or stand_id == STAND_VELOCIRAPTOR or stand_id == STAND_STEGOSAURUS
 
 
+func fossil_data_for(piece_id: String) -> FossilData:
+	if piece_id.is_empty():
+		return null
+	if _fossil_by_id.has(piece_id):
+		return _fossil_by_id[piece_id] as FossilData
+	for path in Tuning.main_fossil_paths:
+		var data: FossilData = load(str(path)) as FossilData
+		if data != null and data.piece_id == piece_id:
+			_fossil_by_id[piece_id] = data
+			return data
+	for path in Tuning.extra_fossil_paths:
+		var data: FossilData = load(str(path)) as FossilData
+		if data != null and data.piece_id == piece_id:
+			_fossil_by_id[piece_id] = data
+			return data
+	return null
+
+
+func stand_piece_ids(stand_id: String) -> PackedStringArray:
+	var ids: PackedStringArray = PackedStringArray()
+	if stand_id.is_empty():
+		return ids
+	var paths: PackedStringArray = Tuning.main_fossil_paths
+	if stand_id == STAND_SMALL_FINDS:
+		paths = Tuning.extra_fossil_paths
+	for path in paths:
+		var data: FossilData = load(str(path)) as FossilData
+		if data == null or data.stand_id != stand_id:
+			continue
+		if data.piece_id.is_empty() or ids.has(data.piece_id):
+			continue
+		ids.append(data.piece_id)
+	return ids
+
+
+func stand_regions(stand_id: String) -> PackedStringArray:
+	var regions: PackedStringArray = PackedStringArray()
+	for piece_id in stand_piece_ids(stand_id):
+		var data: FossilData = fossil_data_for(piece_id)
+		if data == null or data.mount_region.is_empty():
+			continue
+		if not regions.has(data.mount_region):
+			regions.append(data.mount_region)
+	return regions
+
+
+func stand_region_filled(stand_id: String, region: String) -> bool:
+	if stand_id.is_empty() or region.is_empty():
+		return false
+	for piece_id in pieces:
+		var id: String = str(piece_id)
+		if stand_for_piece(id) != stand_id:
+			continue
+		var data: FossilData = fossil_data_for(id)
+		if data != null and data.mount_region == region:
+			return true
+	return false
+
+
+func stand_region_clean(stand_id: String, region: String) -> bool:
+	if not stand_region_filled(stand_id, region):
+		return false
+	for piece_id in pieces:
+		var id: String = str(piece_id)
+		if stand_for_piece(id) != stand_id:
+			continue
+		var data: FossilData = fossil_data_for(id)
+		if data == null or data.mount_region != region:
+			continue
+		var piece: Dictionary = pieces[id]
+		if bool(piece.get("clean", false)):
+			return true
+	return false
+
+
+func stand_is_complete(stand_id: String) -> bool:
+	var ids: PackedStringArray = stand_piece_ids(stand_id)
+	if ids.is_empty():
+		return false
+	for piece_id in ids:
+		if piece_needs_more(piece_id):
+			return false
+	return true
+
+
 func piece_blurb(piece_id: String) -> String:
 	match piece_id:
+		"t_rex_tooth":
+			return "T. rex teeth for the jaw — collect 6 for a mouth, not a textbook set of 60."
+		"t_rex_jaw":
+			return "A T. rex jaw for the center bay."
+		"t_rex_femur":
+			return "A T. rex femur for the legs."
+		"t_rex_ribcage":
+			return "A T. rex ribcage for the torso."
+		"t_rex_tail":
+			return "A T. rex tail series for the center bay."
+		"t_rex_skull":
+			return "A T. rex skull for the head."
+		"triceratops_tooth":
+			return "Triceratops battery teeth for the beak — collect 5."
+		"triceratops_vertebra":
+			return "A Triceratops vertebra for the body."
+		"triceratops_nose_horn":
+			return "A Triceratops nose horn."
+		"triceratops_brow_horns":
+			return "Triceratops brow horns."
+		"triceratops_hind_limb":
+			return "A Triceratops hind limb."
+		"triceratops_tail":
+			return "A Triceratops tail."
+		"triceratops_skull":
+			return "A skull for the Triceratops bay."
+		"stegosaurus_foot":
+			return "Stegosaurus feet — collect all 4."
+		"stegosaurus_plate":
+			return "Stegosaurus plates for the back — collect 3, not a full sail of 17."
+		"stegosaurus_femur":
+			return "A Stegosaurus femur for the legs."
+		"stegosaurus_thagomizer":
+			return "A Stegosaurus tail spike."
+		"stegosaurus_torso":
+			return "A Stegosaurus torso."
+		"stegosaurus_skull":
+			return "A Stegosaurus skull for the head."
+		"velociraptor_claw":
+			return "Velociraptor sickle claws — one per foot, collect 2."
+		"velociraptor_skull":
+			return "A Velociraptor skull."
+		"velociraptor_femur":
+			return "A Velociraptor femur."
+		"velociraptor_tail":
+			return "A Velociraptor tail."
+		"velociraptor_ribs":
+			return "Velociraptor ribs."
+		"brachiosaurus_tooth":
+			return "Brachiosaurus peg teeth — collect 5 to start the sauropod stand."
+		"brachiosaurus_tail":
+			return "A Brachiosaurus tail."
+		"brachiosaurus_skull":
+			return "A small Brachiosaurus skull."
+		"brachiosaurus_humerus":
+			return "A Brachiosaurus humerus."
+		"brachiosaurus_femur":
+			return "A Brachiosaurus femur."
+		"brachiosaurus_neck":
+			return "A long Brachiosaurus neck."
+		"trilobite":
+			return "A trilobite for the Small Finds case."
+		"amber_insect":
+			return "An insect in amber for the Small Finds case."
 		"tooth":
 			return "A small tooth — first piece for the hall case."
 		"vertebra":
 			return "A vertebra for the Small Finds case."
-		"triceratops_skull":
-			return "A skull for the Triceratops bay."
 		_:
 			return "Goes on display in the hall."
 
@@ -862,6 +1072,7 @@ func load_game(path: String = SAVE_PATH) -> bool:
 	for item in catalog:
 		var id: String = str(item["id"])
 		levels[id] = int(raw_levels.get(id, 0))
+	levels.erase("precision")
 	pieces.clear()
 	var raw_pieces: Dictionary = data.get("pieces", {})
 	for raw_id in raw_pieces:
@@ -871,6 +1082,7 @@ func load_game(path: String = SAVE_PATH) -> bool:
 			"name": str(piece.get("name", piece_id)),
 			"cleanliness": float(piece.get("cleanliness", 0.0)),
 			"clean": bool(piece.get("clean", false)),
+			"count": maxi(1, int(piece.get("count", 1))),
 		}
 	precision_on = bool(data.get("precision_on", false))
 	featured_stand_id = str(data.get("featured_stand_id", ""))

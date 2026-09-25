@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "Brachiosaurus Humerus"
+piece_id = "brachiosaurus_humerus"
+stand_id = "brachiosaurus"
+mount_region = "arm"
+shape_width = 3
+shape = PackedInt32Array(0, 1, 0, 1, 1, 1, 0, 1, 0)
+min_layer = 12
+max_layer = 19
+base_value = 80
+min_rank = 6
+needs_rich_bed = true

@@ -37,6 +37,12 @@ func _run() -> void:
 	_test_wide_scoop_caps_sprites_without_merging()
 	_test_cells_can_show_a_terrain_tell()
 	_test_lucky_float_is_currency()
+	_test_hands_pay_more_than_shovel_on_same_cell()
+	_test_shovel_and_pick_are_common_spoil()
+	_test_hand_ranks_buff_find_quality()
+	_test_shovel_ranks_do_not_print_rare_loot()
+	_test_soil_bounty_leans_toward_hands()
+	_test_dig_site_harvests_with_the_equipped_tool()
 	print("matrix_finds %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -372,6 +378,152 @@ func _test_cells_can_show_a_terrain_tell() -> void:
 		_assert(told > 0, "some cells show a pebble or speck before they pop")
 		_assert(empty > 0 or float(TN.matrix_dirt_chance) >= 0.9, "empty cells stay plain dirt")
 	site.queue_free()
+
+
+func _test_hands_pay_more_than_shovel_on_same_cell() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	_assert(Matrix.has_method("harvest"), "matrix finds harvest through the equipped tool")
+	if not Matrix.has_method("harvest"):
+		return
+	var pending := {"name": "tiny toothlet", "amount": 4, "rarity": 1}
+	var hands: Dictionary = Matrix.harvest(pending, 0, TN.TOOL_HANDS)
+	var shovel: Dictionary = Matrix.harvest(pending, 0, TN.TOOL_SHOVEL)
+	_assert(int(hands.get("amount", 0)) > int(shovel.get("amount", 0)), "hands pay more than the shovel on the same cell")
+	_assert(int(hands.get("rarity", -1)) >= 1, "hands keep the better inclusion")
+	_assert(int(shovel.get("rarity", -1)) == 0, "the shovel smashes the same cell into common spoil")
+	_assert(str(Matrix.float_text(hands)).begins_with("+$"), "hands still bank +$, not +tooth")
+	_assert(str(Matrix.float_text(shovel)).begins_with("+$"), "shovel spoil still banks +$")
+	_assert(str(shovel.get("name", "")).to_lower().find("toothlet") < 0, "shovel spoil is not a hand-tier toothlet")
+
+
+func _test_shovel_and_pick_are_common_spoil() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var shovel_rare: int = 0
+	var pick_rare: int = 0
+	var hands_better: int = 0
+	var shovel_pay: int = 0
+	var hands_pay: int = 0
+	var pick_pay: int = 0
+	var hands_stone_pay: int = 0
+	var n: int = 160
+	for _i in n:
+		var hands: Dictionary = Matrix.roll(rng, 0, TN.TOOL_HANDS)
+		var shovel: Dictionary = Matrix.roll(rng, 0, TN.TOOL_SHOVEL)
+		var pick: Dictionary = Matrix.roll(rng, 20, TN.TOOL_PICKAXE)
+		var hands_stone: Dictionary = Matrix.roll(rng, 20, TN.TOOL_HANDS)
+		hands_pay += int(hands.get("amount", 0))
+		shovel_pay += int(shovel.get("amount", 0))
+		pick_pay += int(pick.get("amount", 0))
+		hands_stone_pay += int(hands_stone.get("amount", 0))
+		if int(hands.get("rarity", 0)) >= 1:
+			hands_better += 1
+		if int(shovel.get("rarity", 0)) >= 2:
+			shovel_rare += 1
+		if int(pick.get("rarity", 0)) >= 2:
+			pick_rare += 1
+	_assert(hands_pay > shovel_pay, "hands EV on dirt beats shovel spoil")
+	_assert(hands_better > 8, "hands still find uncommon and rare scrap")
+	_assert(shovel_rare == 0, "shovel pops stay common spoil, not rare toothlets")
+	_assert(pick_rare == 0, "pick nodules stay weaker spoil, not hand-tier rares")
+	_assert(pick_pay > 0, "pick stone still pays something")
+	_assert(hands_stone_pay > pick_pay, "hands on stone pay more than pick spoil on the same layers")
+
+
+func _test_hand_ranks_buff_find_quality() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	var rng := RandomNumberGenerator.new()
+	var n: int = 180
+	rng.seed = 13
+	var base_pay: int = 0
+	var base_better: int = 0
+	for _i in n:
+		var find: Dictionary = Matrix.roll(rng, 0, TN.TOOL_HANDS)
+		base_pay += int(find.get("amount", 0))
+		if int(find.get("rarity", 0)) >= 1:
+			base_better += 1
+	GS.levels["hands_click"] = 5
+	GS.apply_upgrades()
+	var copy: String = str(GS.shop_item_desc("hands_click")).to_lower()
+	_assert(copy.find("find") >= 0 or copy.find("harvest") >= 0 or copy.find("$") >= 0, "Calloused Fingers talks about find quality or $")
+	rng.seed = 13
+	var buff_pay: int = 0
+	var buff_better: int = 0
+	for _i in n:
+		var find: Dictionary = Matrix.roll(rng, 0, TN.TOOL_HANDS)
+		buff_pay += int(find.get("amount", 0))
+		if int(find.get("rarity", 0)) >= 1:
+			buff_better += 1
+	_assert(buff_pay > base_pay, "Calloused Fingers raises hands harvest $")
+	_assert(buff_better > base_better, "Calloused Fingers raises uncommon and rare chance")
+
+
+func _test_shovel_ranks_do_not_print_rare_loot() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	GS.levels["shovel_click"] = 6
+	GS.levels["shovel_radius"] = 4
+	GS.levels["shovel_super"] = 6
+	GS.apply_upgrades()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 44
+	var rare: int = 0
+	var uncommon: int = 0
+	for _i in 200:
+		var find: Dictionary = Matrix.roll(rng, 0, TN.TOOL_SHOVEL)
+		if int(find.get("rarity", 0)) >= 2:
+			rare += 1
+		if int(find.get("rarity", 0)) == 1:
+			uncommon += 1
+	_assert(rare == 0, "Super Shovel does not print rare toothlets")
+	_assert(uncommon == 0, "shovel radius and Heavy Swings do not raise find rarity")
+	var pending := {"name": "amber speck", "amount": 8, "rarity": 2}
+	if Matrix.has_method("harvest"):
+		var scoop: Dictionary = Matrix.harvest(pending, 0, TN.TOOL_SHOVEL)
+		_assert(int(scoop.get("rarity", -1)) == 0, "a 21-cell scoop still downgrades a rare tell to spoil")
+		_assert(int(scoop.get("amount", 0)) < int(pending.get("amount", 0)), "shovel spoil on a rare cell still pays less than the tell")
+
+
+func _test_soil_bounty_leans_toward_hands() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	var rng := RandomNumberGenerator.new()
+	var n: int = 160
+	rng.seed = 17
+	var hands_base: int = 0
+	var shovel_base: int = 0
+	for _i in n:
+		hands_base += int(Matrix.roll(rng, 0, TN.TOOL_HANDS).get("amount", 0))
+		shovel_base += int(Matrix.roll(rng, 0, TN.TOOL_SHOVEL).get("amount", 0))
+	GS.levels["dirt_pay"] = 5
+	GS.apply_upgrades()
+	var soil: String = str(GS.shop_item_desc("dirt_pay")).to_lower()
+	_assert(soil.find("hand") >= 0, "Soil Bounty copy leans toward hands")
+	rng.seed = 17
+	var hands_buff: int = 0
+	var shovel_buff: int = 0
+	for _i in n:
+		hands_buff += int(Matrix.roll(rng, 0, TN.TOOL_HANDS).get("amount", 0))
+		shovel_buff += int(Matrix.roll(rng, 0, TN.TOOL_SHOVEL).get("amount", 0))
+	var hands_gain: int = hands_buff - hands_base
+	var shovel_gain: int = shovel_buff - shovel_base
+	_assert(hands_buff > hands_base, "Soil Bounty still raises hands harvest $")
+	_assert(hands_gain > shovel_gain, "Soil Bounty helps hands more than the shovel")
+
+
+func _test_dig_site_harvests_with_the_equipped_tool() -> void:
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(src.find("Matrix.harvest") >= 0, "layer pops harvest through the equipped tool")
+	_assert(src.find("current_tool") >= 0, "the pit still knows which tool is equipped")
 
 
 func _test_lucky_float_is_currency() -> void:

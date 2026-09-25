@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "Triceratops Tooth"
+piece_id = "triceratops_tooth"
+stand_id = "triceratops"
+mount_region = "beak"
+shape_width = 1
+shape = PackedInt32Array(1)
+min_layer = 3
+max_layer = 8
+base_value = 16
+min_rank = 0
+needs_rich_bed = false
+set_need = 5

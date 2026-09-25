@@ -37,7 +37,39 @@ var grid_h: int = 4
 var site_size_rank: int = 0
 var extra_find_slots: int = 0
 var extra_find_chance: float = 0.0
-var extra_fossil_paths: PackedStringArray = ["res://tooth.tres", "res://vertebra.tres"]
+var main_fossil_paths: PackedStringArray = [
+	"res://t_rex_tooth.tres",
+	"res://t_rex_jaw.tres",
+	"res://t_rex_femur.tres",
+	"res://t_rex_ribcage.tres",
+	"res://t_rex_tail.tres",
+	"res://t_rex_skull.tres",
+	"res://triceratops_tooth.tres",
+	"res://triceratops_vertebra.tres",
+	"res://triceratops_nose_horn.tres",
+	"res://triceratops_brow_horns.tres",
+	"res://triceratops_hind_limb.tres",
+	"res://triceratops_tail.tres",
+	"res://triceratops_skull.tres",
+	"res://stegosaurus_foot.tres",
+	"res://stegosaurus_plate.tres",
+	"res://stegosaurus_femur.tres",
+	"res://stegosaurus_thagomizer.tres",
+	"res://stegosaurus_torso.tres",
+	"res://stegosaurus_skull.tres",
+	"res://velociraptor_claw.tres",
+	"res://velociraptor_skull.tres",
+	"res://velociraptor_femur.tres",
+	"res://velociraptor_tail.tres",
+	"res://velociraptor_ribs.tres",
+	"res://brachiosaurus_tooth.tres",
+	"res://brachiosaurus_tail.tres",
+	"res://brachiosaurus_skull.tres",
+	"res://brachiosaurus_humerus.tres",
+	"res://brachiosaurus_femur.tres",
+	"res://brachiosaurus_neck.tres",
+]
+var extra_fossil_paths: PackedStringArray = ["res://trilobite.tres", "res://amber_insect.tres"]
 var big_finds_unlocked: bool = false
 var passive_miner_owned: bool = false
 var lucky_shift_chance: float = 0.70
@@ -144,10 +176,15 @@ var piece_income_exhibit_dirty: float = 0.035
 var dirty_income_factor: float = 1.0
 var exhibit_flat_income: float = 0.0
 var duplicate_cash: float = 0.4
+var set_complete_sale_mult: float = 2.0
+var extra_complete_set_chance: float = 0.22
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0
 var matrix_dirt_chance: float = 0.94
 var matrix_stone_chance: float = 0.42
+var matrix_hands_quality: float = 0.0
+var matrix_hands_pay: float = 1.0
+var matrix_clear_pay: float = 0.50
 var fossil_value_mult: float = 1.0
 var spotlight_mult: float = 2.0
 var unveil_burst_clean: int = 40
@@ -237,6 +274,68 @@ func site_layout_for_rank(rank: int) -> Vector2i:
 		return Vector2i(base_grid_w, base_grid_h)
 	var idx: int = clampi(rank, 0, site_layouts.size() - 1)
 	return site_layouts[idx]
+
+
+func spawn_max_cells_for_rank(rank: int) -> int:
+	var r: int = maxi(rank, 0)
+	if r <= 0:
+		return 1
+	if r == 1:
+		return 3
+	if r == 2:
+		return 6
+	if r == 3:
+		return 8
+	if r == 4:
+		return 10
+	if r == 5:
+		return 12
+	if r == 6:
+		return 14
+	return 18
+
+
+func spawn_max_box_for_rank(rank: int) -> Vector2i:
+	var r: int = maxi(rank, 0)
+	if r <= 0:
+		return Vector2i(1, 1)
+	if r == 1:
+		return Vector2i(3, 2)
+	if r == 2:
+		return Vector2i(4, 3)
+	if r == 3:
+		return Vector2i(5, 4)
+	if r == 4:
+		return Vector2i(6, 5)
+	if r == 5:
+		return Vector2i(7, 5)
+	if r == 6:
+		return Vector2i(8, 6)
+	return Vector2i(10, 7)
+
+
+func piece_can_spawn(data: FossilData, rank: int, rich_bed: bool) -> bool:
+	if data == null:
+		return false
+	var cells: int = data.occupied_cells()
+	if cells <= 0:
+		return false
+	var box: Vector2i = data.bounding_size()
+	if cells > spawn_max_cells_for_rank(rank):
+		return false
+	var cap: Vector2i = spawn_max_box_for_rank(rank)
+	if box.x > cap.x or box.y > cap.y:
+		return false
+	var pit: Vector2i = site_layout_for_rank(rank)
+	if box.x > pit.x or box.y > pit.y:
+		return false
+	if box.x >= pit.x and box.y >= pit.y:
+		return false
+	if rank < data.min_rank:
+		return false
+	if data.needs_rich_bed or data.is_skull() or cells >= 6:
+		return rich_bed
+	return true
 
 
 func reference_pit_size() -> Vector2:

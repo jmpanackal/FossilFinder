@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "T. rex Skull"
+piece_id = "t_rex_skull"
+stand_id = "t_rex"
+mount_region = "head"
+shape_width = 5
+shape = PackedInt32Array(0, 1, 1, 1, 1, 1, 1, 1, 1, 0)
+min_layer = 10
+max_layer = 18
+base_value = 110
+min_rank = 4
+needs_rich_bed = true

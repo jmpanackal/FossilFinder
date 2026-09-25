@@ -7,6 +7,7 @@ const Matrix := preload("res://matrix_find.gd")
 const Lucky := preload("res://lucky_strike.gd")
 
 @onready var camera: Camera2D = $Camera2D
+@onready var site_backdrop = $SiteBackdrop
 @onready var dig_site = $DigSite
 @onready var hud = $HUD
 @onready var toast = $Toast
@@ -26,6 +27,7 @@ var _last_fossil_stars: int = 0
 var _round_finds: Array = []
 var _round_finds_pay: int = 0
 var _round_fossil_pay: int = 0
+var _extract_fate: String = ""
 var _pending_tool_notices: Dictionary = {}
 var _boosted_tools: Array[int] = []
 
@@ -44,7 +46,6 @@ func _ready() -> void:
 	dig_site.tool_used.connect(_on_tool_used)
 	dig_site.lucky_struck.connect(_on_lucky_struck)
 	hud.tool_selected.connect(dig_site.set_tool)
-	hud.precision_toggled.connect(_toggle_precision)
 	hud.end_shift.connect(_end_round)
 	summary.dig_again.connect(start_round)
 	summary.open_museum.connect(func() -> void: show_screen("museum"))
@@ -67,6 +68,7 @@ func start_round() -> void:
 	_round_finds.clear()
 	_round_finds_pay = 0
 	_round_fossil_pay = 0
+	_extract_fate = ""
 	_last_fossil_line = ""
 	_last_fossil_stars = 0
 	dig_site.start_round()
@@ -79,6 +81,10 @@ func show_screen(next: String) -> void:
 	screen = next
 	var digging := next == "dig"
 	dig_site.visible = digging
+	if site_backdrop != null:
+		site_backdrop.visible = digging
+		if digging and site_backdrop.has_method("set_covers_chunk_hole"):
+			site_backdrop.call("set_covers_chunk_hole", not (dig_site != null and dig_site.visible))
 	museum.visible = next == "museum"
 	shop.visible = next == "shop"
 	if next != "dig":
@@ -96,19 +102,14 @@ func _return_from_menu() -> void:
 	show_screen("dig")
 
 
-func _toggle_precision() -> void:
-	if not GameState.precision_unlocked():
-		return
-	GameState.precision_on = not GameState.precision_on
-	Sfx.play("ui")
-
-
 func _sync_view() -> void:
 	var size := Tuning.play_view_size(get_viewport().get_visible_rect().size)
 	Tuning.view_w = size.x
 	Tuning.view_h = size.y
 	camera.position = size * 0.5
 	Tuning.apply_cell_metrics()
+	if site_backdrop != null:
+		site_backdrop.queue_redraw()
 	if dig_site != null:
 		dig_site.queue_redraw()
 
@@ -141,7 +142,13 @@ func _process(delta: float) -> void:
 	hud.refresh(time_left, Tuning.round_seconds, dig_site.current_tool, round_active and screen == "dig", found, stars, grade, clean, value)
 	var headline := ""
 	if found and dig_site.has_method("focused_find_extracted") and bool(dig_site.focused_find_extracted()):
-		headline = "%s found!" % str(dig_site.focused_find_name())
+		var found_name: String = str(dig_site.focused_find_name())
+		if _extract_fate == "sold extra":
+			headline = "%s sold extra!" % found_name
+		elif not _extract_fate.is_empty():
+			headline = "%s found!  %s" % [found_name, _extract_fate]
+		else:
+			headline = "%s found!" % found_name
 	if hud.has_method("set_find_headline"):
 		hud.set_find_headline(headline)
 	if debug_on:
@@ -155,8 +162,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			$DebugOverlay.visible = debug_on
 		elif event.physical_keycode == KEY_F2 and round_active:
 			_end_round()
-		elif event.physical_keycode == KEY_P:
-			_toggle_precision()
 		elif not round_active and (event.physical_keycode == KEY_ENTER or event.physical_keycode == KEY_SPACE):
 			start_round()
 
@@ -176,15 +181,19 @@ func _end_round() -> void:
 		var names: PackedStringArray = []
 		_last_fossil_stars = 0
 		for entry in _round_finds:
-			names.append(Summary.find_line(str(entry["name"]), str(entry["grade"]), str(entry.get("dirt", ""))))
+			names.append(Summary.find_line(str(entry["name"]), str(entry["grade"]), str(entry.get("dirt", "")), str(entry.get("fate", ""))))
 			_last_fossil_stars = maxi(_last_fossil_stars, int(entry["stars"]))
-		_last_fossil_line = "\n".join(names)
+		_last_fossil_line = Summary.join_find_lines(names)
 	_show_summary()
 
 
 func _show_summary() -> void:
 	if dig_site != null:
-		dig_site.visible = false
+		dig_site.visible = true
+	if site_backdrop != null:
+		site_backdrop.visible = true
+		if site_backdrop.has_method("set_covers_chunk_hole"):
+			site_backdrop.call("set_covers_chunk_hole", false)
 	summary.show_summary(_round_fossil_pay, _round_finds_pay, _last_fossil_line, _last_fossil_stars)
 
 
@@ -228,7 +237,8 @@ func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cle
 	var before: int = GameState.money
 	GameState.add_money(value)
 	var id := piece_id if piece_id != "" else "find"
-	GameState.install_find(id, fossil_name, cleanliness, clean)
+	var note: String = GameState.install_find(id, fossil_name, cleanliness, clean)
+	_extract_fate = _extract_fate_for(id, note)
 	_round_fossil_pay += GameState.money - before
 	var grade := Tuning.preservation_grade(integrity)
 	var stars := Tuning.preservation_stars(integrity)
@@ -239,9 +249,24 @@ func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cle
 		"grade": grade,
 		"stars": stars,
 		"dirt": dirt,
+		"fate": _extract_fate,
 	})
 	if hud.has_method("set_find_headline"):
-		hud.set_find_headline("%s found!" % fossil_name)
+		if _extract_fate == "sold extra":
+			hud.set_find_headline("%s sold extra!" % fossil_name)
+		elif not _extract_fate.is_empty():
+			hud.set_find_headline("%s found!  %s" % [fossil_name, _extract_fate])
+		else:
+			hud.set_find_headline("%s found!" % fossil_name)
+
+
+func _extract_fate_for(piece_id: String, note: String) -> String:
+	if note.to_lower().find("sold") >= 0:
+		return "sold extra"
+	var progress: String = GameState.piece_progress_label(piece_id)
+	if not progress.is_empty():
+		return "%s on display" % progress
+	return ""
 
 
 func _on_pickaxe() -> void:

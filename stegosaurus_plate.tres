@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "Stegosaurus Plate"
+piece_id = "stegosaurus_plate"
+stand_id = "stegosaurus"
+mount_region = "plates"
+shape_width = 2
+shape = PackedInt32Array(0, 1, 1, 0)
+min_layer = 8
+max_layer = 14
+base_value = 24
+min_rank = 3
+needs_rich_bed = false
+set_need = 3

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "T. rex Tail"
+piece_id = "t_rex_tail"
+stand_id = "t_rex"
+mount_region = "tail"
+shape_width = 2
+shape = PackedInt32Array(1, 1, 0, 1)
+min_layer = 6
+max_layer = 12
+base_value = 28
+min_rank = 2
+needs_rich_bed = false

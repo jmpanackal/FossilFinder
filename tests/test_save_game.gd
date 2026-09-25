@@ -18,6 +18,7 @@ func _run() -> void:
 	GS = root.get_node("GameState")
 	_test_roundtrip_keeps_progress()
 	_test_old_save_piece_is_not_pending()
+	_test_leftover_fine_point_ranks_do_not_crash()
 	_test_missing_file_does_not_load()
 	_cleanup()
 	print("save_game %d passed, %d failed" % [_passed, _failed])
@@ -87,6 +88,28 @@ func _test_old_save_piece_is_not_pending() -> void:
 	_assert(GS.load_game(PATH), "loads a save with no unveil map")
 	_assert(GS.stand_is_filled("triceratops"), "old skull still fills the bay")
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "old saves are not ribboned")
+
+
+func _test_leftover_fine_point_ranks_do_not_crash() -> void:
+	_reset()
+	var data := {
+		"version": 1,
+		"money": 10,
+		"levels": {
+			"precision": 5,
+			"shovel_click": 1,
+		},
+		"pieces": {},
+		"precision_on": true,
+		"featured_stand_id": "",
+	}
+	var file := FileAccess.open(PATH, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	file.close()
+	_assert(GS.load_game(PATH), "loads a save that still has Fine Point ranks")
+	_assert(GS.money == 10, "money from the leftover save still loads")
+	_assert(int(GS.levels.get("shovel_click", 0)) == 1, "real ranks still load")
+	_assert(int(GS.levels.get("precision", 0)) == 0, "Fine Point ranks are ignored")
 
 
 func _test_missing_file_does_not_load() -> void:

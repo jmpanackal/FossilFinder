@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "Triceratops Brow Horns"
+piece_id = "triceratops_brow_horns"
+stand_id = "triceratops"
+mount_region = "brow"
+shape_width = 3
+shape = PackedInt32Array(1, 0, 1, 0, 1, 0)
+min_layer = 6
+max_layer = 13
+base_value = 30
+min_rank = 2
+needs_rich_bed = false

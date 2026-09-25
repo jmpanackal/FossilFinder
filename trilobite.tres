@@ -4,10 +4,12 @@
 
 [resource]
 script = ExtResource("1_foss")
-name = "Vertebra"
-piece_id = "vertebra"
-shape_width = 3
-shape = PackedInt32Array(0, 1, 0, 1, 0, 1)
-min_layer = 8
-max_layer = 16
-base_value = 24
+name = "Trilobite"
+piece_id = "trilobite"
+stand_id = "small_finds"
+mount_region = "scrap"
+shape_width = 1
+shape = PackedInt32Array(1)
+min_layer = 2
+max_layer = 7
+base_value = 12

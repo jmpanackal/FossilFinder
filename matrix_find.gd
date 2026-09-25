@@ -13,14 +13,16 @@ const STONE_UNCOMMON: PackedStringArray = ["nodule", "geode crumb", "crystal sha
 const STONE_RARE: PackedStringArray = ["quartz nodule", "calcite crystal", "ironstone nodule"]
 
 
-static func roll(rng: RandomNumberGenerator, layer: int) -> Dictionary:
+static func roll(rng: RandomNumberGenerator, layer: int, tool: int = -1) -> Dictionary:
+	if tool < 0:
+		tool = Tuning.TOOL_HANDS
 	var material: int = Tuning.material_at_layer(layer)
 	var chance: float = pop_chance(material)
 	if rng.randf() > chance:
 		return {}
-	var rarity: int = _roll_rarity(rng, material)
+	var rarity: int = _roll_rarity(rng, material, tool)
 	var name: String = _pick_name(rng, material, rarity)
-	var amount: int = payout_for(layer, rarity, chance)
+	var amount: int = payout_for(layer, rarity, chance, tool)
 	if amount <= 0:
 		return {}
 	return {
@@ -30,13 +32,31 @@ static func roll(rng: RandomNumberGenerator, layer: int) -> Dictionary:
 	}
 
 
+static func harvest(find: Dictionary, layer: int, tool: int) -> Dictionary:
+	if find.is_empty():
+		return {}
+	var harvested: Dictionary = find.duplicate()
+	var material: int = Tuning.material_at_layer(layer)
+	if _is_clear_tool(tool):
+		harvested["rarity"] = RARITY_COMMON
+		harvested["name"] = _spoil_name(str(find.get("name", "")), material)
+		harvested["amount"] = _clear_payout(int(find.get("amount", 0)))
+	else:
+		harvested["amount"] = maxi(1, int(round(float(find.get("amount", 0)) * maxf(Tuning.matrix_hands_pay, 0.25))))
+	if int(harvested.get("amount", 0)) <= 0:
+		return {}
+	return harvested
+
+
 static func pop_chance(material: int) -> float:
 	if material <= Tuning.MAT_PACKED:
 		return clampf(Tuning.matrix_dirt_chance, 0.05, 1.0)
 	return clampf(Tuning.matrix_stone_chance, 0.05, 0.85)
 
 
-static func payout_for(layer: int, rarity: int, chance: float) -> int:
+static func payout_for(layer: int, rarity: int, chance: float, tool: int = -1) -> int:
+	if tool < 0:
+		tool = Tuning.TOOL_HANDS
 	var base: float = float(Tuning.money_for_layer(layer))
 	var rmult: float = 0.78
 	match clampi(rarity, RARITY_COMMON, RARITY_RARE):
@@ -44,7 +64,8 @@ static func payout_for(layer: int, rarity: int, chance: float) -> int:
 			rmult = 1.35 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 1.05
 		RARITY_RARE:
 			rmult = 2.55 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 2.0
-	return maxi(1, int(round(base * rmult / maxf(chance, 0.25))))
+	var tool_mult: float = Tuning.matrix_clear_pay if _is_clear_tool(tool) else maxf(Tuning.matrix_hands_pay, 0.25)
+	return maxi(1, int(round(base * rmult * tool_mult / maxf(chance, 0.25))))
 
 
 static func float_text(find: Dictionary) -> String:
@@ -204,13 +225,39 @@ static func batch_display(finds: Array, max_floats: int = 5) -> Array:
 	return juice
 
 
-static func _roll_rarity(rng: RandomNumberGenerator, material: int) -> int:
-	var pick: float = rng.randf()
+static func _is_clear_tool(tool: int) -> bool:
+	return tool == Tuning.TOOL_SHOVEL or tool == Tuning.TOOL_PICKAXE
+
+
+static func _clear_payout(amount: int) -> int:
+	var spoil: int = maxi(1, int(round(float(maxi(amount, 0)) * clampf(Tuning.matrix_clear_pay, 0.15, 0.85))))
+	if spoil >= amount and amount > 1:
+		return amount - 1
+	return spoil
+
+
+static func _spoil_name(original: String, material: int) -> String:
+	var key: String = original.to_lower()
 	if material > Tuning.MAT_PACKED:
-		return RARITY_RARE if pick < 0.20 else RARITY_UNCOMMON
-	if pick < 0.05:
+		return "nodule"
+	for name in DIRT_COMMON:
+		if key == name:
+			return original
+	return "pebble"
+
+
+static func _roll_rarity(rng: RandomNumberGenerator, material: int, tool: int = -1) -> int:
+	if tool < 0:
+		tool = Tuning.TOOL_HANDS
+	if _is_clear_tool(tool):
+		return RARITY_COMMON
+	var pick: float = rng.randf()
+	var quality: float = clampf(Tuning.matrix_hands_quality, 0.0, 0.55)
+	if material > Tuning.MAT_PACKED:
+		return RARITY_RARE if pick < 0.20 + quality * 0.28 else RARITY_UNCOMMON
+	if pick < 0.05 + quality * 0.12:
 		return RARITY_RARE
-	if pick < 0.28:
+	if pick < 0.28 + quality * 0.22:
 		return RARITY_UNCOMMON
 	return RARITY_COMMON
 

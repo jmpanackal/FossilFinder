@@ -17,8 +17,10 @@ func _run() -> void:
 	_test_dirty_tag_is_short()
 	_test_clean_has_no_dirt_tag()
 	_test_find_line_does_not_repeat_or_essay()
+	_test_shift_lists_the_same_find_once()
 	_test_summary_money_is_total_plus_quiet_breakdown()
 	_test_summary_dim_is_a_full_rect_modal()
+	_test_shift_over_does_not_leave_a_white_pit()
 	print("shift_summary %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -45,6 +47,17 @@ func _test_find_line_does_not_repeat_or_essay() -> void:
 	_assert(clean == "Tooth · Well preserved", "clean find is name and grade only")
 	_assert(dirty.find("hall") < 0 and dirty.find("case") < 0, "find line drops the hall-case essay")
 	_assert(dirty.find("tooth") < 0, "find line does not repeat tooth in an essay")
+
+
+func _test_shift_lists_the_same_find_once() -> void:
+	var script: GDScript = load("res://summary.gd") as GDScript
+	var line: String = str(script.call("find_line", "Vertebra", "Well preserved", "still dirty"))
+	var joined: String = str(script.call("join_find_lines", PackedStringArray([line, line])))
+	_assert(joined == line, "same find is listed once")
+	_assert(joined.split("\n").size() == 1, "duplicate vertebra lines collapse to one")
+	var other: String = str(script.call("find_line", "Tooth", "Mostly intact", ""))
+	var both: String = str(script.call("join_find_lines", PackedStringArray([line, other])))
+	_assert(both.find("Vertebra") >= 0 and both.find("Tooth") >= 0, "different finds both stay")
 
 
 func _test_summary_money_is_total_plus_quiet_breakdown() -> void:
@@ -85,6 +98,39 @@ func _test_summary_dim_is_a_full_rect_modal() -> void:
 	_assert(str(panel._body.text) == "Left in the ground.", "left-in-ground is one line")
 	_assert(not bool(panel._stars.visible), "left-in-ground has no star row")
 	panel.free()
+
+
+func _test_shift_over_does_not_leave_a_white_pit() -> void:
+	var packed: PackedScene = load("res://main.tscn") as PackedScene
+	_assert(packed != null, "main.tscn loads")
+	if packed == null:
+		return
+	var main: Node = packed.instantiate()
+	root.add_child(main)
+	if main.has_method("_show_summary"):
+		main.call("_show_summary")
+	var pit: Node = main.get_node_or_null("DigSite")
+	var backdrop: Node = main.get_node_or_null("SiteBackdrop")
+	var card: Node = main.get_node_or_null("Summary")
+	_assert(pit != null and bool(pit.visible), "shift-over keeps the excavated pit on screen")
+	_assert(backdrop != null and bool(backdrop.visible), "field stays behind the card")
+	_assert(card != null and bool(card.visible), "shift-over card is up")
+	_assert(backdrop != null and backdrop.has_method("covers_chunk_hole"), "backdrop can still plug a hole if the pit is gone")
+	if backdrop != null and backdrop.has_method("covers_chunk_hole"):
+		_assert(not bool(backdrop.call("covers_chunk_hole")), "visible pit fills the site hole — no blank tan patch")
+	var Site: GDScript = load("res://site_backdrop.gd") as GDScript
+	_assert(Site != null and Site.has_method("hole_fill_color"), "backdrop exposes the hole fill color")
+	if Site != null and Site.has_method("hole_fill_color"):
+		var fill: Color = Site.hole_fill_color()
+		_assert(fill.is_equal_approx(Site.ground_color()), "hole fill is the same tan as the field")
+		_assert(not fill.is_equal_approx(Site.clear_color()), "hole fill is not the pale letterbox wash")
+		_assert(not fill.is_equal_approx(Color.WHITE), "hole fill is not white")
+	var main_src: String = FileAccess.get_file_as_string("res://main.gd")
+	_assert(main_src.find("play_view_size") >= 0, "_sync_view stays in design space")
+	_assert(main_src.find("Tuning.view_w = get_viewport().get_visible_rect()") < 0, "window pixels do not become the pit world")
+	var dim: ColorRect = card.get("_dim") if card != null else null
+	_assert(dim != null and bool(card.visible), "dim overlay still sits over the site and pit")
+	main.free()
 
 
 func _assert(ok: bool, label: String) -> void:

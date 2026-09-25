@@ -26,6 +26,7 @@ func _run() -> void:
 	shop.visible = true
 	shop.refresh()
 	_test_tabs_cover_every_department()
+	_test_fine_point_is_not_a_shop_row()
 	_test_icons_exist_for_tools_and_ranks()
 	_test_hands_is_a_chapter_without_a_gate()
 	_test_locked_shovel_two_is_a_chest_gate()
@@ -59,6 +60,14 @@ func _test_tabs_cover_every_department() -> void:
 	for cat in expected:
 		_assert(shop._tabs.has(cat), "tab exists for %s" % cat)
 		_assert(shop._pages.has(cat), "page exists for %s" % cat)
+
+
+func _test_fine_point_is_not_a_shop_row() -> void:
+	_assert(not shop._buttons.has("precision"), "shop has no Fine Point row")
+	for item in GS.catalog:
+		_assert(str(item.get("id", "")) != "precision", "catalog has no precision id")
+		_assert(str(item.get("name", "")).find("Fine") < 0, "catalog names do not say Fine")
+		_assert(str(item.get("unlock_name", "")).find("Fine") < 0, "catalog unlocks do not say Fine")
 
 
 func _test_icons_exist_for_tools_and_ranks() -> void:

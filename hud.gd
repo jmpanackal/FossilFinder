@@ -2,7 +2,6 @@ class_name DigHUD
 extends CanvasLayer
 
 signal tool_selected(tool: int)
-signal precision_toggled
 signal end_shift
 
 const Ui := preload("res://ui_style.gd")
@@ -21,7 +20,6 @@ var _chip: Button
 var _goal_key: String = ""
 var _goal_pop: float = 0.0
 var _tool_role: Label
-var _precision: Button
 var _tool_buttons: Array[Button] = []
 var _tool_slots: Array[Control] = []
 var _slot_tools: Array[int] = []
@@ -51,10 +49,10 @@ func _ready() -> void:
 
 	var tools := HBoxContainer.new()
 	tools.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	tools.offset_left = -220
-	tools.offset_right = 220
-	tools.offset_top = 8
-	tools.offset_bottom = 78
+	tools.offset_left = -260
+	tools.offset_right = 260
+	tools.offset_top = 6
+	tools.offset_bottom = 94
 	tools.add_theme_constant_override("separation", 18)
 	tools.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(tools)
@@ -65,22 +63,12 @@ func _ready() -> void:
 	_tool_role = Label.new()
 	_tool_role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tool_role.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_tool_role.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_tool_role.offset_left = -180
-	_tool_role.offset_right = 180
-	_tool_role.offset_top = 76
-	_tool_role.offset_bottom = 94
 	_tool_role.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_tool_role, 12, Ui.MUTED)
-	root.add_child(_tool_role)
-
-	_precision = Button.new()
-	_precision.text = "P"
-	_precision.custom_minimum_size = Vector2(44, 56)
-	_precision.visible = false
-	_precision.pressed.connect(func() -> void: precision_toggled.emit())
-	Ui.apply_button(_precision)
-	tools.add_child(_precision)
+	_tool_role.custom_minimum_size = Vector2(72, 16)
+	_tool_role.clip_text = false
+	Ui.apply_label(_tool_role, 11, Color("2C2118"))
+	_tool_role.add_theme_color_override("font_outline_color", Color("F6EDE0"))
+	_tool_role.add_theme_constant_override("outline_size", 3)
 
 	_clock = Control.new()
 	_clock.set_script(ClockFace)
@@ -233,8 +221,6 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 	if _clock.has_method("set_time"):
 		_clock.set_time(time_left, time_max)
 	_set_money_text(false)
-	_precision.visible = GameState.precision_unlocked()
-	_precision.modulate = Color.WHITE if GameState.precision_on else Color(0.75, 0.7, 0.64)
 	_highlight_tool(tool)
 	_apply_tool_flashes()
 	_find_box.visible = show_find
@@ -352,14 +338,15 @@ func _set_money_text(flash: bool) -> void:
 
 func _add_tool_slot(parent: HBoxContainer, tool: int) -> void:
 	var slot := VBoxContainer.new()
-	slot.add_theme_constant_override("separation", 4)
+	slot.add_theme_constant_override("separation", 2)
 	slot.alignment = BoxContainer.ALIGNMENT_CENTER
+	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	parent.add_child(slot)
 	_tool_slots.append(slot)
 	_slot_tools.append(tool)
 
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(72, 50)
+	button.custom_minimum_size = Vector2(72, 44)
 	button.text = ""
 	Ui.apply_button(button)
 	button.pressed.connect(_on_tool_pressed.bind(tool))
@@ -379,9 +366,25 @@ func _add_tool_slot(parent: HBoxContainer, tool: int) -> void:
 	key.text = Tuning.hotkey_for_tool(tool)
 	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	key.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(key, 14, Ui.MUTED)
+	Ui.apply_label(key, 12, Ui.MUTED)
 	slot.add_child(key)
 	_tool_buttons.append(button)
+
+
+func _place_tool_role(tool: int) -> void:
+	if _tool_role == null:
+		return
+	_tool_role.text = GameState.tool_role_line(tool)
+	_tool_role.visible = visible and not _tool_role.text.is_empty()
+	var slot_i: int = _slot_tools.find(tool)
+	if slot_i < 0 or slot_i >= _tool_slots.size():
+		return
+	var slot: Control = _tool_slots[slot_i]
+	if _tool_role.get_parent() != slot:
+		var prior: Node = _tool_role.get_parent()
+		if prior != null:
+			prior.remove_child(_tool_role)
+		slot.add_child(_tool_role)
 
 
 func _on_tool_pressed(tool: int) -> void:
@@ -401,9 +404,7 @@ func _highlight_tool(tool: int) -> void:
 		_tool_buttons[i].disabled = false
 		Ui.apply_button(_tool_buttons[i], on)
 		_tool_buttons[i].modulate = Color.WHITE if on else Color(0.78, 0.74, 0.68)
-	if _tool_role != null:
-		_tool_role.text = GameState.tool_role_line(tool)
-		_tool_role.visible = visible and not _tool_role.text.is_empty()
+	_place_tool_role(tool)
 
 
 func _apply_tool_flashes() -> void:

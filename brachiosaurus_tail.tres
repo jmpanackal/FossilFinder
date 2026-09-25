@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FossilData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://fossil_data.gd" id="1_foss"]
+
+[resource]
+script = ExtResource("1_foss")
+name = "Brachiosaurus Tail"
+piece_id = "brachiosaurus_tail"
+stand_id = "brachiosaurus"
+mount_region = "tail"
+shape_width = 3
+shape = PackedInt32Array(1, 1, 0, 0, 1, 0, 0, 1, 0)
+min_layer = 11
+max_layer = 18
+base_value = 50
+min_rank = 5
+needs_rich_bed = false

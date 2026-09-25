@@ -119,7 +119,7 @@ static func pay_breakdown(fossil_pay: int, finds_pay: int) -> String:
 	return ""
 
 
-static func find_line(piece_name: String, grade: String, dirt_tag: String) -> String:
+static func find_line(piece_name: String, grade: String, dirt_tag: String, fate: String = "") -> String:
 	var bits: PackedStringArray = PackedStringArray()
 	if not piece_name.is_empty():
 		bits.append(piece_name)
@@ -127,7 +127,18 @@ static func find_line(piece_name: String, grade: String, dirt_tag: String) -> St
 		bits.append(grade)
 	if not dirt_tag.is_empty():
 		bits.append(dirt_tag)
+	if not fate.is_empty():
+		bits.append(fate)
 	return " · ".join(bits)
+
+
+static func join_find_lines(lines: PackedStringArray) -> String:
+	var unique: PackedStringArray = PackedStringArray()
+	for line in lines:
+		if line.is_empty() or unique.has(line):
+			continue
+		unique.append(line)
+	return "\n".join(unique)
 
 
 func hide_summary() -> void:

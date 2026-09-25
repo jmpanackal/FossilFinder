@@ -4,10 +4,14 @@
 
 [resource]
 script = ExtResource("1_foss")
-name = "Vertebra"
-piece_id = "vertebra"
+name = "T. rex Jaw"
+piece_id = "t_rex_jaw"
+stand_id = "t_rex"
+mount_region = "jaw"
 shape_width = 3
-shape = PackedInt32Array(0, 1, 0, 1, 0, 1)
+shape = PackedInt32Array(1, 1, 1, 0, 0, 1)
 min_layer = 8
-max_layer = 16
-base_value = 24
+max_layer = 14
+base_value = 48
+min_rank = 3
+needs_rich_bed = true

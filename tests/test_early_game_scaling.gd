@@ -251,7 +251,10 @@ func _test_wider_scoop_rank_2_hits_more_than_one_cell() -> void:
 	_assert(hits > 1, "shovel damages more than one cell at Wider Scoop 2")
 	_assert(hits >= 5, "rank 2 is at least a plus or 3-wide")
 	GS.precision_on = true
-	_assert(_count_shovel_cells(Vector2i(2, 2), 0.0) == 1, "precision still pinches to one cell")
+	GS.levels["precision"] = 5
+	GS.apply_upgrades()
+	_assert(TN.shovel_hit_cells(Vector2i(2, 2), float(TN.shovel_radius)).size() > 1, "leftover Fine ranks do not pinch the shovel")
+	_assert(is_zero_approx(float(TN.precision_damage_bonus)), "leftover Fine ranks do not add a precision bonus")
 	GS.precision_on = false
 
 

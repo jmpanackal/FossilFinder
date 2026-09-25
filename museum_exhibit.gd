@@ -67,6 +67,18 @@ func stand_id_at(hall_pos: Vector2) -> String:
 	return ""
 
 
+func display_slots(piece_id: String) -> int:
+	return int(GameState.piece_need(piece_id))
+
+
+func slot_on(piece_id: String, slot: int) -> bool:
+	return slot >= 0 and int(GameState.piece_count(piece_id)) > slot
+
+
+func _slot_clean(piece_id: String, slot: int) -> bool:
+	return slot_on(piece_id, slot) and _owned_clean(piece_id)
+
+
 func _draw() -> void:
 	_draw_hall()
 	_draw_t_rex_bay()
@@ -153,16 +165,33 @@ func _draw_t_rex_bay() -> void:
 	var stand: Rect2 = stand_rect("t_rex")
 	var mount: Rect2 = _draw_stand(stand, "T. rex", "t_rex")
 	var xf := _fit(mount, Vector2(-86, -110), Vector2(108, 0))
-	_rect(xf, -8, -84, 70, 38, false, false)
-	_rect(xf, 54, -72, 54, 14, false, false)
-	_rect(xf, -6, -52, 22, 30, false, false)
-	_rect(xf, -2, -26, 16, 26, false, false)
-	_rect(xf, 28, -48, 18, 26, false, false)
-	_rect(xf, 26, -24, 20, 24, false, false)
-	_rect(xf, -4, -66, 18, 6, false, false)
-	_rect(xf, -30, -100, 26, 26, false, false)
-	_rect(xf, -78, -110, 52, 26, false, false)
-	_rect(xf, -72, -86, 34, 8, false, false)
+	var head_on: bool = _region_on("t_rex", "head")
+	var head_clean: bool = _region_clean("t_rex", "head")
+	var torso_on: bool = _region_on("t_rex", "torso")
+	var torso_clean: bool = _region_clean("t_rex", "torso")
+	var legs_on: bool = _region_on("t_rex", "legs")
+	var legs_clean: bool = _region_clean("t_rex", "legs")
+	var tail_on: bool = _region_on("t_rex", "tail")
+	var tail_clean: bool = _region_clean("t_rex", "tail")
+	_rect(xf, -8, -84, 70, 38, torso_on, torso_clean)
+	_rect(xf, 54, -72, 54, 14, tail_on, tail_clean)
+	_rect(xf, -6, -52, 22, 30, legs_on, legs_clean)
+	_rect(xf, -2, -26, 16, 26, legs_on, legs_clean)
+	_rect(xf, 28, -48, 18, 26, legs_on, legs_clean)
+	_rect(xf, 26, -24, 20, 24, legs_on, legs_clean)
+	var jaw_bone_on: bool = GameState.has_piece("t_rex_jaw")
+	var jaw_bone_clean: bool = _owned_clean("t_rex_jaw")
+	_rect(xf, -4, -66, 18, 6, jaw_bone_on, jaw_bone_clean)
+	_rect(xf, -30, -100, 26, 26, head_on, head_clean)
+	_rect(xf, -78, -110, 52, 26, head_on, head_clean)
+	_rect(xf, -72, -86, 34, 8, jaw_bone_on, jaw_bone_clean)
+	for i in display_slots("t_rex_tooth"):
+		var tooth_x: float = -70.0 + float(i) * 5.5
+		_poly(xf, PackedVector2Array([
+			Vector2(tooth_x, -86.0),
+			Vector2(tooth_x + 4.0, -86.0),
+			Vector2(tooth_x + 2.0, -78.0),
+		]), slot_on("t_rex_tooth", i), _slot_clean("t_rex_tooth", i))
 	_draw_stand_finish("t_rex", stand)
 
 
@@ -198,7 +227,7 @@ func _case_piece_ids() -> PackedStringArray:
 				continue
 			_case_ids.append(piece_id)
 		if _case_ids.is_empty():
-			_case_ids = PackedStringArray(["tooth", "vertebra"])
+			_case_ids = PackedStringArray(["trilobite", "amber_insect"])
 	var ids: PackedStringArray = _case_ids.duplicate()
 	for piece_id in GameState.pieces:
 		var id: String = str(piece_id)
@@ -224,6 +253,10 @@ func _draw_case_cell(cell: Rect2, piece_id: String) -> void:
 			_draw_tooth_mount(fossil_rect, owned, clean)
 		"vertebra":
 			_draw_vertebra_mount(fossil_rect, owned, clean)
+		"trilobite":
+			_draw_trilobite_mount(fossil_rect, owned, clean)
+		"amber_insect":
+			_draw_amber_mount(fossil_rect, owned, clean)
 		_:
 			_draw_generic_scrap(fossil_rect, owned, clean)
 	var title: String = _case_cell_title(piece_id)
@@ -237,6 +270,10 @@ func _case_cell_title(piece_id: String) -> String:
 			return "Tooth"
 		"vertebra":
 			return "Vertebra"
+		"trilobite":
+			return "Trilobite"
+		"amber_insect":
+			return "Amber"
 		"":
 			return "Empty"
 		_:
@@ -268,28 +305,53 @@ func _draw_generic_scrap(cell: Rect2, owned: bool, clean: bool) -> void:
 	_rect(xf, -8, -36, 16, 10, owned, clean)
 
 
+func _draw_trilobite_mount(cell: Rect2, owned: bool, clean: bool) -> void:
+	var xf := _fit(cell, Vector2(-22, -40), Vector2(22, -8))
+	_rect(xf, -18, -28, 36, 16, owned, clean)
+	_rect(xf, -10, -38, 20, 12, owned, clean)
+	_rect(xf, -8, -16, 16, 8, owned, clean)
+
+
+func _draw_amber_mount(cell: Rect2, owned: bool, clean: bool) -> void:
+	var xf := _fit(cell, Vector2(-18, -40), Vector2(18, -8))
+	_poly(xf, PackedVector2Array([
+		Vector2(-6, -38), Vector2(12, -32), Vector2(10, -12), Vector2(-12, -16)
+	]), owned, clean)
+	_rect(xf, -4, -28, 8, 10, owned, clean)
+
+
 func _draw_triceratops_bay() -> void:
 	var stand: Rect2 = stand_rect("triceratops")
 	var mount: Rect2 = _draw_stand(stand, "Triceratops", "triceratops")
-	var owned: bool = GameState.has_piece("triceratops_skull")
-	var clean: bool = false
-	if owned:
-		var piece: Dictionary = GameState.pieces["triceratops_skull"]
-		clean = bool(piece.get("clean", false))
+	var skull_on: bool = _region_on("triceratops", "skull")
+	var skull_clean: bool = _region_clean("triceratops", "skull")
+	var body_on: bool = _region_on("triceratops", "body")
+	var body_clean: bool = _region_clean("triceratops", "body")
+	var nose_on: bool = _region_on("triceratops", "nose")
+	var nose_clean: bool = _region_clean("triceratops", "nose")
+	var brow_on: bool = _region_on("triceratops", "brow")
+	var brow_clean: bool = _region_clean("triceratops", "brow")
+	var legs_on: bool = _region_on("triceratops", "legs")
+	var legs_clean: bool = _region_clean("triceratops", "legs")
+	var tail_on: bool = _region_on("triceratops", "tail")
+	var tail_clean: bool = _region_clean("triceratops", "tail")
 	var xf := _fit(mount, Vector2(-98, -100), Vector2(104, 0))
-	_rect(xf, -14, -68, 82, 36, false, false)
-	_rect(xf, 60, -56, 44, 12, false, false)
-	_rect(xf, -10, -34, 16, 34, false, false)
-	_rect(xf, 16, -34, 16, 34, false, false)
-	_rect(xf, 42, -34, 16, 34, false, false)
-	_rect(xf, 66, -32, 16, 32, false, false)
-	_rect(xf, -62, -92, 40, 46, owned, clean)
-	_rect(xf, -86, -66, 38, 26, owned, clean)
-	_rect(xf, -98, -56, 16, 12, owned, clean)
-	_rect(xf, -48, -100, 8, 20, owned, clean)
-	_rect(xf, -32, -98, 8, 18, owned, clean)
-	_rect(xf, -78, -72, 8, 16, owned, clean)
-	if owned:
+	_rect(xf, -14, -68, 82, 36, body_on, body_clean)
+	_rect(xf, 60, -56, 44, 12, tail_on, tail_clean)
+	_rect(xf, -10, -34, 16, 34, legs_on, legs_clean)
+	_rect(xf, 16, -34, 16, 34, legs_on, legs_clean)
+	_rect(xf, 42, -34, 16, 34, legs_on, legs_clean)
+	_rect(xf, 66, -32, 16, 32, legs_on, legs_clean)
+	_rect(xf, -62, -92, 40, 46, skull_on, skull_clean)
+	_rect(xf, -86, -66, 38, 26, skull_on, skull_clean)
+	_rect(xf, -98, -56, 16, 12, skull_on, skull_clean)
+	_rect(xf, -48, -100, 8, 20, brow_on, brow_clean)
+	_rect(xf, -32, -98, 8, 18, brow_on, brow_clean)
+	_rect(xf, -78, -72, 8, 16, nose_on, nose_clean)
+	for i in display_slots("triceratops_tooth"):
+		var tooth_x: float = -98.0 + float(i) * 3.6
+		_rect(xf, tooth_x, -50.0, 3.0, 8.0, slot_on("triceratops_tooth", i), _slot_clean("triceratops_tooth", i))
+	if skull_on:
 		draw_circle(xf * Vector2(-62, -52), 5.0 * xf.x.length(), Color("2B2118"))
 	_draw_stand_finish("triceratops", stand)
 
@@ -298,15 +360,29 @@ func _draw_sauropod_bay() -> void:
 	var stand: Rect2 = stand_rect("brachiosaurus")
 	var mount: Rect2 = _draw_stand(stand, "Brachiosaurus", "brachiosaurus")
 	var xf := _fit(mount, Vector2(-70, -132), Vector2(90, 0))
-	_rect(xf, -18, -70, 74, 36, false, false)
-	_rect(xf, 48, -56, 42, 12, false, false)
-	_rect(xf, -16, -40, 16, 40, false, false)
-	_rect(xf, 6, -36, 16, 36, false, false)
-	_rect(xf, 28, -36, 16, 36, false, false)
-	_rect(xf, 48, -34, 16, 34, false, false)
-	_rect(xf, -28, -102, 22, 36, false, false)
-	_rect(xf, -42, -124, 20, 28, false, false)
-	_rect(xf, -70, -132, 32, 16, false, false)
+	var torso_on: bool = _region_on("brachiosaurus", "arm") or _region_on("brachiosaurus", "legs")
+	var arm_on: bool = _region_on("brachiosaurus", "arm")
+	var arm_clean: bool = _region_clean("brachiosaurus", "arm")
+	var legs_on: bool = _region_on("brachiosaurus", "legs")
+	var legs_clean: bool = _region_clean("brachiosaurus", "legs")
+	var tail_on: bool = _region_on("brachiosaurus", "tail")
+	var tail_clean: bool = _region_clean("brachiosaurus", "tail")
+	var neck_on: bool = _region_on("brachiosaurus", "neck")
+	var neck_clean: bool = _region_clean("brachiosaurus", "neck")
+	var head_on: bool = _region_on("brachiosaurus", "head")
+	var head_clean: bool = _region_clean("brachiosaurus", "head")
+	_rect(xf, -18, -70, 74, 36, torso_on, arm_clean or legs_clean)
+	_rect(xf, 48, -56, 42, 12, tail_on, tail_clean)
+	_rect(xf, -16, -40, 16, 40, arm_on, arm_clean)
+	_rect(xf, 6, -36, 16, 36, legs_on, legs_clean)
+	_rect(xf, 28, -36, 16, 36, legs_on, legs_clean)
+	_rect(xf, 48, -34, 16, 34, legs_on, legs_clean)
+	_rect(xf, -28, -102, 22, 36, neck_on, neck_clean)
+	_rect(xf, -42, -124, 20, 28, neck_on, neck_clean)
+	_rect(xf, -70, -132, 32, 16, head_on, head_clean)
+	for i in display_slots("brachiosaurus_tooth"):
+		var peg_x: float = -68.0 + float(i) * 4.0
+		_rect(xf, peg_x, -118.0, 3.0, 6.0, slot_on("brachiosaurus_tooth", i), _slot_clean("brachiosaurus_tooth", i))
 	_draw_stand_finish("brachiosaurus", stand)
 
 
@@ -314,39 +390,75 @@ func _draw_raptor_bay() -> void:
 	var stand: Rect2 = stand_rect("velociraptor")
 	var mount: Rect2 = _draw_stand(stand, "Velociraptor", "velociraptor")
 	var xf := _fit(mount, Vector2(-54, -74), Vector2(96, 0))
-	_rect(xf, -14, -50, 52, 22, false, false)
-	_rect(xf, 32, -46, 64, 8, false, false)
-	_rect(xf, 2, -34, 14, 34, false, false)
-	_rect(xf, 14, -16, 16, 6, false, false)
-	_rect(xf, -8, -30, 10, 18, false, false)
-	_rect(xf, -28, -64, 16, 18, false, false)
-	_rect(xf, -54, -72, 28, 16, false, false)
-	_rect(xf, -50, -58, 14, 6, false, false)
+	var torso_on: bool = _region_on("velociraptor", "torso")
+	var torso_clean: bool = _region_clean("velociraptor", "torso")
+	var tail_on: bool = _region_on("velociraptor", "tail")
+	var tail_clean: bool = _region_clean("velociraptor", "tail")
+	var legs_on: bool = _region_on("velociraptor", "legs")
+	var legs_clean: bool = _region_clean("velociraptor", "legs")
+	var head_on: bool = _region_on("velociraptor", "head")
+	var head_clean: bool = _region_clean("velociraptor", "head")
+	_rect(xf, -14, -50, 52, 22, torso_on, torso_clean)
+	_rect(xf, 32, -46, 64, 8, tail_on, tail_clean)
+	_rect(xf, 2, -34, 14, 34, legs_on, legs_clean)
+	_rect(xf, 14, -16, 16, 6, slot_on("velociraptor_claw", 0), _slot_clean("velociraptor_claw", 0))
+	_rect(xf, -8, -14, 12, 5, slot_on("velociraptor_claw", 1), _slot_clean("velociraptor_claw", 1))
+	_rect(xf, -8, -30, 10, 18, legs_on, legs_clean)
+	_rect(xf, -28, -64, 16, 18, head_on, head_clean)
+	_rect(xf, -54, -72, 28, 16, head_on, head_clean)
+	_rect(xf, -50, -58, 14, 6, head_on, head_clean)
 	_draw_stand_finish("velociraptor", stand)
+
+
+func _owned_clean(piece_id: String) -> bool:
+	if not GameState.has_piece(piece_id):
+		return false
+	var piece: Dictionary = GameState.pieces[piece_id]
+	return bool(piece.get("clean", false))
+
+
+func _region_on(stand_id: String, region: String) -> bool:
+	return bool(GameState.stand_region_filled(stand_id, region))
+
+
+func _region_clean(stand_id: String, region: String) -> bool:
+	return bool(GameState.stand_region_clean(stand_id, region))
 
 
 func _draw_stego_bay() -> void:
 	var stand: Rect2 = stand_rect("stegosaurus")
 	var mount: Rect2 = _draw_stand(stand, "Stegosaurus", "stegosaurus")
+	var torso_on: bool = _region_on("stegosaurus", "torso")
+	var torso_clean: bool = _region_clean("stegosaurus", "torso")
+	var legs_on: bool = _region_on("stegosaurus", "legs")
+	var legs_clean: bool = _region_clean("stegosaurus", "legs")
+	var tail_on: bool = _region_on("stegosaurus", "tail")
+	var tail_clean: bool = _region_clean("stegosaurus", "tail")
+	var head_on: bool = _region_on("stegosaurus", "head")
+	var head_clean: bool = _region_clean("stegosaurus", "head")
 	var xf := _fit(mount, Vector2(-52, -88), Vector2(108, 0))
-	_rect(xf, -18, -54, 82, 28, false, false)
-	_rect(xf, 56, -46, 40, 10, false, false)
-	_rect(xf, -12, -28, 14, 28, false, false)
-	_rect(xf, 12, -28, 14, 28, false, false)
-	_rect(xf, 36, -28, 14, 28, false, false)
-	_rect(xf, 58, -26, 14, 26, false, false)
-	_rect(xf, -44, -48, 28, 14, false, false)
-	_poly(xf, PackedVector2Array([
-		Vector2(-4, -54), Vector2(8, -84), Vector2(20, -54)
-	]), false, false)
-	_poly(xf, PackedVector2Array([
-		Vector2(22, -54), Vector2(36, -88), Vector2(50, -54)
-	]), false, false)
-	_poly(xf, PackedVector2Array([
-		Vector2(48, -54), Vector2(60, -80), Vector2(72, -54)
-	]), false, false)
-	_rect(xf, 90, -54, 6, 16, false, false)
-	_rect(xf, 100, -50, 6, 14, false, false)
+	_rect(xf, -18, -54, 82, 28, torso_on, torso_clean)
+	_rect(xf, 56, -46, 40, 10, tail_on, tail_clean)
+	_rect(xf, -12, -28, 14, 20, legs_on, legs_clean)
+	_rect(xf, 12, -28, 14, 20, legs_on, legs_clean)
+	_rect(xf, 36, -28, 14, 20, legs_on, legs_clean)
+	_rect(xf, 58, -26, 14, 18, legs_on, legs_clean)
+	var foot_xs: Array[float] = [-12.0, 12.0, 36.0, 58.0]
+	for i in display_slots("stegosaurus_foot"):
+		var foot_x: float = foot_xs[i] if i < foot_xs.size() else 58.0 + float(i - 3) * 16.0
+		_rect(xf, foot_x, -8.0, 14.0, 8.0, slot_on("stegosaurus_foot", i), _slot_clean("stegosaurus_foot", i))
+	_rect(xf, -44, -48, 28, 14, head_on, head_clean)
+	var plate_pts: Array[PackedVector2Array] = [
+		PackedVector2Array([Vector2(-4, -54), Vector2(8, -84), Vector2(20, -54)]),
+		PackedVector2Array([Vector2(22, -54), Vector2(36, -88), Vector2(50, -54)]),
+		PackedVector2Array([Vector2(48, -54), Vector2(60, -80), Vector2(72, -54)]),
+	]
+	for i in display_slots("stegosaurus_plate"):
+		if i >= plate_pts.size():
+			continue
+		_poly(xf, plate_pts[i], slot_on("stegosaurus_plate", i), _slot_clean("stegosaurus_plate", i))
+	_rect(xf, 90, -54, 6, 16, tail_on, tail_clean)
+	_rect(xf, 100, -50, 6, 14, tail_on, tail_clean)
 	_draw_stand_finish("stegosaurus", stand)
 
 
