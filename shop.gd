@@ -26,28 +26,27 @@ var _fitting_pages: bool = false
 var _fit_queued: bool = false
 
 
+func _init() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
+
 func _ready() -> void:
 	layer = 12
 	visible = false
 
 	var bg := ColorRect.new()
-	bg.color = Color("16110D")
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_field(bg)
 	add_child(bg)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var bar := Panel.new()
-	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	bar.offset_bottom = 64
-	bar.mouse_filter = Control.MOUSE_FILTER_STOP
-	Ui.apply_bar(bar, Ui.PAPER_DEEP, false)
+	Ui.apply_header_bar(bar)
 	add_child(bar)
 
 	var back := Button.new()
 	back.text = "Back"
-	back.position = Vector2(20, 12)
-	back.custom_minimum_size = Vector2(100, 40)
-	Ui.apply_button(back)
+	Ui.apply_nav(back)
+	Ui.place_header_back(back)
 	back.pressed.connect(func() -> void:
 		Sfx.play("ui")
 		closed.emit()
@@ -56,20 +55,20 @@ func _ready() -> void:
 
 	_title = Label.new()
 	_title.text = "Upgrades"
-	_title.position = Vector2(136, 16)
 	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_title, 26, Ui.GOLD)
+	Ui.apply_title(_title)
+	Ui.place_header_title(_title)
 	add_child(_title)
 
 	_wallet = Label.new()
 	_wallet.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_wallet.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_wallet.offset_left = -280
-	_wallet.offset_right = -28
-	_wallet.offset_top = 14
-	_wallet.offset_bottom = 52
+	_wallet.offset_right = -Ui.HEADER_PAD
+	_wallet.offset_top = (Ui.HEADER_H - 36.0) * 0.5
+	_wallet.offset_bottom = _wallet.offset_top + 36.0
 	_wallet.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_wallet, 28, Ui.GOLD)
+	Ui.apply_wallet(_wallet)
 	add_child(_wallet)
 
 	var body := HBoxContainer.new()
@@ -77,13 +76,13 @@ func _ready() -> void:
 	body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	body.offset_left = 20
 	body.offset_right = -20
-	body.offset_top = 76
+	body.offset_top = Ui.HEADER_H + 10.0
 	body.offset_bottom = -16
 	body.add_theme_constant_override("separation", 16)
 
 	var rail := Panel.new()
 	rail.custom_minimum_size = Vector2(RAIL_W, 0)
-	Ui.apply_panel(rail, Color("1B1410"))
+	Ui.apply_panel(rail, Ui.PAPER_DEEP)
 	body.add_child(rail)
 	var rail_list := VBoxContainer.new()
 	rail_list.add_theme_constant_override("separation", 8)
@@ -123,8 +122,8 @@ func _ready() -> void:
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_banner.offset_left = -300
 	_banner.offset_right = 300
-	_banner.offset_top = 68
-	_banner.offset_bottom = 124
+	_banner.offset_top = Ui.HEADER_H + 2.0
+	_banner.offset_bottom = _banner.offset_top + 56.0
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner.modulate.a = 0.0
 	Ui.apply_label(_banner, 34, Ui.GOLD)
@@ -191,7 +190,7 @@ func _make_tab(cat: String) -> Button:
 	caption.text = cat
 	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(caption, 16, Ui.INK)
+	Ui.apply_body(caption)
 	row.add_child(caption)
 
 	var badge := Label.new()
@@ -236,13 +235,13 @@ func _add_chapter(page: VBoxContainer, cat: String, tier: int) -> void:
 
 	var mark := Label.new()
 	mark.text = GameState.tier_title(cat, tier)
-	Ui.apply_label(mark, 22, Ui.GOLD)
+	Ui.apply_section(mark)
 	head.add_child(mark)
 
 	var progress := Label.new()
 	progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	Ui.apply_label(progress, 14, Ui.MUTED)
+	Ui.apply_caption(progress)
 	head.add_child(progress)
 
 	var body := VBoxContainer.new()
@@ -277,7 +276,7 @@ func _add_gate(page: VBoxContainer, cat: String, tier: int) -> void:
 	var title := Label.new()
 	title.text = GameState.tier_title(cat, tier)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Ui.apply_label(title, 22, Ui.GOLD)
+	Ui.apply_section(title)
 	col.add_child(title)
 
 	var reason := Label.new()
@@ -285,7 +284,7 @@ func _add_gate(page: VBoxContainer, cat: String, tier: int) -> void:
 	reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reason.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reason.custom_minimum_size.x = 240
-	Ui.apply_label(reason, 15, Ui.MUTED)
+	Ui.apply_caption(reason)
 	col.add_child(reason)
 
 	_gates[key] = {"wrap": gate, "title": title, "reason": reason, "icon": icon}
@@ -354,12 +353,7 @@ func _refresh_tab(cat: String) -> void:
 	badge.visible = glow_count > 0
 	badge.text = str(glow_count)
 	if glow_count > 0:
-		var pip := StyleBoxFlat.new()
-		pip.bg_color = Ui.GOLD
-		pip.set_corner_radius_all(10)
-		pip.content_margin_left = 6
-		pip.content_margin_right = 6
-		badge.add_theme_stylebox_override("normal", pip)
+		badge.add_theme_stylebox_override("normal", Ui.badge_box())
 		badge.add_theme_color_override("font_color", Color("1B1410"))
 	if tab["icon"].has_method("setup"):
 		tab["icon"].setup(ShopIcon.glyph_for_cat(cat), Ui.GOLD if selected or glow_count > 0 else Color("A88858"))
@@ -589,9 +583,9 @@ func _flash_spend(cost: int) -> void:
 	Ui.apply_label(chip, 22, Color("E24B4B"))
 	chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	chip.offset_left = -280
-	chip.offset_right = -28
-	chip.offset_top = 48
-	chip.offset_bottom = 78
+	chip.offset_right = -Ui.HEADER_PAD
+	chip.offset_top = Ui.HEADER_H - 38.0
+	chip.offset_bottom = chip.offset_top + 30.0
 	add_child(chip)
 	var tw := create_tween()
 	tw.tween_property(_wallet, "modulate", Color.WHITE, 0.45)

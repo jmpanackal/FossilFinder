@@ -28,7 +28,7 @@ func _ready() -> void:
 	_subtitle = Label.new()
 	_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_subtitle, 14, Ui.MUTED)
+	Ui.apply_caption(_subtitle)
 	_box.add_child(_subtitle)
 
 	_stars = Control.new()

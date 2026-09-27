@@ -96,6 +96,7 @@ func _run() -> void:
 	_test_occupancy_reads_as_the_part()
 	_test_doodles_use_the_right_geometry()
 	_test_pit_draws_the_part_doodle()
+	_test_footer_chip_uses_the_part_doodle()
 	_test_cell_counts_and_quotas_hold()
 	print("fossil_silhouettes %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -255,6 +256,17 @@ func _test_pit_draws_the_part_doodle() -> void:
 	var data_src: String = FileAccess.get_file_as_string("res://fossil_data.gd")
 	_assert(data_src.find("func draw_silhouette") >= 0, "FossilData can draw its own pit doodle")
 	_assert(data_src.find("func silhouette_polys") >= 0, "FossilData exposes silhouette polygons")
+
+
+func _test_footer_chip_uses_the_part_doodle() -> void:
+	var chip_src: String = FileAccess.get_file_as_string("res://find_chip.gd")
+	_assert(not chip_src.is_empty(), "find_chip.gd paints the footer doodle")
+	_assert(chip_src.find("draw_silhouette") >= 0, "footer chips fall back to the part silhouette")
+	_assert(chip_src.find("ArtCatalog") >= 0 or chip_src.find("art_catalog") >= 0, "footer chips reuse ArtCatalog bone art")
+	var hud_src: String = FileAccess.get_file_as_string("res://hud.gd")
+	_assert(hud_src.find("find_chip") >= 0 or hud_src.find("FindChip") >= 0, "HUD hosts find chips, not cell chrome")
+	var site_src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(site_src.find("THIS FIND") < 0, "pit cells do not grow a nameplate")
 
 
 func _test_cell_counts_and_quotas_hold() -> void:

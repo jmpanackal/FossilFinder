@@ -12,15 +12,19 @@ const TOOL_NAMES: PackedStringArray = ["SHOVEL", "PICKAXE", "BRUSH", "HANDS"]
 func hotkey_for_tool(tool: int) -> String:
 	match tool:
 		TOOL_HANDS:
-			return "0"
-		TOOL_SHOVEL:
 			return "1"
-		TOOL_PICKAXE:
+		TOOL_SHOVEL:
 			return "2"
-		TOOL_BRUSH:
+		TOOL_PICKAXE:
 			return "3"
+		TOOL_BRUSH:
+			return "4"
 		_:
 			return ""
+
+
+func hud_rail_w() -> float:
+	return 184.0
 
 const MAT_LOOSE := 0
 const MAT_PACKED := 1
@@ -134,7 +138,7 @@ var depth_darken: float = 0.028
 ## Pickaxe is weak on dirt so one click cannot farm the surface.
 var damage_matrix := [
 	[1.6, 1.2, 0.16, 0.05],
-	[0.55, 0.65, 3.2, 5.0],
+	[0.40, 0.65, 4.2, 8.0],
 	[0.0, 0.0, 0.0, 0.0],
 ]
 
@@ -149,8 +153,8 @@ var shovel_hold_mult: float = 1.0
 var shovel_hold_tick_rate: float = 2.4
 var pickaxe_click_mult: float = 0.85
 var pickaxe_hold_mult: float = 1.0
-var pickaxe_hold_tick_rate: float = 1.4
-var pickaxe_splash_mult: float = 0.4
+var pickaxe_hold_tick_rate: float = 1.8
+var pickaxe_splash_mult: float = 0.7
 ## Floor so max Steady Shoveling stays snappy without 60 ticks/sec.
 var hold_min_interval: float = 0.065
 
@@ -162,8 +166,8 @@ var unbrushed_value: float = 0.5
 var clean_extract_threshold: float = 0.999
 
 var shake_enabled: bool = true
-var shake_strength: float = 5.0
-var shake_time: float = 0.12
+var shake_strength: float = 8.0
+var shake_time: float = 0.18
 
 var fossil_path: String = "res://triceratops_skull.tres"
 var precision_damage_bonus: float = 0.0
@@ -180,17 +184,19 @@ var set_complete_sale_mult: float = 2.0
 var extra_complete_set_chance: float = 0.22
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0
-var matrix_dirt_chance: float = 0.94
-var matrix_stone_chance: float = 0.42
+var matrix_dirt_chance: float = 0.48
+var matrix_stone_chance: float = 0.55
 var matrix_hands_quality: float = 0.0
 var matrix_hands_pay: float = 1.0
 var matrix_clear_pay: float = 0.50
 var fossil_value_mult: float = 1.0
-var spotlight_mult: float = 2.0
+var spotlight_mult: float = 1.0
 var unveil_burst_clean: int = 40
 var unveil_burst_dirty: int = 18
-var unveil_spike_seconds: float = 5.0
+var unveil_spike_seconds: float = 24.0
 var unveil_spike_mult: float = 2.0
+var unveil_rush_stack_cap: int = 5
+var unveil_rush_strength: float = 1.0
 
 ## Break grades only. Dirt is tracked separately.
 const PRESERVATION_GRADES: PackedStringArray = [
@@ -220,9 +226,9 @@ func preservation_grade(integrity: float, _cleanliness: float = 1.0) -> String:
 
 
 func dirt_label(cleanliness: float) -> String:
-	if cleanliness >= 0.99:
-		return "Clean"
-	return "Dust  %d%%" % int(round((1.0 - clampf(cleanliness, 0.0, 1.0)) * 100.0))
+	var clean := clampf(cleanliness, 0.0, 1.0)
+	var pct: int = 100 if clean >= 0.99 else int(round(clean * 100.0))
+	return "Brushed %d%%" % pct
 
 
 func summary_dirt_line(cleanliness: float, _owns_brush: bool) -> String:
@@ -257,8 +263,36 @@ func money_for_layer(layer: int) -> int:
 
 
 func color_for_layer(layer: int) -> Color:
-	var color: Color = material_colors[material_at_layer(layer)]
-	return color.darkened(clampf(float(layer) * depth_darken, 0.0, 0.72))
+	## Per-layer steps in two job families: warm shovel dirt, then cool pick stone.
+	var idx: int = clampi(layer, 0, layer_count - 1)
+	if idx <= 11:
+		return _ramp_color(idx, 0, 11, [
+			Color("C4A36A"),
+			Color("A07840"),
+			Color("7A4A28"),
+		])
+	return _ramp_color(idx, 12, layer_count - 1, [
+		Color("6A7484"),
+		Color("4A5666"),
+		Color("2A3848"),
+	])
+
+
+func _ramp_color(layer: int, from_layer: int, to_layer: int, stops: PackedColorArray) -> Color:
+	var span: int = maxi(to_layer - from_layer, 1)
+	var t: float = clampf(float(layer - from_layer) / float(span), 0.0, 1.0)
+	var scaled: float = t * float(stops.size() - 1)
+	var i: int = clampi(int(floor(scaled)), 0, stops.size() - 2)
+	return stops[i].lerp(stops[i + 1], scaled - float(i))
+
+
+func tool_works_on(tool: int, layer: int) -> bool:
+	var material: int = material_at_layer(layer)
+	if tool == TOOL_SHOVEL or tool == TOOL_HANDS:
+		return material <= MAT_PACKED
+	if tool == TOOL_PICKAXE:
+		return material >= MAT_CLAY
+	return false
 
 
 func particle_color_for_layer(layer: int) -> Color:
@@ -400,22 +434,32 @@ func apply_site_layout() -> void:
 
 
 func center_grid() -> void:
-	var pit: Vector2 = fitted_pit_size()
-	var width := pit.x + cell_side
-	var top := hud_h + 10.0
-	grid_origin = Vector2((view_w - width) * 0.5 + chunk_pad * 0.25, top)
+	var top := hud_h + chunk_pad
+	grid_origin = Vector2(hud_rail_w() + chunk_pad, top)
 
 
 func pit_face_bottom() -> float:
 	return grid_origin.y + float(grid_h) * cell_h
 
 
+func pit_grid_size() -> Vector2:
+	return Vector2(float(grid_w) * cell_w, float(grid_h) * cell_h)
+
+
+func pit_grid_rect() -> Rect2:
+	return Rect2(grid_origin, pit_grid_size())
+
+
 func footer_top() -> float:
 	return pit_face_bottom() + chunk_front + 8.0
 
 
+func footer_chip_inset() -> float:
+	return grid_origin.x
+
+
 func footer_menu_gutter() -> float:
-	return 140.0
+	return footer_chip_inset()
 
 
 func footer_goal_h() -> float:
@@ -427,12 +471,14 @@ func footer_find_gap() -> float:
 
 
 func footer_find_top() -> float:
-	return footer_top() + footer_goal_h() + footer_find_gap()
+	return footer_top() + footer_find_gap()
 
 
 func integrity_hit_for(tool: int) -> float:
 	if tool == TOOL_HANDS:
 		return integrity_hit_cost * hands_integrity_mult
+	if tool == TOOL_BRUSH:
+		return 0.0
 	return integrity_hit_cost
 
 
@@ -444,8 +490,27 @@ func chunk_side_color() -> Color:
 	return color_for_layer(0).darkened(0.32)
 
 
+func shaft_interior_color(layer: int = 0) -> Color:
+	## Local dirt hue, darkened hard enough that undug tan still reads as a hole.
+	if layer >= layer_count:
+		return Color("1A1410")
+	var source := color_for_layer(maxi(layer, 0))
+	var wall := source.darkened(0.42)
+	var tan := color_for_layer(0)
+	var cap := tan.get_luminance() * 0.70
+	var wall_l := wall.get_luminance()
+	if wall_l > cap:
+		var scale := cap / maxf(wall_l, 0.001)
+		wall = Color(wall.r * scale, wall.g * scale, wall.b * scale, wall.a)
+	return wall
+
+
 func chunk_line_color() -> Color:
 	return cell_line
+
+
+func chunk_line_width() -> float:
+	return 1.5
 
 
 func pickaxe_cell_damage(layer: int, is_splash: bool, style_mult: float) -> float:

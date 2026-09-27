@@ -14,6 +14,7 @@ const Lucky := preload("res://lucky_strike.gd")
 @onready var summary = $Summary
 @onready var museum = $Museum
 @onready var shop = $Shop
+@onready var title = $Title
 @onready var debug_label: Label = $DebugOverlay/DebugLabel
 
 var time_left: float = 0.0
@@ -37,6 +38,7 @@ func _ready() -> void:
 	GameState.load_game()
 	get_viewport().size_changed.connect(_sync_view)
 	Settings.menu_toggled.connect(_on_settings_toggled)
+	GameState.progress_reset.connect(_on_progress_reset)
 	_sync_view()
 	dig_site.layer_cleared.connect(_on_layer_cleared)
 	dig_site.fossil_cell_exposed.connect(_on_fossil_exposed)
@@ -52,8 +54,56 @@ func _ready() -> void:
 	summary.open_shop.connect(func() -> void: show_screen("shop"))
 	museum.closed.connect(_return_from_menu)
 	shop.closed.connect(_return_from_menu)
+	if title != null and title.has_signal("started"):
+		title.started.connect(_begin_from_title)
+	if Settings.has_signal("title_requested"):
+		Settings.title_requested.connect(show_title)
 	$DebugOverlay.visible = false
+	show_title()
+
+
+func _begin_from_title() -> void:
+	_hide_title()
 	start_round()
+
+
+func show_title() -> void:
+	round_active = false
+	time_left = 0.0
+	_timer_armed = false
+	if dig_site != null:
+		dig_site.input_enabled = false
+		if dig_site.has_method("cancel_input"):
+			dig_site.cancel_input()
+	if summary != null:
+		summary.hide_summary()
+	if museum != null:
+		museum.visible = false
+	if shop != null:
+		shop.visible = false
+	if hud != null:
+		hud.visible = false
+	screen = "title"
+	_sync_shift_pause()
+	if site_backdrop != null:
+		site_backdrop.visible = true
+		if site_backdrop.has_method("set_covers_chunk_hole"):
+			site_backdrop.call("set_covers_chunk_hole", true)
+	if title != null:
+		title.visible = true
+		if title.has_method("refresh_field"):
+			title.refresh_field()
+	_sync_menu_chrome()
+	if Settings.has_method("set_title_return_visible"):
+		Settings.set_title_return_visible(false)
+
+
+func _hide_title() -> void:
+	if title != null:
+		title.visible = false
+	_sync_menu_chrome()
+	if Settings.has_method("set_title_return_visible"):
+		Settings.set_title_return_visible(true)
 
 
 func start_round() -> void:
@@ -63,6 +113,7 @@ func start_round() -> void:
 	_shake_left = 0.0
 	camera.offset = Vector2.ZERO
 	summary.hide_summary()
+	_hide_title()
 	show_screen("dig")
 	dig_site.input_enabled = true
 	_round_finds.clear()
@@ -76,6 +127,11 @@ func start_round() -> void:
 
 
 func show_screen(next: String) -> void:
+	if next != "title":
+		_hide_title()
+	if round_active and (next == "shop" or next == "museum"):
+		_open_shift_overlay(next)
+		return
 	if round_active and next != "dig":
 		return
 	screen = next
@@ -92,14 +148,85 @@ func show_screen(next: String) -> void:
 	elif not round_active:
 		_show_summary()
 	dig_site.input_enabled = digging and round_active
+	if hud != null:
+		hud.visible = digging and round_active
+	_sync_menu_chrome()
 	if next == "shop" and shop.has_method("refresh"):
 		shop.refresh()
 	if next == "museum" and museum.has_method("_refresh"):
 		museum._refresh()
+	_sync_shift_pause()
+
+
+func _open_shift_overlay(next: String) -> void:
+	if next != "shop" and next != "museum":
+		return
+	if dig_site != null and dig_site.has_method("cancel_input"):
+		dig_site.cancel_input()
+	screen = next
+	dig_site.visible = false
+	if site_backdrop != null:
+		site_backdrop.visible = false
+	museum.visible = next == "museum"
+	shop.visible = next == "shop"
+	if hud != null:
+		hud.visible = false
+	_sync_menu_chrome()
+	dig_site.input_enabled = false
+	if next == "shop" and shop.has_method("refresh"):
+		shop.refresh()
+	if next == "museum" and museum.has_method("_refresh"):
+		museum._refresh()
+	_sync_shift_pause()
 
 
 func _return_from_menu() -> void:
+	if round_active:
+		shop.visible = false
+		museum.visible = false
+		screen = "dig"
+		dig_site.visible = true
+		if site_backdrop != null:
+			site_backdrop.visible = true
+			if site_backdrop.has_method("set_covers_chunk_hole"):
+				site_backdrop.call("set_covers_chunk_hole", false)
+		if hud != null:
+			hud.visible = true
+		_sync_menu_chrome()
+		dig_site.input_enabled = true
+		_sync_shift_pause()
+		return
 	show_screen("dig")
+
+
+func _sync_menu_chrome() -> void:
+	if Settings.has_method("set_menu_chrome_visible"):
+		# Menu lives on the dig header now. Do not resurrect the settings-layer
+		# fallback over shop, museum, shift-over, settings, or title.
+		Settings.set_menu_chrome_visible(false)
+		if Settings.has_method("_layout_menu_chrome"):
+			Settings.call("_layout_menu_chrome")
+	if hud != null and hud.has_method("set_header_actions_visible"):
+		hud.set_header_actions_visible(not _dig_header_should_hide())
+
+
+func _dig_header_should_hide() -> bool:
+	if screen == "shop" or screen == "museum" or screen == "title":
+		return true
+	if summary != null and bool(summary.visible):
+		return true
+	if Settings.has_method("is_open") and Settings.is_open():
+		return true
+	return false
+
+
+func _sync_shift_pause() -> void:
+	if get_tree() == null:
+		return
+	if screen == "shop" or screen == "museum":
+		get_tree().paused = true
+	elif not Settings.is_open():
+		get_tree().paused = false
 
 
 func _sync_view() -> void:
@@ -117,9 +244,20 @@ func _sync_view() -> void:
 func _on_settings_toggled(open: bool) -> void:
 	if open and dig_site != null and dig_site.has_method("cancel_input"):
 		dig_site.cancel_input()
+	_sync_menu_chrome()
+	if not open:
+		_sync_shift_pause()
+
+
+func _on_progress_reset() -> void:
+	_begin_from_title()
 
 
 func _process(delta: float) -> void:
+	if screen == "title":
+		if hud != null:
+			hud.visible = false
+		return
 	if Settings.is_open():
 		return
 	if _shake_left > 0.0 and Tuning.shake_enabled:
@@ -134,23 +272,21 @@ func _process(delta: float) -> void:
 			time_left -= delta
 			if time_left <= 0.0:
 				_end_round()
-	var found: bool = round_active and screen == "dig" and bool(dig_site.has_visible_find())
+	var cards: Array = []
+	if round_active and screen == "dig" and dig_site.has_method("live_find_cards"):
+		cards = dig_site.live_find_cards()
+	if hud.has_method("set_find_cards"):
+		hud.set_find_cards(cards)
+	var found: bool = not cards.is_empty()
 	var clean: float = float(dig_site.fossil_cleanliness())
 	var grade: String = Tuning.preservation_grade(float(dig_site.integrity), clean) if found else ""
 	var stars: int = Tuning.preservation_stars(float(dig_site.integrity), clean) if found else 0
 	var value: int = int(dig_site.preview_value()) if found else 0
 	hud.refresh(time_left, Tuning.round_seconds, dig_site.current_tool, round_active and screen == "dig", found, stars, grade, clean, value)
-	var headline := ""
-	if found and dig_site.has_method("focused_find_extracted") and bool(dig_site.focused_find_extracted()):
-		var found_name: String = str(dig_site.focused_find_name())
-		if _extract_fate == "sold extra":
-			headline = "%s sold extra!" % found_name
-		elif not _extract_fate.is_empty():
-			headline = "%s found!  %s" % [found_name, _extract_fate]
-		else:
-			headline = "%s found!" % found_name
+	if hud.has_method("set_bone_warning") and dig_site.has_method("aiming_spoils_bone"):
+		hud.set_bone_warning(bool(dig_site.aiming_spoils_bone()))
 	if hud.has_method("set_find_headline"):
-		hud.set_find_headline(headline)
+		hud.set_find_headline("")
 	if debug_on:
 		_refresh_debug()
 
@@ -160,9 +296,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_F1:
 			debug_on = not debug_on
 			$DebugOverlay.visible = debug_on
+		elif screen == "title" and (event.physical_keycode == KEY_ENTER or event.physical_keycode == KEY_SPACE):
+			_begin_from_title()
 		elif event.physical_keycode == KEY_F2 and round_active:
 			_end_round()
-		elif not round_active and (event.physical_keycode == KEY_ENTER or event.physical_keycode == KEY_SPACE):
+		elif screen != "title" and not round_active and (event.physical_keycode == KEY_ENTER or event.physical_keycode == KEY_SPACE):
 			start_round()
 
 
@@ -188,13 +326,17 @@ func _end_round() -> void:
 
 
 func _show_summary() -> void:
+	_hide_title()
 	if dig_site != null:
 		dig_site.visible = true
 	if site_backdrop != null:
 		site_backdrop.visible = true
 		if site_backdrop.has_method("set_covers_chunk_hole"):
 			site_backdrop.call("set_covers_chunk_hole", false)
-	summary.show_summary(_round_fossil_pay, _round_finds_pay, _last_fossil_line, _last_fossil_stars)
+	summary.show_summary(_round_fossil_pay, _round_finds_pay, _last_fossil_line, _last_fossil_stars, _round_finds)
+	if hud != null:
+		hud.visible = false
+	_sync_menu_chrome()
 
 
 func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
@@ -225,20 +367,28 @@ func _on_fossil_exposed(world_pos: Vector2, first: bool) -> void:
 		_ping(world_pos)
 
 
-func _on_ready_to_dust() -> void:
+func _on_ready_to_dust(find_index: int = -1) -> void:
+	if hud != null and hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
+		hud.set_find_cards(dig_site.live_find_cards())
 	dig_site.pulse_bones()
-	_ping(dig_site.fossil_centroid())
+	var origin: Vector2 = dig_site.fossil_centroid()
+	if find_index >= 0 and dig_site.has_method("find_centroid"):
+		origin = dig_site.find_centroid(find_index)
+	_ping(origin)
 	Sfx.play("fossil_ping")
 	if Tuning.shake_enabled:
 		_shake_left = maxf(_shake_left, 0.18)
+	_spawn_fossil_fly(find_index, origin)
 
 
 func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cleanliness: float, clean: bool, piece_id: String) -> void:
 	var before: int = GameState.money
 	GameState.add_money(value)
 	var id := piece_id if piece_id != "" else "find"
-	var note: String = GameState.install_find(id, fossil_name, cleanliness, clean)
-	_extract_fate = _extract_fate_for(id, note)
+	_extract_fate = GameState.hall_fate_line(id)
+	if dig_site.has_method("set_find_fate"):
+		dig_site.set_find_fate(id, _extract_fate)
+	GameState.install_find(id, fossil_name, cleanliness, clean)
 	_round_fossil_pay += GameState.money - before
 	var grade := Tuning.preservation_grade(integrity)
 	var stars := Tuning.preservation_stars(integrity)
@@ -246,27 +396,29 @@ func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cle
 	var dirt := Tuning.summary_dirt_line(cleanliness, owns_brush)
 	_round_finds.append({
 		"name": fossil_name,
+		"piece_id": id,
 		"grade": grade,
 		"stars": stars,
 		"dirt": dirt,
 		"fate": _extract_fate,
 	})
+	if hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
+		hud.set_find_cards(dig_site.live_find_cards())
+	if hud.has_method("catch_find") and dig_site.has_method("find_index_for"):
+		hud.catch_find(int(dig_site.find_index_for(id)))
 	if hud.has_method("set_find_headline"):
-		if _extract_fate == "sold extra":
-			hud.set_find_headline("%s sold extra!" % fossil_name)
-		elif not _extract_fate.is_empty():
-			hud.set_find_headline("%s found!  %s" % [fossil_name, _extract_fate])
-		else:
-			hud.set_find_headline("%s found!" % fossil_name)
+		hud.set_find_headline("")
 
 
 func _extract_fate_for(piece_id: String, note: String) -> String:
+	if GameState.has_method("hall_fate_line"):
+		return str(GameState.hall_fate_line(piece_id))
 	if note.to_lower().find("sold") >= 0:
-		return "sold extra"
+		return "extra sold"
 	var progress: String = GameState.piece_progress_label(piece_id)
 	if not progress.is_empty():
 		return "%s on display" % progress
-	return ""
+	return "needs this"
 
 
 func _on_pickaxe() -> void:
@@ -357,6 +509,24 @@ func _world_to_hud(world_pos: Vector2) -> Vector2:
 	return get_viewport().get_canvas_transform() * world_pos
 
 
+func _spawn_fossil_fly(find_index: int, world_pos: Vector2) -> void:
+	var dest := Vector2(Tuning.view_w * 0.5, Tuning.footer_find_top() + 34.0)
+	if hud != null and hud.has_method("find_chip_catch_pos"):
+		dest = hud.find_chip_catch_pos(find_index)
+	var data: Resource = null
+	if find_index >= 0 and find_index < dig_site.finds.size():
+		var find: Dictionary = dig_site.finds[find_index]
+		data = find.get("data", null) as Resource
+	var fly = LootFlyScene.new()
+	fly.setup_fossil(data, _world_to_hud(world_pos), dest)
+	if hud != null and hud.has_method("catch_find"):
+		fly.arrived.connect(func() -> void: hud.catch_find(find_index))
+	if hud != null:
+		hud.add_child(fly)
+	else:
+		add_child(fly)
+
+
 func _spawn_loot_fly(kind: String, world_pos: Vector2, delay: float = 0.0, rarity: int = 0) -> void:
 	var dest := Vector2(40, 40)
 	if hud != null and hud.has_method("money_catch_pos"):
@@ -371,7 +541,7 @@ func _spawn_loot_fly(kind: String, world_pos: Vector2, delay: float = 0.0, rarit
 		add_child(fly)
 
 
-func _spawn_float(text: String, world_pos: Vector2, color: Color, font_size: int = 16) -> void:
+func _spawn_float(text: String, world_pos: Vector2, color: Color, font_size: int = 22) -> void:
 	var floater = FloatingTextScene.new()
 	floater.position = world_pos
 	floater.setup(text, color, font_size)

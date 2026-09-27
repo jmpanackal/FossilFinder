@@ -1,8 +1,9 @@
 extends CanvasLayer
 
-## Pause overlay plus display / volume / save. Esc or HUD Menu opens it.
+## Pause overlay plus display / volume / save. Esc or the shared Menu button opens it.
 
 signal menu_toggled(open: bool)
+signal title_requested
 
 const Ui := preload("res://ui_style.gd")
 const SETTINGS_PATH := "user://settings.cfg"
@@ -12,13 +13,20 @@ var master_volume: float = 0.8
 var sfx_volume: float = 1.0
 var fullscreen: bool = true
 
+var _overlay: Control
+var _menu_btn: Button
 var _master: HSlider
 var _sfx: HSlider
 var _full: CheckButton
 var _load: Button
+var _new_game: Button
+var _title_btn: Button
+var _confirm_wrap: VBoxContainer
 var _status: Label
 var _status_life: float = 0.0
 var _refreshing: bool = false
+var _chrome_allowed: bool = true
+var _title_return_allowed: bool = true
 
 
 func _init() -> void:
@@ -27,7 +35,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	visible = false
+	visible = true
 	_build_ui()
 	load_settings()
 	apply_display()
@@ -37,20 +45,20 @@ func _ready() -> void:
 
 
 func is_open() -> bool:
-	return visible
+	return _overlay != null and _overlay.visible
 
 
 func toggle_menu() -> void:
-	if visible:
+	if is_open():
 		close_menu()
 	else:
 		open_menu()
 
 
 func open_menu() -> void:
-	if visible:
+	if is_open():
 		return
-	visible = true
+	_set_overlay_open(true)
 	_refresh_controls()
 	if get_tree() != null:
 		get_tree().paused = true
@@ -59,13 +67,43 @@ func open_menu() -> void:
 
 
 func close_menu() -> void:
-	if not visible:
+	if not is_open():
 		return
-	visible = false
+	_hide_new_game_confirm()
+	_set_overlay_open(false)
 	if get_tree() != null:
 		get_tree().paused = false
 	menu_toggled.emit(false)
 	Sfx.play("ui")
+
+
+func set_menu_chrome_visible(on: bool) -> void:
+	_chrome_allowed = on
+	if _menu_btn != null:
+		_menu_btn.visible = on and not is_open()
+
+
+func set_title_return_visible(on: bool) -> void:
+	_title_return_allowed = on
+	if _title_btn != null:
+		_title_btn.visible = on
+
+
+func _layout_menu_chrome() -> void:
+	if _menu_btn == null:
+		return
+	_menu_btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_menu_btn.anchor_right = 0.0
+	_menu_btn.anchor_bottom = 0.0
+	_menu_btn.position = Vector2(Tuning.view_w - 8.0 - 120.0, Tuning.hud_h + 8.0)
+	_menu_btn.size = Vector2(120, 36)
+
+
+func _set_overlay_open(open: bool) -> void:
+	if _overlay != null:
+		_overlay.visible = open
+	if _menu_btn != null:
+		_menu_btn.visible = (not open) and _chrome_allowed
 
 
 func apply_display() -> void:
@@ -143,21 +181,38 @@ func save_settings() -> void:
 
 
 func _build_ui() -> void:
+	_menu_btn = Button.new()
+	_menu_btn.text = "Menu"
+	_menu_btn.custom_minimum_size = Vector2(120, 36)
+	_menu_btn.clip_text = false
+	_menu_btn.focus_mode = Control.FOCUS_NONE
+	_menu_btn.add_theme_font_size_override("font_size", Ui.META_SIZE)
+	Ui.apply_button(_menu_btn)
+	_menu_btn.pressed.connect(toggle_menu)
+	add_child(_menu_btn)
+	_layout_menu_chrome()
+
+	_overlay = Control.new()
+	_overlay.visible = false
+	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_overlay)
+	_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
 	var dim := ColorRect.new()
-	dim.color = Color(0.06, 0.04, 0.03, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Ui.DIM
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.gui_input.connect(_on_dim_gui)
-	add_child(dim)
+	_overlay.add_child(dim)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var panel := Panel.new()
+	Ui.apply_modal(panel)
+	_overlay.add_child(panel)
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -230
 	panel.offset_right = 230
-	panel.offset_top = -268
-	panel.offset_bottom = 268
-	Ui.apply_panel(panel, Color("2A1F18"))
-	add_child(panel)
+	panel.offset_top = -330
+	panel.offset_bottom = 330
 
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -171,19 +226,19 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "Settings"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Ui.apply_label(title, 28, Ui.GOLD)
+	Ui.apply_title(title)
 	box.add_child(title)
 
 	var hint := Label.new()
 	hint.text = "Esc to close  ·  F11 fullscreen"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Ui.apply_label(hint, 13, Ui.MUTED)
+	Ui.apply_caption(hint)
 	box.add_child(hint)
 
 	var resume := Button.new()
 	resume.text = "Resume"
 	resume.custom_minimum_size = Vector2(0, 48)
-	resume.add_theme_font_size_override("font_size", 22)
+	resume.add_theme_font_size_override("font_size", Ui.SECTION_SIZE)
 	Ui.apply_button(resume, true)
 	resume.pressed.connect(close_menu)
 	box.add_child(resume)
@@ -213,12 +268,43 @@ func _build_ui() -> void:
 	Ui.apply_label(_status, 14, Ui.GOLD)
 	box.add_child(_status)
 
+	_new_game = Button.new()
+	_new_game.text = "New game"
+	_new_game.custom_minimum_size = Vector2(0, 42)
+	Ui.apply_button(_new_game)
+	_new_game.pressed.connect(_on_new_game_pressed)
+	box.add_child(_new_game)
+
+	_confirm_wrap = VBoxContainer.new()
+	_confirm_wrap.visible = false
+	_confirm_wrap.add_theme_constant_override("separation", 8)
+	box.add_child(_confirm_wrap)
+	var confirm_label := Label.new()
+	confirm_label.text = "Erase save and start over?"
+	confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	Ui.apply_label(confirm_label, 14, Ui.GOLD)
+	_confirm_wrap.add_child(confirm_label)
+	var confirm_row := HBoxContainer.new()
+	confirm_row.add_theme_constant_override("separation", 10)
+	_confirm_wrap.add_child(confirm_row)
+	confirm_row.add_child(_action_button("Erase", _on_new_game_confirmed))
+	confirm_row.add_child(_action_button("Cancel", _hide_new_game_confirm))
+
+	_title_btn = Button.new()
+	_title_btn.text = "Title"
+	_title_btn.custom_minimum_size = Vector2(0, 42)
+	Ui.apply_button(_title_btn)
+	_title_btn.pressed.connect(_on_title_pressed)
+	box.add_child(_title_btn)
+
 	var quit := Button.new()
 	quit.text = "Quit"
 	quit.custom_minimum_size = Vector2(0, 42)
 	Ui.apply_button(quit)
 	quit.pressed.connect(_on_quit_pressed)
 	box.add_child(quit)
+	quit.visible = not OS.has_feature("web")
 
 
 func _volume_row(caption: String, slider: HSlider, cb: Callable) -> VBoxContainer:
@@ -226,7 +312,7 @@ func _volume_row(caption: String, slider: HSlider, cb: Callable) -> VBoxContaine
 	wrap.add_theme_constant_override("separation", 2)
 	var label := Label.new()
 	label.text = caption
-	Ui.apply_label(label, 14, Ui.MUTED)
+	Ui.apply_caption(label)
 	wrap.add_child(label)
 	slider.min_value = 0.0
 	slider.max_value = 100.0
@@ -306,10 +392,39 @@ func _on_load_pressed() -> void:
 	Sfx.play("ui")
 
 
+func _on_title_pressed() -> void:
+	GameState.save_game()
+	close_menu()
+	title_requested.emit()
+
+
 func _on_quit_pressed() -> void:
 	GameState.save_game()
 	save_settings()
+	if OS.has_feature("web"):
+		return
 	get_tree().quit()
+
+
+func _on_new_game_pressed() -> void:
+	if _new_game != null:
+		_new_game.visible = false
+	if _confirm_wrap != null:
+		_confirm_wrap.visible = true
+	Sfx.play("ui")
+
+
+func _hide_new_game_confirm() -> void:
+	if _confirm_wrap != null:
+		_confirm_wrap.visible = false
+	if _new_game != null:
+		_new_game.visible = true
+
+
+func _on_new_game_confirmed() -> void:
+	GameState.reset_progress()
+	_hide_new_game_confirm()
+	close_menu()
 
 
 func _flash_status(text: String) -> void:

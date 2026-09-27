@@ -1,0 +1,21 @@
+---
+description: Layout and gameplay changes must not break neighboring chrome or the pit
+alwaysApply: true
+---
+
+# No collateral damage
+
+When you change HUD, pit, colors, tools, or sounds, treat nearby layout as in-scope. A change is not done if it overlaps, clips, or hides something that was already working.
+
+- Dig chrome (Tools, wallet, clock, Menu, End shift, Finds) must stay off the **whole dig-site hole**, not just the cell grid. The hole includes west/east/north pads (`chunk_pad`). Measure against that cutout.
+- Do not grow one section by covering another. If Tools needs width, move the pit or shrink the empty gutter — never paint over dirt cells.
+- After the edit, check the neighbors you touched: left rail vs pit, header vs pit, Finds vs pit, clock vs wallet.
+- Run the related Godot suites (`test_hud_layout`, plus any suite for the behavior you changed) and fix new failures before you stop.
+
+```
+# BAD — Tools frame ends on the cell grid, so the west pad sits under the panel
+frame_right <= pit.position.x
+
+# GOOD — Tools frame clears the hole, including the west pad
+frame_right <= pit.position.x - chunk_pad - gap
+```

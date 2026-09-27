@@ -1,21 +1,24 @@
 extends Node
 
 ## Call Sfx.play("hit_dirt"). Placeholder beeps until real audio lands.
+## Web browsers start AudioContext suspended; unlock_web_audio() resumes it.
 
 const _TONES := {
-	"hit_dirt": Vector3(190.0, 0.045, 0.22),
-	"hit_packed": Vector3(150.0, 0.05, 0.24),
-	"hit_clay": Vector3(120.0, 0.06, 0.26),
-	"hit_rock": Vector3(80.0, 0.08, 0.30),
-	"layer_clear": Vector3(310.0, 0.04, 0.16),
-	"fossil_ping": Vector3(880.0, 0.16, 0.28),
-	"extract": Vector3(523.0, 0.28, 0.32),
+	"hit_dirt": Vector3(190.0, 0.05, 0.34),
+	"hit_packed": Vector3(150.0, 0.055, 0.36),
+	"hit_clay": Vector3(120.0, 0.065, 0.38),
+	"hit_rock": Vector3(80.0, 0.09, 0.42),
+	"tool_refuse": Vector3(210.0, 0.045, 0.46),
+	"layer_clear": Vector3(310.0, 0.05, 0.24),
+	"fossil_ping": Vector3(880.0, 0.18, 0.40),
+	"extract": Vector3(523.0, 0.30, 0.42),
 	"ui": Vector3(440.0, 0.05, 0.18),
-	"crack": Vector3(70.0, 0.07, 0.2),
-	"dust": Vector3(620.0, 0.035, 0.12),
+	"crack": Vector3(70.0, 0.08, 0.34),
+	"dust": Vector3(620.0, 0.04, 0.16),
 }
 
 const _FANFARES := {
+	"tool_refuse": [Vector3(240.0, 0.035, 0.44), Vector3(92.0, 0.09, 0.48)],
 	"buy": [Vector3(523.0, 0.08, 0.30), Vector3(659.0, 0.14, 0.34)],
 	"unlock": [Vector3(523.0, 0.07, 0.28), Vector3(659.0, 0.07, 0.30), Vector3(784.0, 0.20, 0.36)],
 	"unveil": [Vector3(523.0, 0.07, 0.30), Vector3(659.0, 0.08, 0.32), Vector3(784.0, 0.10, 0.34), Vector3(1046.0, 0.22, 0.38)],
@@ -33,7 +36,9 @@ const _THROTTLED_IDS: PackedStringArray = [
 
 var _players: Dictionary = {}
 var hit_plays: int = 0
+var last_id: String = ""
 var _last_hit_msec: int = -99999
+var _silent_player: AudioStreamPlayer
 
 
 func reset_throttle() -> void:
@@ -46,6 +51,74 @@ func _init() -> void:
 
 func _ready() -> void:
 	ensure_bus()
+	if not OS.has_feature("web"):
+		return
+	_silent_player = AudioStreamPlayer.new()
+	_silent_player.bus = "Master"
+	_silent_player.volume_db = -80.0
+	_silent_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_apply_web_playback(_silent_player)
+	_silent_player.stream = _make_beep(40.0, 0.02, 0.0001)
+	add_child(_silent_player)
+
+
+func _input(event: InputEvent) -> void:
+	if not OS.has_feature("web"):
+		return
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed:
+			unlock_web_audio()
+	elif event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo:
+			unlock_web_audio()
+	elif event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			unlock_web_audio()
+	elif event is InputEventJoypadButton:
+		var pad := event as InputEventJoypadButton
+		if pad.pressed:
+			unlock_web_audio()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		unlock_web_audio()
+
+
+func unlock_web_audio() -> void:
+	if not OS.has_feature("web"):
+		return
+	_resume_audio_context()
+	var master_idx: int = AudioServer.get_bus_index("Master")
+	if master_idx >= 0:
+		AudioServer.set_bus_mute(master_idx, false)
+	ensure_bus()
+	var sfx_idx: int = AudioServer.get_bus_index(BUS_SFX)
+	if sfx_idx >= 0:
+		AudioServer.set_bus_mute(sfx_idx, false)
+	if _silent_player != null and not _silent_player.playing:
+		_silent_player.play()
+
+
+func _resume_audio_context() -> void:
+	if not Engine.has_singleton("JavaScriptBridge"):
+		return
+	var js: Object = Engine.get_singleton("JavaScriptBridge")
+	if js == null:
+		return
+	js.call(
+		"eval",
+		"(function(){var ctx=typeof GodotAudio!=='undefined'?GodotAudio.ctx:null;if(ctx&&ctx.state!=='running'&&ctx.resume){ctx.resume();}})();",
+		true
+	)
+
+
+func _apply_web_playback(player: AudioStreamPlayer) -> void:
+	if OS.has_feature("web"):
+		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 
 
 func ensure_bus() -> void:
@@ -58,6 +131,8 @@ func ensure_bus() -> void:
 
 
 func play(id: String) -> void:
+	last_id = id
+	unlock_web_audio()
 	ensure_bus()
 	if _THROTTLED_IDS.has(id):
 		var now: int = Time.get_ticks_msec()
@@ -70,6 +145,7 @@ func play(id: String) -> void:
 		player = AudioStreamPlayer.new()
 		player.bus = BUS_SFX
 		player.process_mode = Node.PROCESS_MODE_ALWAYS
+		_apply_web_playback(player)
 		if _FANFARES.has(id):
 			var notes: Array = _FANFARES[id]
 			player.stream = _make_fanfare(notes)

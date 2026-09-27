@@ -4,13 +4,14 @@ extends Node2D
 const FossilDataScript := preload("res://fossil_data.gd")
 const Lucky := preload("res://lucky_strike.gd")
 const Matrix := preload("res://matrix_find.gd")
+const ArtCatalogScript := preload("res://art_catalog.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
 signal fossil_extracted(fossil_name: String, value: int, integrity: float, cleanliness: float, clean: bool, piece_id: String)
 signal pickaxe_struck
 signal fossil_hit
-signal fossil_ready_to_dust
+signal fossil_ready_to_dust(find_index: int)
 signal tool_used(tool: int)
 signal lucky_struck(amount: int, world_pos: Vector2)
 signal lucky_fled
@@ -317,16 +318,20 @@ func fossil_cleanliness() -> float:
 
 
 func preview_value() -> int:
-	var find := _focused_find()
-	if find.is_empty():
-		return 0
-	var data = find.get("data", null)
-	if data == null:
-		return 0
-	var clean := _find_clean(find)
-	var intact: float = float(find.get("integrity", 1.0))
-	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
-	return int(round(float(data.base_value) * intact * quality * Tuning.fossil_value_mult))
+	return _find_preview_value(_focused_find())
+
+
+func live_find_cards() -> Array:
+	var cards: Array = []
+	for i in finds.size():
+		cards.append(_card_for_find(i))
+	return cards
+
+
+func find_centroid(index: int) -> Vector2:
+	if index < 0 or index >= finds.size():
+		return fossil_centroid()
+	return _find_centroid(finds[index])
 
 
 func is_fully_exposed() -> bool:
@@ -678,6 +683,10 @@ func _cell_at(world: Vector2) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
+func _tool_cursor_visible_at(world: Vector2) -> bool:
+	return _in_bounds(_cell_at(world))
+
+
 func _is_fossil_cell(cell: Vector2i) -> bool:
 	return fossil_cells.has(cell)
 
@@ -699,13 +708,13 @@ func _cycle_tool(step: int) -> void:
 
 func _tool_from_hotkey(keycode: int) -> int:
 	match keycode:
-		KEY_0:
-			return Tuning.TOOL_HANDS
 		KEY_1:
-			return Tuning.TOOL_SHOVEL
+			return Tuning.TOOL_HANDS
 		KEY_2:
-			return Tuning.TOOL_PICKAXE
+			return Tuning.TOOL_SHOVEL
 		KEY_3:
+			return Tuning.TOOL_PICKAXE
+		KEY_4:
 			return Tuning.TOOL_BRUSH
 		_:
 			return -1
@@ -940,7 +949,7 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	if _find_is_fully_exposed(find) and not bool(find.get("ready", false)):
 		find["ready"] = true
 		pulse_bones()
-		fossil_ready_to_dust.emit()
+		fossil_ready_to_dust.emit(int(fossil_cells.get(cell, -1)))
 
 
 func _can_harm_fossil() -> bool:
@@ -957,14 +966,98 @@ func pulse_bones() -> void:
 
 
 func fossil_centroid() -> Vector2:
-	var find := _focused_find()
+	return _find_centroid(_focused_find())
+
+
+func _find_preview_value(find: Dictionary) -> int:
+	if find.is_empty():
+		return 0
+	var data = find.get("data", null)
+	if data == null:
+		return 0
+	var clean := _find_clean(find)
+	var intact: float = float(find.get("integrity", 1.0))
+	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
+	return int(round(float(data.base_value) * intact * quality * Tuning.fossil_value_mult))
+
+
+func _find_centroid(find: Dictionary) -> Vector2:
 	var cells: Dictionary = find.get("cells", {})
 	if cells.is_empty():
-		return Tuning.grid_origin + Vector2(Tuning.grid_w * Tuning.cell_w, Tuning.grid_h * Tuning.cell_h) * 0.5
+		return Tuning.grid_origin + Vector2(float(Tuning.grid_w) * Tuning.cell_w, float(Tuning.grid_h) * Tuning.cell_h) * 0.5
 	var sum := Vector2.ZERO
 	for cell in cells:
-		sum += cell_center(cell)
+		sum += _safe_cell_center(cell)
 	return sum / float(cells.size())
+
+
+func _safe_cell_center(cell: Vector2i) -> Vector2:
+	if _top_layer.is_empty() or cell.x < 0 or cell.x >= _top_layer.size():
+		return Tuning.grid_origin + Vector2((float(cell.x) + 0.5) * Tuning.cell_w, (float(cell.y) + 0.5) * Tuning.cell_h)
+	return cell_center(cell)
+
+
+func _card_for_find(index: int) -> Dictionary:
+	var find: Dictionary = finds[index]
+	var data = find.get("data", null)
+	var find_name: String = ""
+	if data != null:
+		find_name = str(data.name)
+	var cells: Dictionary = find.get("cells", {})
+	var needed: int = cells.size()
+	var exposed: int = 0
+	for cell in cells:
+		if exposed_cells.has(cell):
+			exposed += 1
+	var bagged: bool = bool(find.get("extracted", false))
+	var fully: bool = needed > 0 and exposed >= needed
+	var status: String = "underground"
+	if bagged:
+		status = "bagged"
+	elif fully:
+		status = "brush"
+	elif exposed > 0:
+		status = "uncovering"
+	var intact: float = float(find.get("integrity", 1.0))
+	var clean: float = _find_clean(find)
+	var piece_id: String = str(find.get("piece_id", ""))
+	var named: bool = bagged or fully
+	var progress: String = ""
+	if named and GameState.has_method("uncover_status_line"):
+		progress = str(GameState.uncover_status_line(piece_id))
+	return {
+		"index": index,
+		"name": find_name if named else "Bone",
+		"piece_id": piece_id,
+		"status": status,
+		"stars": Tuning.preservation_stars(intact, clean),
+		"grade": Tuning.preservation_grade(intact, clean),
+		"dirt": Tuning.dirt_label(clean) if exposed > 0 or bagged else "",
+		"value": _find_preview_value(find),
+		"fate": str(find.get("fate", "")),
+		"progress": progress,
+		"integrity": intact,
+		"clean": clean,
+		"exposed": exposed,
+		"needed": needed,
+		"centroid": _find_centroid(find),
+		"fully_exposed": fully,
+		"extracted": bagged,
+		"data": data,
+	}
+
+
+func set_find_fate(piece_id: String, fate: String) -> void:
+	for find in finds:
+		if str(find.get("piece_id", "")) == piece_id:
+			find["fate"] = fate
+
+
+func find_index_for(piece_id: String) -> int:
+	for i in finds.size():
+		if str(finds[i].get("piece_id", "")) == piece_id:
+			return i
+	return -1
 
 
 func _hit_fossil(cell: Vector2i) -> void:
@@ -1018,6 +1111,9 @@ func _extract_find(find: Dictionary, _require_clean: bool) -> void:
 
 
 func _play_hit(layer: int) -> void:
+	if not Tuning.tool_works_on(current_tool, layer):
+		Sfx.play("tool_refuse")
+		return
 	match Tuning.material_at_layer(layer):
 		Tuning.MAT_LOOSE:
 			Sfx.play("hit_dirt")
@@ -1030,7 +1126,8 @@ func _play_hit(layer: int) -> void:
 
 
 func _finish_strike(center: Vector2i, juice_layer: int, payout: int, struck: int, play_sfx: bool) -> void:
-	_matrix_juice = Matrix.batch_display(_strike_finds)
+	var juice_cap: int = 2 if Tuning.material_at_layer(juice_layer) <= Tuning.MAT_PACKED else 5
+	_matrix_juice = Matrix.batch_display(_strike_finds, juice_cap)
 	_strike_finds.clear()
 	if struck > 0:
 		_burst(cell_center(center), juice_layer, struck > 1)
@@ -1116,12 +1213,12 @@ func _punch_duration(kind: int, weight: float = 1.0) -> float:
 
 
 func _punch_squash(kind: int, weight: float = 1.0) -> Vector2:
-	var squash := Vector2(0.16, 0.22)
+	var squash := Vector2(0.22, 0.32)
 	match kind:
 		PUNCH_BONE:
-			squash = Vector2(0.04, 0.11)
+			squash = Vector2(0.06, 0.16)
 		PUNCH_FIRM:
-			squash = Vector2(0.07, 0.09)
+			squash = Vector2(0.10, 0.14)
 	return squash * maxf(weight, 0.0)
 
 
@@ -1171,10 +1268,12 @@ func _burst(world_pos: Vector2, layer: int, fat: bool = false) -> void:
 	_particles.position = to_local(world_pos)
 	_particles.color = Tuning.particle_color_for_layer(layer)
 	_particles.texture = _rock_tex if rock else _dirt_tex
-	_particles.amount = (22 if rock else 14) if fat else (16 if rock else 10)
-	_particles.scale_amount_min = 1.4 if rock else 0.8
-	_particles.scale_amount_max = 2.4 if rock else 1.4
-	_particles.lifetime = 0.5 if rock else 0.32
+	_particles.amount = (36 if rock else 28) if fat else (28 if rock else 20)
+	_particles.scale_amount_min = 1.8 if rock else 1.15
+	_particles.scale_amount_max = 3.2 if rock else 2.0
+	_particles.lifetime = 0.62 if rock else 0.42
+	_particles.initial_velocity_min = 48.0 if rock else 44.0
+	_particles.initial_velocity_max = 150.0 if rock else 130.0
 	_particles.restart()
 	_particles.emitting = true
 
@@ -1216,28 +1315,148 @@ func _draw() -> void:
 
 
 func _chunk_top() -> Rect2:
-	var pad := Tuning.chunk_pad
-	return Rect2(
-		Tuning.grid_origin.x - pad,
-		Tuning.grid_origin.y - pad,
-		float(Tuning.grid_w) * Tuning.cell_w + pad * 2.0,
-		float(Tuning.grid_h) * Tuning.cell_h + pad
-	)
+	return SiteBackdrop.pit_cutout()
+
+
+func north_face_h() -> float:
+	return maxf(Tuning.grid_origin.y - _chunk_top().position.y, Tuning.chunk_pad)
+
+
+func north_face_rect() -> Rect2:
+	var top := _chunk_top()
+	return Rect2(top.position.x, top.position.y, top.size.x, north_face_h())
+
+
+func west_face_rect() -> Rect2:
+	var top := _chunk_top()
+	return Rect2(top.position.x, top.position.y, Tuning.chunk_pad, top.size.y + Tuning.chunk_front)
+
+
+func east_face_rect() -> Rect2:
+	var top := _chunk_top()
+	return Rect2(top.end.x - Tuning.chunk_pad, top.position.y, Tuning.chunk_pad, top.size.y + Tuning.chunk_front)
+
+
+func _draw_strata_stack(rect: Rect2, start_layer: int, in_shadow: bool = true) -> void:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var from_layer: int = clampi(start_layer, 0, Tuning.layer_count)
+	var remaining: int = Tuning.layer_count - from_layer
+	if remaining <= 0:
+		draw_rect(rect, Color("1A1410"))
+		return
+	var band_h: float = rect.size.y / float(remaining)
+	for i in remaining:
+		var layer: int = from_layer + i
+		var y0: float = rect.position.y + band_h * float(i)
+		var h: float = band_h if i < remaining - 1 else maxf(rect.end.y - y0, 0.0)
+		var band := Rect2(rect.position.x, y0, rect.size.x, h)
+		var dirt: Color = Tuning.shaft_interior_color(layer) if in_shadow else Tuning.color_for_layer(layer).darkened(0.28)
+		draw_rect(band, dirt)
+		if i > 0:
+			draw_line(Vector2(band.position.x, band.position.y), Vector2(band.end.x, band.position.y), dirt.darkened(0.14), 1.0)
+
+
+func _column_start_layer(x: int, y: int) -> int:
+	if _top_layer.is_empty() or x < 0 or x >= _top_layer.size():
+		return 0
+	if y < 0 or y >= _top_layer[x].size():
+		return 0
+	return int(_top_layer[x][y])
+
+
+func _min_column_layer(x: int) -> int:
+	if _top_layer.is_empty() or x < 0 or x >= _top_layer.size():
+		return 0
+	var lowest: int = Tuning.layer_count
+	for y in _top_layer[x].size():
+		lowest = mini(lowest, int(_top_layer[x][y]))
+	return lowest if lowest < Tuning.layer_count else 0
+
+
+func _draw_shaft_face(face: Rect2, start_layer: int, inner_from_left: bool) -> void:
+	if face.size.x <= 0.0 or face.size.y <= 0.0:
+		return
+	var line := Tuning.chunk_line_color()
+	_draw_strata_stack(face, start_layer, true)
+	var wall := Tuning.shaft_interior_color(start_layer)
+	var shade_w: float = maxf(4.0, face.size.x * 0.45)
+	if inner_from_left:
+		draw_rect(Rect2(face.position.x, face.position.y, shade_w, face.size.y), wall.darkened(0.16))
+		draw_rect(Rect2(face.end.x - 2.0, face.position.y, 2.0, face.size.y), wall.lightened(0.18))
+		draw_line(Vector2(face.position.x, face.position.y), Vector2(face.position.x, face.end.y), line, Tuning.chunk_line_width())
+	else:
+		draw_rect(Rect2(face.end.x - shade_w, face.position.y, shade_w, face.size.y), wall.darkened(0.16))
+		draw_rect(Rect2(face.position.x, face.position.y, 2.0, face.size.y), wall.lightened(0.18))
+		draw_line(Vector2(face.end.x, face.position.y), Vector2(face.end.x, face.end.y), line, Tuning.chunk_line_width())
+
+
+func north_face_fill_color() -> Color:
+	return Tuning.shaft_interior_color(0)
+
+
+func shaft_wall_color(x: int, y: int) -> Color:
+	if not _in_bounds(Vector2i(x, y)):
+		return Tuning.shaft_interior_color(0)
+	var cell := Vector2i(x, y)
+	if _is_exposed_fossil(cell):
+		return _bone_color(cell).darkened(0.42)
+	var layer: int = int(_top_layer[x][y])
+	return Tuning.shaft_interior_color(layer)
+
+
+func _north_face_column_rect(x: int) -> Rect2:
+	var face := north_face_rect()
+	var left: float = Tuning.grid_origin.x + float(x) * Tuning.cell_w
+	var right: float = left + Tuning.cell_w
+	if x <= 0:
+		left = face.position.x
+	if x >= Tuning.grid_w - 1:
+		right = face.end.x
+	return Rect2(left, face.position.y, maxf(right - left, 0.0), face.size.y)
+
+
+func _draw_north_face() -> void:
+	var face := north_face_rect()
+	if face.size.y <= 0.0:
+		return
+	var line := Tuning.chunk_line_color()
+	var cols: int = _top_layer.size() if not _top_layer.is_empty() else Tuning.grid_w
+	for x in cols:
+		var col := _north_face_column_rect(x)
+		var start: int = _column_start_layer(x, 0)
+		var wall := shaft_wall_color(x, 0)
+		_draw_strata_stack(col, start, true)
+		draw_rect(Rect2(col.position.x, col.position.y, col.size.x, 2.0), wall.lightened(0.22))
+	draw_line(Vector2(face.position.x, face.position.y), Vector2(face.end.x, face.position.y), line, 2.0)
+	draw_line(Vector2(face.position.x, face.end.y), Vector2(face.end.x, face.end.y), line, 2.0)
+
+
+func _draw_west_face() -> void:
+	var face := west_face_rect()
+	_draw_shaft_face(face, _min_column_layer(0), true)
+
+
+func _draw_east_face() -> void:
+	var face := east_face_rect()
+	var last_x: int = (_top_layer.size() - 1) if not _top_layer.is_empty() else Tuning.grid_w - 1
+	_draw_shaft_face(face, _min_column_layer(last_x), false)
 
 
 func _draw_chunk() -> void:
 	var top := _chunk_top()
-	var body := Rect2(top.position, Vector2(top.size.x, top.size.y + Tuning.chunk_front))
-	var right := Rect2(body.end.x, body.position.y, Tuning.cell_side, body.size.y)
-	var front := Rect2(body.position.x, top.end.y, body.size.x, Tuning.chunk_front)
-	var surface := Tuning.chunk_top_color()
-	var side := Tuning.chunk_side_color()
+	var floor := Rect2(
+		Tuning.grid_origin,
+		Vector2(float(Tuning.grid_w) * Tuning.cell_w, float(Tuning.grid_h) * Tuning.cell_h)
+	)
+	var front := Rect2(top.position.x, top.end.y, top.size.x, Tuning.chunk_front)
 	var line := Tuning.chunk_line_color()
-	draw_rect(right, side)
-	draw_rect(right, line, false, 3.0)
-	draw_rect(top, surface)
-	draw_rect(front, side)
-	draw_rect(body, line, false, 3.0)
+	draw_rect(floor, Tuning.chunk_top_color().darkened(0.08))
+	_draw_strata_stack(front, 0, false)
+	_draw_west_face()
+	_draw_east_face()
+	_draw_north_face()
+	draw_rect(Rect2(top.position, Vector2(top.size.x, top.size.y + Tuning.chunk_front)), line, false, Tuning.chunk_line_width())
 
 
 func _draw_cell_sides(x: int, y: int) -> void:
@@ -1269,6 +1488,7 @@ func _draw_top(x: int, y: int) -> void:
 	var rect := _punched_rect(_top_rect(x, y), cell)
 	var layer: int = _top_layer[x][y]
 	var color: Color
+	var painted: bool = false
 	if _is_exposed_fossil(cell):
 		color = _bone_color(cell)
 		if _bone_pulse > 0.0:
@@ -1277,18 +1497,34 @@ func _draw_top(x: int, y: int) -> void:
 		color = Color("1A1410")
 	else:
 		color = Tuning.color_for_layer(layer)
-	draw_rect(rect, color)
+		painted = ArtCatalogScript.draw_if_present(self, "cells", ArtCatalogScript.cell_id_for_layer(layer), rect)
+	if not painted:
+		draw_rect(rect, color)
 	draw_rect(rect, Tuning.cell_line, false, 1.5)
 	var edge := 0.18
 	if _is_exposed_fossil(cell):
 		edge += float(cleanliness.get(cell, 0.0)) * 0.22
 	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
+	if y == 0:
+		_draw_north_cell_shade(rect, color)
 	_draw_cracks(rect, cell, layer)
 	if not _is_exposed_fossil(cell) and layer < Tuning.layer_count:
 		_draw_inclusion(rect, cell)
 	if _is_exposed_fossil(cell):
 		_draw_bone_mark(rect, cell, float(cleanliness.get(cell, 0.0)))
 		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
+
+
+func _draw_north_cell_shade(rect: Rect2, _color: Color) -> void:
+	var h: float = minf(rect.size.y * 0.42, 16.0)
+	if h <= 0.0:
+		return
+	var steps := 5
+	var slice: float = h / float(steps)
+	for i in steps:
+		var fade: float = 1.0 - float(i) / float(steps)
+		var wash := Color(0.10, 0.07, 0.05, 0.26 * fade)
+		draw_rect(Rect2(rect.position.x, rect.position.y + float(i) * slice, rect.size.x, slice + 0.6), wash)
 
 
 func _draw_bone_pulse() -> void:
@@ -1304,6 +1540,14 @@ func _draw_bone_pulse() -> void:
 	draw_arc(center, ring * 0.62, 0.0, TAU, 32, Color("FFF4D2", _bone_pulse * 0.45), 2.0)
 
 
+func _crack_stroke_width() -> float:
+	return 1.4
+
+
+func _dirt_crack_count(damaged: float) -> int:
+	return int(round(clampf(damaged, 0.0, 1.0) * 3.0))
+
+
 func _draw_cracks(rect: Rect2, cell: Vector2i, layer: int) -> void:
 	var crack_count := 0
 	var crack_color := Color(0.12, 0.08, 0.05, 0.7)
@@ -1313,7 +1557,7 @@ func _draw_cracks(rect: Rect2, cell: Vector2i, layer: int) -> void:
 	elif layer < Tuning.layer_count:
 		var max_hp := Tuning.hp_for_layer(layer)
 		var damaged := 1.0 - clampf(float(_hp[cell.x][cell.y]) / max_hp, 0.0, 1.0)
-		crack_count = int(round(damaged * 3.0))
+		crack_count = _dirt_crack_count(damaged)
 	_stroke_cracks(rect, crack_count, crack_color)
 
 
@@ -1322,10 +1566,11 @@ func _stroke_cracks(rect: Rect2, count: int, color: Color) -> void:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(rect.position.x * 17 + rect.position.y * 31 + count * 9)
+	var width: float = _crack_stroke_width()
 	for i in count:
 		var a := rect.position + Vector2(rng.randf() * rect.size.x, rng.randf() * rect.size.y)
 		var b := rect.position + Vector2(rng.randf() * rect.size.x, rng.randf() * rect.size.y)
-		draw_line(a, b, color, 1.4)
+		draw_line(a, b, color, width)
 
 
 func _bone_color(cell: Vector2i) -> Color:
@@ -1342,6 +1587,15 @@ func _bone_color(cell: Vector2i) -> Color:
 func _draw_bone_mark(rect: Rect2, cell: Vector2i, clean: float) -> void:
 	var find := _find_at(cell)
 	var data: FossilDataScript = find.get("data", fossil) as FossilDataScript
+	var piece_id: String = str(find.get("piece_id", ""))
+	if piece_id.is_empty() and data != null:
+		piece_id = data.piece_id if data.piece_id != "" else data.name.to_snake_case()
+	var origin: Vector2i = find.get("origin", fossil_origin) as Vector2i
+	var offset: Vector2i = cell - origin
+	var src := Rect2(float(offset.x) * 64.0, float(offset.y) * 40.0, 64.0, 40.0)
+	var tint: Color = Color("5A4330").lerp(Color.WHITE, clampf(clean, 0.0, 1.0))
+	if piece_id != "" and ArtCatalogScript.draw_region_if_present(self, "bones", piece_id, rect, src, tint):
+		return
 	var mark := Color("8A7355").lerp(Color("FFF4D6"), clean)
 	if data != null:
 		data.draw_silhouette(self, rect.grow(-6.0), mark)
@@ -1393,8 +1647,23 @@ func _draw_boost_ring(c: CanvasItem) -> void:
 	c.draw_arc(_boost_pos, radius * 0.62, 0.0, TAU, 28, Color("FFF4D2", _boost_flash * 0.45), 2.0)
 
 
+func aiming_spoils_bone(world: Vector2 = Vector2.INF) -> bool:
+	if current_tool != Tuning.TOOL_SHOVEL and current_tool != Tuning.TOOL_PICKAXE:
+		return false
+	var pos: Vector2 = _mouse_world() if world.x == INF else world
+	if not _tool_cursor_visible_at(pos):
+		return false
+	var cell := _cell_at(pos)
+	if not _in_bounds(cell):
+		return false
+	return fossil_cells.has(cell) or not _find_at(cell).is_empty()
+
+
 func _draw_tool_cursor(c: CanvasItem) -> void:
 	var pos := _mouse_world()
+	if not _tool_cursor_visible_at(pos):
+		return
+	var warn: bool = aiming_spoils_bone(pos)
 	var color := Color("F2E6C4")
 	var boosted := has_boosted_tool(current_tool)
 	if _using_hands():
@@ -1405,7 +1674,7 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 		return
 	match current_tool:
 		Tuning.TOOL_SHOVEL:
-			color = Color("FFE08A") if boosted else Color("D4A017")
+			color = Color("E24B4B") if warn else (Color("FFE08A") if boosted else Color("D4A017"))
 			c.draw_circle(pos, 6.0 if boosted else 5.0, color)
 			if Tuning.shovel_radius <= 0.0:
 				c.draw_arc(pos, 10.0, 0.0, TAU, 16, color, 2.0)
@@ -1416,7 +1685,7 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 					var wobble: float = 5.0 + sin(float(Time.get_ticks_msec()) * 0.012) * 2.0
 					c.draw_arc(pos, ring + wobble, 0.0, TAU, 28, Color("FFF4D2", 0.5), 2.0)
 		Tuning.TOOL_PICKAXE:
-			color = Color("FF7A5C") if boosted else Color("D94A3D")
+			color = Color("E24B4B") if warn else (Color("FF7A5C") if boosted else Color("D94A3D"))
 			var reach: float = 14.0 if boosted else 10.0
 			c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
 			c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)

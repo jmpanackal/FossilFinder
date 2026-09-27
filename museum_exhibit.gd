@@ -1,6 +1,7 @@
 extends Node2D
 
 const Ui := preload("res://ui_style.gd")
+const ArtCatalogScript := preload("res://art_catalog.gd")
 
 const HALL := Vector2(2000, 1480)
 const FLOOR := Color("3C2C20")
@@ -14,6 +15,8 @@ const PLATFORM := Color("3A2C20")
 const PLATFORM_LIP := Color("2A1E16")
 const EMPTY_FILL := Color(0.38, 0.30, 0.24, 0.20)
 const EMPTY_LINE := Color(0.58, 0.46, 0.36, 0.62)
+const MIN_LABEL_SCREEN_PX := 11.0
+const PLAQUE_CLEARANCE := 8.0
 const STAND_LAYOUT := {
 	"t_rex": {"title": "T. rex", "x": 760.0, "y": 236.0, "w": 480.0, "h": 250.0},
 	"small_finds": {"title": "Small Finds", "x": 70.0, "y": 236.0, "w": 400.0, "h": 230.0},
@@ -161,9 +164,20 @@ func _draw_banner(center: Vector2, text: String) -> void:
 	_draw_label(center + Vector2(0, 6), text, 18, Ui.GOLD)
 
 
+func _draw_mount_art(stand_id: String, mount: Rect2) -> bool:
+	if not ArtCatalogScript.has_final("museum", stand_id):
+		return false
+	var complete: bool = GameState.stand_is_filled(stand_id)
+	var color := Color.WHITE if complete else Color(1, 1, 1, 0.55)
+	return ArtCatalogScript.draw_if_present(self, "museum", stand_id, mount, color)
+
+
 func _draw_t_rex_bay() -> void:
 	var stand: Rect2 = stand_rect("t_rex")
 	var mount: Rect2 = _draw_stand(stand, "T. rex", "t_rex")
+	if _draw_mount_art("t_rex", mount):
+		_draw_stand_finish("t_rex", stand)
+		return
 	var xf := _fit(mount, Vector2(-86, -110), Vector2(108, 0))
 	var head_on: bool = _region_on("t_rex", "head")
 	var head_clean: bool = _region_clean("t_rex", "head")
@@ -198,6 +212,9 @@ func _draw_t_rex_bay() -> void:
 func _draw_small_finds_bay() -> void:
 	var stand: Rect2 = stand_rect("small_finds")
 	var mount: Rect2 = _draw_stand(stand, "Small Finds", "small_finds")
+	if _draw_mount_art("small_finds", mount):
+		_draw_stand_finish("small_finds", stand)
+		return
 	draw_rect(mount, Color(0.42, 0.58, 0.62, 0.12))
 	draw_rect(mount, Color(0.72, 0.86, 0.90, 0.22), false, 1.5)
 	var ids: PackedStringArray = _case_piece_ids()
@@ -323,6 +340,9 @@ func _draw_amber_mount(cell: Rect2, owned: bool, clean: bool) -> void:
 func _draw_triceratops_bay() -> void:
 	var stand: Rect2 = stand_rect("triceratops")
 	var mount: Rect2 = _draw_stand(stand, "Triceratops", "triceratops")
+	if _draw_mount_art("triceratops", mount):
+		_draw_stand_finish("triceratops", stand)
+		return
 	var skull_on: bool = _region_on("triceratops", "skull")
 	var skull_clean: bool = _region_clean("triceratops", "skull")
 	var body_on: bool = _region_on("triceratops", "body")
@@ -359,6 +379,9 @@ func _draw_triceratops_bay() -> void:
 func _draw_sauropod_bay() -> void:
 	var stand: Rect2 = stand_rect("brachiosaurus")
 	var mount: Rect2 = _draw_stand(stand, "Brachiosaurus", "brachiosaurus")
+	if _draw_mount_art("brachiosaurus", mount):
+		_draw_stand_finish("brachiosaurus", stand)
+		return
 	var xf := _fit(mount, Vector2(-70, -132), Vector2(90, 0))
 	var torso_on: bool = _region_on("brachiosaurus", "arm") or _region_on("brachiosaurus", "legs")
 	var arm_on: bool = _region_on("brachiosaurus", "arm")
@@ -389,6 +412,9 @@ func _draw_sauropod_bay() -> void:
 func _draw_raptor_bay() -> void:
 	var stand: Rect2 = stand_rect("velociraptor")
 	var mount: Rect2 = _draw_stand(stand, "Velociraptor", "velociraptor")
+	if _draw_mount_art("velociraptor", mount):
+		_draw_stand_finish("velociraptor", stand)
+		return
 	var xf := _fit(mount, Vector2(-54, -74), Vector2(96, 0))
 	var torso_on: bool = _region_on("velociraptor", "torso")
 	var torso_clean: bool = _region_clean("velociraptor", "torso")
@@ -428,6 +454,9 @@ func _region_clean(stand_id: String, region: String) -> bool:
 func _draw_stego_bay() -> void:
 	var stand: Rect2 = stand_rect("stegosaurus")
 	var mount: Rect2 = _draw_stand(stand, "Stegosaurus", "stegosaurus")
+	if _draw_mount_art("stegosaurus", mount):
+		_draw_stand_finish("stegosaurus", stand)
+		return
 	var torso_on: bool = _region_on("stegosaurus", "torso")
 	var torso_clean: bool = _region_clean("stegosaurus", "torso")
 	var legs_on: bool = _region_on("stegosaurus", "legs")
@@ -462,15 +491,12 @@ func _draw_stego_bay() -> void:
 	_draw_stand_finish("stegosaurus", stand)
 
 
-func _draw_stand(stand: Rect2, title: String, stand_id: String) -> Rect2:
+func _draw_stand(stand: Rect2, _title: String, stand_id: String) -> Rect2:
 	var featured: bool = GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id)
 	if featured:
 		_draw_spotlight(stand)
 	_draw_platform(stand, featured)
-	var plaque_title: String = title
-	if featured:
-		plaque_title = "%s  ·  2x" % title
-	_draw_plaque(Vector2(stand.get_center().x, stand.end.y - 12.0), plaque_title, featured)
+	_draw_plaque(Vector2(stand.get_center().x, stand.end.y - 12.0), plaque_title_for(stand_id), featured)
 	return Rect2(
 		stand.position.x + 22.0,
 		stand.position.y + 16.0,
@@ -481,35 +507,168 @@ func _draw_stand(stand: Rect2, title: String, stand_id: String) -> Rect2:
 
 func _draw_stand_finish(stand_id: String, stand: Rect2) -> void:
 	if GameState.stand_has_pending_unveil(stand_id):
-		_draw_ribbon(stand)
+		_draw_ribbon(stand, stand_id)
+		_redraw_plaque(stand_id)
 	if flash_t > 0.0 and flash_stand_id == stand_id:
 		draw_rect(stand, Color(1.0, 0.86, 0.40, 0.55 * flash_t))
 		draw_rect(stand.grow(10.0), Color(1.0, 0.92, 0.55, 0.28 * flash_t), false, 6.0)
 
 
+func spotlight_beam_scale() -> float:
+	return 0.20 + 0.35 * Tuning.spotlight_mult
+
+
+func plaque_title_for(stand_id: String) -> String:
+	if not STAND_LAYOUT.has(stand_id):
+		return ""
+	var title: String = str(STAND_LAYOUT[stand_id]["title"])
+	var featured: bool = GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id)
+	var rank: int = int(GameState.levels.get("spotlight", 0))
+	if featured and rank > 0:
+		return "%s  ·  %dx" % [title, int(round(Tuning.spotlight_mult))]
+	return title
+
+
 func _draw_spotlight(stand: Rect2) -> void:
-	var apex: Vector2 = Vector2(stand.get_center().x, stand.position.y - 90.0)
-	var left: Vector2 = Vector2(stand.position.x + 8.0, stand.end.y - 8.0)
-	var right: Vector2 = Vector2(stand.end.x - 8.0, stand.end.y - 8.0)
-	draw_colored_polygon(PackedVector2Array([apex, left, right]), Color(1.0, 0.86, 0.45, 0.18))
-	draw_circle(Vector2(stand.get_center().x, stand.position.y + 18.0), 78.0, Color(1.0, 0.90, 0.55, 0.12))
-	draw_circle(stand.get_center(), minf(stand.size.x, stand.size.y) * 0.42, Color(1.0, 0.84, 0.40, 0.10))
+	var power: float = spotlight_beam_scale()
+	var apex: Vector2 = Vector2(stand.get_center().x, stand.position.y - 90.0 * power)
+	var inset: float = 8.0 / maxf(power, 0.35)
+	var left: Vector2 = Vector2(stand.position.x + inset, stand.end.y - 8.0)
+	var right: Vector2 = Vector2(stand.end.x - inset, stand.end.y - 8.0)
+	draw_colored_polygon(PackedVector2Array([apex, left, right]), Color(1.0, 0.86, 0.45, 0.10 + 0.08 * power))
+	draw_circle(Vector2(stand.get_center().x, stand.position.y + 18.0), 78.0 * power, Color(1.0, 0.90, 0.55, 0.07 + 0.05 * power))
+	draw_circle(stand.get_center(), minf(stand.size.x, stand.size.y) * 0.42 * power, Color(1.0, 0.84, 0.40, 0.06 + 0.04 * power))
 
 
-func _draw_ribbon(stand: Rect2) -> void:
-	draw_rect(stand, Color(0.10, 0.07, 0.05, 0.78))
+func ribbon_prompt(stand_id: String) -> String:
+	var lines: PackedStringArray = ribbon_prompt_lines(stand_id)
+	return " ".join(lines)
+
+
+func ribbon_prompt_lines(stand_id: String) -> PackedStringArray:
+	var ids: PackedStringArray = GameState.pending_unveil_ids(stand_id)
+	if ids.is_empty():
+		return PackedStringArray(["Click to unveil"])
+	if ids.size() >= 2:
+		return PackedStringArray(["Unveil %d finds" % ids.size()])
+	var bone: String = GameState.pending_unveil_label(stand_id)
+	if bone.is_empty():
+		return PackedStringArray(["Click to unveil"])
+	return PackedStringArray(["Unveil", bone])
+
+
+func ribbon_font_size(stand_id: String) -> int:
+	var lines: PackedStringArray = ribbon_prompt_lines(stand_id)
+	var max_w: float = _ribbon_text_max_width(stand_id)
+	var font: Font = Ui.display_font()
+	var size: int = label_font_size(12)
+	while size > 8:
+		if _ribbon_lines_width(lines, font, size) <= max_w:
+			return size
+		size -= 1
+	return size
+
+
+func _ribbon_text_max_width(stand_id: String) -> float:
+	return maxf(40.0, stand_rect(stand_id).size.x - 48.0)
+
+
+func _ribbon_lines_width(lines: PackedStringArray, font: Font, font_size: int) -> float:
+	var max_w: float = 0.0
+	for line in lines:
+		max_w = maxf(max_w, font.get_string_size(str(line), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
+	return max_w
+
+
+func label_font_size(base: int) -> int:
+	var zoom: float = maxf(get_global_transform().get_scale().x, 0.001)
+	if float(base) * zoom >= MIN_LABEL_SCREEN_PX:
+		return base
+	return maxi(base, int(ceili(MIN_LABEL_SCREEN_PX / zoom)))
+
+
+func plaque_rect(stand_id: String) -> Rect2:
+	if not STAND_LAYOUT.has(stand_id):
+		return Rect2()
+	var featured: bool = GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id)
+	var stand: Rect2 = stand_rect(stand_id)
+	return _plaque_rect_at(Vector2(stand.get_center().x, stand.end.y - 12.0), plaque_title_for(stand_id), featured)
+
+
+func ribbon_vertical_rect(stand_id: String) -> Rect2:
+	var stand: Rect2 = stand_rect(stand_id)
+	var plaque: Rect2 = plaque_rect(stand_id)
+	var band_h: float = 22.0
+	var bottom: float = plaque.position.y - PLAQUE_CLEARANCE
+	var height: float = maxf(0.0, bottom - stand.position.y)
+	return Rect2(stand.get_center().x - band_h * 0.5, stand.position.y, band_h, height)
+
+
+func ribbon_label_rect(stand_id: String) -> Rect2:
+	var stand: Rect2 = stand_rect(stand_id)
+	var plaque: Rect2 = plaque_rect(stand_id)
+	var lines: PackedStringArray = ribbon_prompt_lines(stand_id)
+	var font: Font = Ui.display_font()
+	var font_size: int = ribbon_font_size(stand_id)
+	var max_w: float = _ribbon_lines_width(lines, font, font_size)
+	var line_h: float = float(font_size) + 4.0
+	var inset: float = 12.0
+	var max_chip_w: float = maxf(48.0, stand.size.x - inset * 2.0)
+	var bottom: float = plaque.position.y - PLAQUE_CLEARANCE
+	var max_chip_h: float = maxf(line_h + 12.0, bottom - (stand.position.y + 8.0))
+	var size: Vector2 = Vector2(minf(max_chip_w, max_w + 24.0), minf(max_chip_h, line_h * float(lines.size()) + 12.0))
+	var min_top: float = stand.position.y + 8.0
+	var max_top: float = bottom - size.y
+	var top: float = stand.get_center().y - size.y * 0.5
+	if max_top < min_top:
+		top = min_top
+		size.y = maxf(0.0, bottom - top)
+	else:
+		top = clampf(top, min_top, max_top)
+	var left: float = stand.get_center().x - size.x * 0.5
+	left = clampf(left, stand.position.x + inset, stand.end.x - inset - size.x)
+	return Rect2(left, top, size.x, size.y)
+
+
+func _redraw_plaque(stand_id: String) -> void:
+	if not STAND_LAYOUT.has(stand_id):
+		return
+	var featured: bool = GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id)
+	var stand: Rect2 = stand_rect(stand_id)
+	_draw_plaque(Vector2(stand.get_center().x, stand.end.y - 12.0), plaque_title_for(stand_id), featured)
+
+
+func _draw_ribbon(stand: Rect2, stand_id: String = "") -> void:
 	var gold: Color = Color("E4B75A")
+	var plaque: Rect2 = plaque_rect(stand_id) if stand_id != "" else Rect2()
+	var cover_h: float = stand.size.y
+	if plaque.size != Vector2.ZERO:
+		cover_h = maxf(0.0, plaque.position.y - stand.position.y)
+	draw_rect(Rect2(stand.position, Vector2(stand.size.x, cover_h)), Color(0.10, 0.07, 0.05, 0.78))
 	var band_h: float = 22.0
 	var hy: float = stand.get_center().y - band_h * 0.5
 	draw_rect(Rect2(stand.position.x, hy, stand.size.x, band_h), gold)
 	draw_rect(Rect2(stand.position.x, hy, stand.size.x, band_h), Color("8A6A28"), false, 2.0)
-	var vx: float = stand.get_center().x - band_h * 0.5
-	draw_rect(Rect2(vx, stand.position.y, band_h, stand.size.y), gold)
-	draw_rect(Rect2(vx, stand.position.y, band_h, stand.size.y), Color("8A6A28"), false, 2.0)
+	var vertical: Rect2 = ribbon_vertical_rect(stand_id) if stand_id != "" else Rect2(stand.get_center().x - band_h * 0.5, stand.position.y, band_h, cover_h)
+	draw_rect(vertical, gold)
+	draw_rect(vertical, Color("8A6A28"), false, 2.0)
 	var c: Vector2 = stand.get_center()
 	draw_circle(c, 18.0, Color("F6E08A"))
 	draw_circle(c, 18.0, gold, false, 2.0)
-	_draw_label(c + Vector2(0.0, stand.size.y * 0.5 - 38.0), "Click to unveil", 14, gold)
+	var chip: Rect2 = ribbon_label_rect(stand_id) if stand_id != "" else Rect2()
+	if chip.size == Vector2.ZERO:
+		return
+	draw_rect(chip, Color("2C2118"))
+	draw_rect(chip, gold, false, 1.5)
+	var lines: PackedStringArray = ribbon_prompt_lines(stand_id)
+	var font_size: int = ribbon_font_size(stand_id) if stand_id != "" else label_font_size(12)
+	var line_h: float = float(font_size) + 4.0
+	var start_y: float = chip.position.y + 8.0 + float(font_size)
+	var font: Font = Ui.display_font()
+	for i in lines.size():
+		var line: String = str(lines[i])
+		var width: float = font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		draw_string(font, Vector2(chip.get_center().x - width * 0.5, start_y + float(i) * line_h), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, gold)
 
 
 func _draw_platform(rect: Rect2, featured: bool = false) -> void:
@@ -522,18 +681,64 @@ func _draw_platform(rect: Rect2, featured: bool = false) -> void:
 	draw_circle(rect.get_center() + Vector2(0, -18), minf(rect.size.x, rect.size.y) * 0.36, Color(0.89, 0.72, 0.35, glow))
 
 
-func _draw_plaque(center: Vector2, title: String, featured: bool = false) -> void:
-	var font: Font = ThemeDB.fallback_font
-	var font_size: int = 16 if featured else 14
+func _plaque_rect_at(center: Vector2, title: String, featured: bool = false) -> Rect2:
+	var font: Font = Ui.display_font()
+	var font_size: int = label_font_size(16 if featured else 14)
 	var text_w: float = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var pop: float = 1.0
 	if featured:
 		pop += 0.16 * pop_t
-	var size: Vector2 = Vector2(maxf(158.0, text_w + 36.0), 26.0 if featured else 24.0) * pop
-	var rect: Rect2 = Rect2(center - size * 0.5, size)
-	draw_rect(rect, Color("3A2A14") if featured else Color("2C2118"))
-	draw_rect(rect, Color("F0D070") if featured else Ui.GOLD, false, 2.2 if featured else 1.5)
-	_draw_label(center + Vector2(0, 5), title, font_size, Color("FFE08A") if featured else Ui.GOLD)
+	var height: float = float(26 if featured else 24) + float(maxi(0, font_size - 14))
+	var size: Vector2 = Vector2(maxf(158.0, text_w + 36.0), height) * pop
+	return Rect2(center - size * 0.5, size)
+
+
+func _draw_plaque(center: Vector2, title: String, featured: bool = false) -> void:
+	var rect: Rect2 = _plaque_rect_at(center, title, featured)
+	_draw_plaque_lip(rect)
+	draw_rect(Rect2(rect.position + Vector2(2, 3), rect.size), Color(0, 0, 0, 0.38))
+	_draw_plaque_plate(rect, featured)
+	_draw_plaque_bevel(rect, featured)
+	_draw_plaque_screws(rect)
+	_draw_label(center + Vector2(0, 5), title, 16 if featured else 14, Color("FFE08A") if featured else Ui.GOLD)
+
+
+func _draw_plaque_lip(rect: Rect2) -> void:
+	var lip := Rect2(rect.position.x - 8.0, rect.end.y - 3.0, rect.size.x + 16.0, 9.0)
+	draw_rect(lip, Color("3A2818"))
+	draw_rect(Rect2(lip.position.x, lip.end.y - 3.0, lip.size.x, 3.0), Color("2A1C10"))
+	draw_line(lip.position, Vector2(lip.end.x, lip.position.y), Color("8A6A40"), 1.2)
+
+
+func _draw_plaque_plate(rect: Rect2, featured: bool) -> void:
+	draw_rect(rect, Color("4A3418") if featured else Color("3A2A14"))
+	draw_rect(rect.grow(-3.0), Color("3A2A14") if featured else Color("2C2118"))
+
+
+func _draw_plaque_bevel(rect: Rect2, featured: bool) -> void:
+	var outer: Color = Color("8A6A28") if featured else Color("6A523C")
+	var hi: Color = Color("FFE8A0") if featured else Color("E8C878")
+	var lo: Color = Color("4A3010")
+	draw_rect(rect, outer, false, 2.0)
+	var inner := rect.grow(-2.0)
+	draw_line(inner.position, Vector2(inner.end.x, inner.position.y), hi, 1.2)
+	draw_line(inner.position, Vector2(inner.position.x, inner.end.y), hi, 1.2)
+	draw_line(Vector2(inner.position.x, inner.end.y), inner.end, lo, 1.2)
+	draw_line(Vector2(inner.end.x, inner.position.y), inner.end, lo, 1.2)
+
+
+func _draw_plaque_screws(rect: Rect2) -> void:
+	var inset := Vector2(7.0, 6.0)
+	var heads: PackedVector2Array = PackedVector2Array([
+		rect.position + inset,
+		Vector2(rect.end.x - inset.x, rect.position.y + inset.y),
+		Vector2(rect.position.x + inset.x, rect.end.y - inset.y),
+		rect.end - inset,
+	])
+	for p in heads:
+		draw_circle(p, 2.5, Color("5A4630"))
+		draw_circle(p, 1.6, Color("C9A056"))
+		draw_line(p + Vector2(-1.3, 0.2), p + Vector2(1.3, -0.2), Color("3A2814"), 0.8)
 
 
 func _fit(mount: Rect2, local_min: Vector2, local_max: Vector2) -> Transform2D:
@@ -583,6 +788,7 @@ func _draw_bone_poly(points: PackedVector2Array, owned: bool, clean: bool) -> vo
 
 
 func _draw_label(center: Vector2, text: String, font_size: int, color: Color) -> void:
-	var font := ThemeDB.fallback_font
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	draw_string(font, center + Vector2(-width * 0.5, 0.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	var font: Font = Ui.display_font()
+	var size: int = label_font_size(font_size)
+	var width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	draw_string(font, center + Vector2(-width * 0.5, 0.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)

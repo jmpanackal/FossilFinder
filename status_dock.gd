@@ -14,7 +14,7 @@ func _ready() -> void:
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bar.offset_top = -Tuning.find_bar_h
 	bar.offset_bottom = 0
-	Ui.apply_bar(bar, Color("1B1410"))
+	Ui.apply_bar(bar, Ui.PAPER_DEEP)
 	add_child(bar)
 
 	var row := HBoxContainer.new()
@@ -27,14 +27,14 @@ func _ready() -> void:
 	bar.add_child(row)
 
 	var title := Label.new()
-	title.text = "THIS FIND"
-	Ui.apply_label(title, 16, Ui.GOLD)
+	title.text = "This find"
+	Ui.apply_label(title, Ui.BODY_SIZE, Ui.GOLD)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
 
 	_name = _col_label(20, Ui.INK)
-	_progress = _col_label(16, Ui.MUTED)
-	_status = _col_label(16, Ui.GOLD)
+	_progress = _col_label(Ui.BODY_SIZE, Ui.MUTED)
+	_status = _col_label(Ui.BODY_SIZE, Ui.GOLD)
 	row.add_child(_name)
 	row.add_child(_progress)
 	row.add_child(_status)

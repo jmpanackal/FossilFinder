@@ -4,6 +4,7 @@ signal money_changed
 signal collection_changed
 signal upgrades_changed
 signal hall_changed
+signal progress_reset
 
 const STAND_T_REX := "t_rex"
 const STAND_TRICERATOPS := "triceratops"
@@ -24,6 +25,8 @@ var last_unlocked_ids: Array[String] = []
 var featured_stand_id: String = ""
 var pending_unveils: Dictionary = {}
 var unveil_spike_left: float = 0.0
+var unveil_rush_stacks: int = 0
+var unveil_rush_unit: float = 0.0
 var _income_accum: float = 0.0
 var _bases: Dictionary = {}
 var _fossil_by_id: Dictionary = {}
@@ -53,7 +56,10 @@ var catalog: Array[Dictionary] = [
 	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 340, "scale": 1.75, "max": 6},
 	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
 	{"id": "lighting", "cat": "Exhibit", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 110, "scale": 1.7, "max": 5},
+	{"id": "spotlight", "cat": "Exhibit", "tier": 1, "name": "Featured exhibit 2x", "desc": "Featured exhibit 3x.", "unlock_name": "Unlock Spotlight", "unlock_desc": "Featured exhibit 2x.", "unlock_action": "Unlock", "cost": 200, "scale": 1.8, "max": 3},
 	{"id": "benches", "cat": "Exhibit", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 100, "scale": 1.65, "max": 5},
+	{"id": "unveil_time", "cat": "Exhibit", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 120, "scale": 1.7, "max": 4},
+	{"id": "unveil_crowd", "cat": "Exhibit", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes pay more each second.", "cost": 140, "scale": 1.7, "max": 4},
 	{"id": "glass_case", "cat": "Exhibit", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 280, "scale": 1.7, "max": 6},
 	{"id": "labels", "cat": "Exhibit", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 250, "scale": 1.7, "max": 6},
 	{"id": "gift_shop", "cat": "Exhibit", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 400, "scale": 1.75, "max": 6},
@@ -79,10 +85,13 @@ func _ready() -> void:
 		"exhibit_flat_income": 0.0,
 		"dirt_money_bonus": 0.0,
 		"rock_money_bonus": 0.0,
-		"matrix_dirt_chance": 0.94,
-		"matrix_stone_chance": 0.42,
+		"matrix_dirt_chance": 0.48,
+		"matrix_stone_chance": 0.55,
 		"fossil_value_mult": 1.0,
 		"integrity_hit_cost": Tuning.integrity_hit_cost,
+		"unveil_spike_seconds": Tuning.unveil_spike_seconds,
+		"unveil_rush_strength": Tuning.unveil_rush_strength,
+		"spotlight_mult": 1.0,
 	}
 	for item in catalog:
 		levels[item["id"]] = 0
@@ -100,6 +109,7 @@ func _process(delta: float) -> void:
 	if unveil_spike_left > 0.0:
 		unveil_spike_left = maxf(0.0, unveil_spike_left - delta)
 		if unveil_spike_left <= 0.0:
+			_clear_unveil_rush()
 			hall_changed.emit()
 
 
@@ -295,6 +305,8 @@ func is_unlock_offer(id: String) -> bool:
 
 
 func shop_display_name(id: String) -> String:
+	if id == "spotlight":
+		return spotlight_shop_name()
 	var item: Dictionary = _item(id)
 	if is_unlock_offer(id):
 		return str(item["unlock_name"])
@@ -302,10 +314,215 @@ func shop_display_name(id: String) -> String:
 
 
 func shop_item_desc(id: String) -> String:
+	if id == "spotlight":
+		return spotlight_shop_desc()
 	var item: Dictionary = _item(id)
 	if is_unlock_offer(id) and item.has("unlock_desc"):
 		return str(item["unlock_desc"])
 	return str(item.get("desc", ""))
+
+
+func shop_effect_line(id: String) -> String:
+	var item: Dictionary = _item(id)
+	if item.is_empty():
+		return ""
+	var current: int = int(levels.get(id, 0))
+	var max_level: int = int(item.get("max", 1))
+	if current >= max_level:
+		return _shop_effect_at(id, current)
+	return _shop_effect_delta(id, current, current + 1)
+
+
+func _shop_effect_at(id: String, level: int) -> String:
+	var zero: Dictionary = _tuning_at(id, 0)
+	var at: Dictionary = _tuning_at(id, level)
+	return _format_shop_effect(id, zero, at)
+
+
+func _shop_effect_delta(id: String, from_level: int, to_level: int) -> String:
+	var before: Dictionary = _tuning_at(id, from_level)
+	var after: Dictionary = _tuning_at(id, to_level)
+	return _format_shop_effect(id, before, after)
+
+
+func _tuning_at(id: String, level: int) -> Dictionary:
+	var saved: int = int(levels.get(id, 0))
+	levels[id] = level
+	apply_upgrades()
+	var snap: Dictionary = _tuning_snapshot()
+	levels[id] = saved
+	apply_upgrades()
+	return snap
+
+
+func _tuning_snapshot() -> Dictionary:
+	return {
+		"hands_click_mult": Tuning.hands_click_mult,
+		"shovel_click_mult": Tuning.shovel_click_mult,
+		"shovel_hold_tick_rate": Tuning.shovel_hold_tick_rate,
+		"shovel_radius": Tuning.shovel_radius,
+		"pickaxe_click_mult": Tuning.pickaxe_click_mult,
+		"pickaxe_hold_tick_rate": Tuning.pickaxe_hold_tick_rate,
+		"brush_clean_per_pixel": Tuning.brush_clean_per_pixel,
+		"round_seconds": Tuning.round_seconds,
+		"museum_income_mult": Tuning.museum_income_mult,
+		"money_mult": Tuning.money_mult,
+		"dirt_money_bonus": Tuning.dirt_money_bonus,
+		"rock_money_bonus": Tuning.rock_money_bonus,
+		"fossil_value_mult": Tuning.fossil_value_mult,
+		"exhibit_flat_income": Tuning.exhibit_flat_income,
+		"dirty_income_factor": Tuning.dirty_income_factor,
+		"site_size_rank": Tuning.site_size_rank,
+		"extra_find_slots": Tuning.extra_find_slots,
+		"extra_find_chance": Tuning.extra_find_chance,
+		"big_finds_unlocked": Tuning.big_finds_unlocked,
+		"passive_miner_owned": Tuning.passive_miner_owned,
+		"integrity_hit_cost": Tuning.integrity_hit_cost,
+		"unveil_spike_seconds": Tuning.unveil_spike_seconds,
+		"unveil_rush_strength": Tuning.unveil_rush_strength,
+		"spotlight_mult": Tuning.spotlight_mult,
+		"matrix_hands_quality": Tuning.matrix_hands_quality,
+		"matrix_hands_pay": Tuning.matrix_hands_pay,
+		"matrix_dirt_chance": Tuning.matrix_dirt_chance,
+		"matrix_stone_chance": Tuning.matrix_stone_chance,
+	}
+
+
+func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String:
+	match id:
+		"hands_click":
+			return _pct_over_line("+%d%% click harvest", float(zero["hands_click_mult"]), float(at["hands_click_mult"]))
+		"hands_hold", "shovel_hold":
+			return _pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"]))
+		"shovel_click":
+			if is_equal_approx(float(zero["shovel_click_mult"]), float(at["shovel_click_mult"])):
+				return "Unlocks the shovel"
+			return _pct_over_line("+%d%% shovel clicks", float(zero["shovel_click_mult"]), float(at["shovel_click_mult"]))
+		"shovel_radius":
+			return _radius_delta_line(zero, at)
+		"shovel_super":
+			return _join_effects(PackedStringArray([
+				_pct_over_line("+%d%% shovel clicks", float(zero["shovel_click_mult"]), float(at["shovel_click_mult"])),
+				_pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"])),
+				_radius_delta_line(zero, at),
+			]))
+		"shovel_soft", "pick_soft":
+			return _integrity_line(float(zero["integrity_hit_cost"]), float(at["integrity_hit_cost"]))
+		"pick_click":
+			if is_equal_approx(float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"])):
+				return "Unlocks the pickaxe"
+			return _pct_over_line("+%d%% pick clicks", float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"]))
+		"pick_hold":
+			return _pct_faster_line("Hold digs %d%% faster", float(zero["pickaxe_hold_tick_rate"]), float(at["pickaxe_hold_tick_rate"]))
+		"pick_super":
+			return _join_effects(PackedStringArray([
+				_pct_over_line("+%d%% pick clicks", float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"])),
+				_pct_faster_line("Hold digs %d%% faster", float(zero["pickaxe_hold_tick_rate"]), float(at["pickaxe_hold_tick_rate"])),
+			]))
+		"brush_speed":
+			if is_equal_approx(float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"])):
+				return "Unlocks the brush"
+			return _pct_over_line("+%d%% brush speed", float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"]))
+		"brush_master":
+			return _pct_over_line("+%d%% brush speed", float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"]))
+		"round_time":
+			return "+%ds per shift" % int(round(float(at["round_seconds"]) - float(zero["round_seconds"])))
+		"dirt_pay":
+			return "+$%.2f matrix finds" % (float(at["dirt_money_bonus"]) - float(zero["dirt_money_bonus"]))
+		"site_size", "site_expand":
+			var layout: Vector2i = Tuning.site_layout_for_rank(int(at["site_size_rank"]))
+			return "Pit %d×%d" % [layout.x, layout.y]
+		"scrap_bed":
+			return "+%d scrap slot" % int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"])))
+		"rich_bed":
+			var slots: int = int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"])))
+			if bool(at["big_finds_unlocked"]) and not bool(zero["big_finds_unlocked"]):
+				return "Unlocks large bones · +%d scrap slot" % slots
+			return "+%d scrap slot" % slots
+		"rock_pay":
+			return "+$%.1f stone finds" % (float(at["rock_money_bonus"]) - float(zero["rock_money_bonus"]))
+		"money_mult":
+			return _pct_delta_line("+%d%% dig value", float(zero["money_mult"]), float(at["money_mult"]))
+		"fossil_value":
+			return _pct_delta_line("+%d%% fossil sale", float(zero["fossil_value_mult"]), float(at["fossil_value_mult"]))
+		"passive_miner":
+			return "Unlocks a hired hand"
+		"lighting", "labels", "gift_shop", "crowds":
+			return _pct_delta_line("+%d%% exhibit income", float(zero["museum_income_mult"]), float(at["museum_income_mult"]))
+		"spotlight":
+			return "Featured exhibit %dx" % int(round(float(at["spotlight_mult"])))
+		"benches", "glass_case":
+			return "+$%.2f/s exhibit" % (float(at["exhibit_flat_income"]) - float(zero["exhibit_flat_income"]))
+		"unveil_time":
+			return "Unveil rush +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
+		"unveil_crowd":
+			return _pct_delta_line("Unveil rush +%d%%", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
+		"restoration":
+			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
+		_:
+			return ""
+
+
+func _pct_faster_line(template: String, before: float, after: float) -> String:
+	if after <= before + 0.0001:
+		return ""
+	var pct: int = int(round((after / maxf(before, 0.01) - 1.0) * 100.0))
+	return template % pct
+
+
+func _pct_over_line(template: String, before: float, after: float) -> String:
+	if after <= before + 0.0000001:
+		return ""
+	var pct: int = int(round((after / maxf(before, 0.000001) - 1.0) * 100.0))
+	return template % pct
+
+
+func _pct_delta_line(template: String, before: float, after: float) -> String:
+	var delta: float = after - before
+	if absf(delta) < 0.0001:
+		return ""
+	return template % int(round(delta * 100.0))
+
+
+func _integrity_line(before: float, after: float) -> String:
+	if after >= before - 0.0001:
+		return ""
+	var pct: int = int(round((before - after) / maxf(before, 0.01) * 100.0))
+	return "Hits cost %d%% less integrity" % pct
+
+
+func _radius_delta_line(zero: Dictionary, at: Dictionary) -> String:
+	var delta: float = float(at["shovel_radius"]) - float(zero["shovel_radius"])
+	if delta <= 0.001:
+		return ""
+	return "+%.1f cell radius" % delta
+
+
+func _join_effects(parts: PackedStringArray, limit: int = 2) -> String:
+	var kept: PackedStringArray = PackedStringArray()
+	for part in parts:
+		if part.is_empty():
+			continue
+		kept.append(part)
+		if kept.size() >= limit:
+			break
+	return " · ".join(kept)
+
+
+func spotlight_shop_name() -> String:
+	var rank: int = int(levels.get("spotlight", 0))
+	if rank <= 0:
+		return "Unlock Spotlight"
+	return "Featured exhibit %dx" % (rank + 1)
+
+
+func spotlight_shop_desc() -> String:
+	var rank: int = int(levels.get("spotlight", 0))
+	if rank <= 0:
+		return "Featured exhibit 2x."
+	if rank >= 3:
+		return "The featured stand pays 4x."
+	return "Featured exhibit %dx." % (rank + 2)
 
 
 func shop_row_title(id: String) -> String:
@@ -372,13 +589,13 @@ func tool_display_name(tool: int) -> String:
 func tool_role_line(tool: int) -> String:
 	match tool:
 		Tuning.TOOL_HANDS:
-			return "Harvest · 1 cell"
+			return "Harvest · safe on bone"
 		Tuning.TOOL_SHOVEL:
-			return "Clear dirt"
+			return "Clear dirt · spoils bone"
 		Tuning.TOOL_PICKAXE:
-			return "Clear stone"
+			return "Clear stone · spoils bone"
 		Tuning.TOOL_BRUSH:
-			return "Fossil"
+			return "Clean fossil"
 		_:
 			return ""
 
@@ -399,41 +616,29 @@ func next_upgrade_action(tool: int) -> String:
 
 func next_shop_id(tool: int = -1) -> String:
 	var filter_tool: int = tool if tool >= 0 else Tuning.TOOL_HANDS
-	var affordable_unlock: String = ""
-	var affordable_rank: String = ""
-	var cheapest_unlock: String = ""
-	var cheapest_rank: String = ""
-	var cheapest_unlock_cost: int = 1 << 30
-	var cheapest_rank_cost: int = 1 << 30
+	var cheapest: String = ""
+	var cheapest_cost: int = 1 << 30
+	var locked_next: String = ""
 	for item in catalog:
 		var id: String = str(item["id"])
 		if tool_for_upgrade(id) != filter_tool:
 			continue
-		if not requirements_met(id) or not tier_unlocked(id):
-			continue
 		if int(levels.get(id, 0)) >= int(item["max"]):
 			continue
-		var cost: int = cost_of(id)
-		var is_new: bool = int(levels.get(id, 0)) <= 0 or is_unlock_offer(id)
-		if can_buy(id):
-			if is_new and affordable_unlock.is_empty():
-				affordable_unlock = id
-			elif not is_new and affordable_rank.is_empty():
-				affordable_rank = id
-		if is_new:
-			if cost < cheapest_unlock_cost:
-				cheapest_unlock_cost = cost
-				cheapest_unlock = id
-		elif cost < cheapest_rank_cost:
-			cheapest_rank_cost = cost
-			cheapest_rank = id
-	if not affordable_unlock.is_empty():
-		return affordable_unlock
-	if not affordable_rank.is_empty():
-		return affordable_rank
-	if not cheapest_unlock.is_empty():
-		return cheapest_unlock
-	return cheapest_rank
+		if requirements_met(id) and tier_unlocked(id):
+			var cost: int = cost_of(id)
+			if cost < cheapest_cost:
+				cheapest_cost = cost
+				cheapest = id
+		elif locked_next.is_empty():
+			locked_next = id
+	if not cheapest.is_empty():
+		return cheapest
+	return locked_next
+
+
+func next_goal_maxed_lines(tool: int) -> PackedStringArray:
+	return PackedStringArray(["Next upgrade", "%s maxed" % tool_display_name(tool)])
 
 
 func next_goal(tool: int = -1) -> Dictionary:
@@ -474,11 +679,28 @@ func next_goal_rank_name(id: String) -> String:
 
 
 func next_goal_chip_lines(id: String, cost: int) -> PackedStringArray:
-	return PackedStringArray(["Next upgrade", next_goal_rank_name(id), "$%d" % cost])
+	var lines := PackedStringArray(["Next upgrade"])
+	var effect: String = shop_effect_line(id)
+	if effect.is_empty():
+		effect = next_goal_rank_name(id)
+	for raw in effect.split(" · "):
+		var bit: String = str(raw).strip_edges()
+		if bit.is_empty():
+			continue
+		if bit.begins_with("Hold digs "):
+			bit = bit.replace("Hold digs ", "Hold-dig ")
+		lines.append(bit)
+	if lines.size() == 1:
+		lines.append(effect)
+	lines.append("$%d" % cost)
+	return lines
 
 
 func next_goal_chip_text(id: String, cost: int) -> String:
-	return "Next upgrade · %s · $%d" % [next_goal_rank_name(id), cost]
+	var effect: String = shop_effect_line(id)
+	if effect.is_empty():
+		effect = next_goal_rank_name(id)
+	return " · ".join(PackedStringArray(["Next upgrade", effect, "$%d" % cost]))
 
 
 func _shop_goal(id: String) -> Dictionary:
@@ -615,8 +837,8 @@ func apply_upgrades() -> void:
 	# Old 0.40/rank stayed under 1.0 through rank 2, so neighbors were skipped.
 	var scoop: float = _lv("shovel_radius")
 	Tuning.shovel_radius = 0.0 if scoop <= 0.0 else (0.5 + 0.5 * scoop + 0.5 * _lv("shovel_super"))
-	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.16 * pick_ranks + 0.28 * _lv("pick_super")
-	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.45 * _lv("pick_hold") + 0.35 * _lv("pick_super")
+	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.20 * pick_ranks + 0.32 * _lv("pick_super")
+	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.70 * _lv("pick_hold") + 0.55 * _lv("pick_super")
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
 	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time")
 	Tuning.museum_income_mult = float(_bases["museum_income_mult"]) + 0.20 * _lv("lighting") + 0.14 * _lv("labels") + 0.28 * _lv("gift_shop") + 0.40 * _lv("crowds")
@@ -635,6 +857,9 @@ func apply_upgrades() -> void:
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
 	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
 	Tuning.integrity_hit_cost = maxf(0.035, float(_bases["integrity_hit_cost"]) - 0.018 * (_lv("shovel_soft") + _lv("pick_soft")))
+	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time")
+	Tuning.unveil_rush_strength = float(_bases["unveil_rush_strength"]) + 0.25 * _lv("unveil_crowd")
+	Tuning.spotlight_mult = float(_bases["spotlight_mult"]) + _lv("spotlight")
 
 
 func piece_need(piece_id: String) -> int:
@@ -660,6 +885,29 @@ func piece_progress_label(piece_id: String) -> String:
 	if need <= 1:
 		return ""
 	return "%d/%d" % [piece_count(piece_id), need]
+
+
+func uncover_status_line(piece_id: String) -> String:
+	var need: int = piece_need(piece_id)
+	var count: int = piece_count(piece_id)
+	if count >= need:
+		return "Duplicate"
+	var next: int = count + 1
+	if need > 1:
+		if count == 0:
+			return "New · %d/%d" % [next, need]
+		return "%d/%d" % [next, need]
+	return "New" if count == 0 else "needs this"
+
+
+func hall_fate_line(piece_id: String) -> String:
+	var need: int = piece_need(piece_id)
+	var count: int = piece_count(piece_id)
+	if count >= need:
+		return "extra sold"
+	if need > 1:
+		return "%d/%d on display" % [count + 1, need]
+	return "needs this"
 
 
 func _duplicate_sale(cleanliness: float, set_bonus: bool) -> int:
@@ -935,13 +1183,94 @@ func stand_has_pending_unveil(stand_id: String) -> bool:
 
 
 func has_any_pending_unveil() -> bool:
-	for piece_id in pending_unveils:
-		if not bool(pending_unveils[piece_id]):
-			continue
+	return not pending_unveil_ids("").is_empty()
+
+
+func pending_unveil_ids(stand_id: String = "") -> PackedStringArray:
+	var ids: PackedStringArray = []
+	for piece_id in pieces:
 		var id: String = str(piece_id)
-		if has_piece(id) and stand_for_piece(id) != "":
-			return true
-	return false
+		if not bool(pending_unveils.get(id, false)):
+			continue
+		var piece_stand: String = stand_for_piece(id)
+		if piece_stand == "":
+			continue
+		if stand_id != "" and piece_stand != stand_id:
+			continue
+		ids.append(id)
+	return ids
+
+
+func _piece_display_name(piece_id: String) -> String:
+	if pieces.has(piece_id):
+		return str(pieces[piece_id].get("name", piece_id))
+	return piece_id
+
+
+func _join_and(names: PackedStringArray) -> String:
+	if names.is_empty():
+		return ""
+	if names.size() == 1:
+		return names[0]
+	if names.size() == 2:
+		return "%s and %s" % [names[0], names[1]]
+	var head: String = ", ".join(names.slice(0, names.size() - 1))
+	return "%s, and %s" % [head, names[names.size() - 1]]
+
+
+func pending_unveil_label(stand_id: String = "") -> String:
+	var names: PackedStringArray = []
+	for id in pending_unveil_ids(stand_id):
+		names.append(_piece_display_name(id))
+	return _join_and(names)
+
+
+func unveil_title(stand_id: String) -> String:
+	var label: String = pending_unveil_label(stand_id)
+	if label.is_empty():
+		return "Unveil"
+	return "Unveil %s" % label
+
+
+func pending_unveil_waiting_line() -> String:
+	var n: int = pending_unveil_ids("").size()
+	if n <= 0:
+		return ""
+	if n == 1:
+		return "1 unveil waiting"
+	return "%d unveils waiting" % n
+
+
+func _clear_unveil_rush() -> void:
+	unveil_spike_left = 0.0
+	unveil_rush_stacks = 0
+	unveil_rush_unit = 0.0
+
+
+func unveil_rush_rate() -> float:
+	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
+		return 0.0
+	return float(unveil_rush_stacks) * unveil_rush_unit * Tuning.unveil_rush_strength
+
+
+func unveil_rush_line() -> String:
+	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
+		return ""
+	var secs: int = maxi(1, int(ceili(unveil_spike_left)))
+	var rate: float = unveil_rush_rate()
+	if unveil_rush_stacks > 1:
+		return "Unveil rush ×%d · +$%.2f/sec · %ds" % [unveil_rush_stacks, rate, secs]
+	return "Unveil rush · +$%.2f/sec · %ds" % [rate, secs]
+
+
+func museum_income_base() -> float:
+	var total: float = Tuning.exhibit_flat_income
+	for piece_id in pieces:
+		var rate: float = piece_income(str(piece_id))
+		if stand_for_piece(str(piece_id)) == featured_stand_id and featured_stand_id != "":
+			rate *= Tuning.spotlight_mult
+		total += rate
+	return total * Tuning.museum_income_mult
 
 
 func piece_income(piece_id: String) -> float:
@@ -989,12 +1318,24 @@ func unveil_stand(stand_id: String) -> int:
 			burst += Tuning.unveil_burst_dirty
 	for id in waiting:
 		pending_unveils.erase(id)
-	unveil_spike_left = Tuning.unveil_spike_seconds
+	_add_unveil_rush_stack()
 	if burst > 0:
 		add_money(burst)
 	collection_changed.emit()
 	hall_changed.emit()
 	return burst
+
+
+func _add_unveil_rush_stack() -> void:
+	var duration: float = Tuning.unveil_spike_seconds
+	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
+		unveil_rush_unit = museum_income_base()
+		unveil_rush_stacks = 1
+		unveil_spike_left = duration
+		return
+	if unveil_rush_stacks < Tuning.unveil_rush_stack_cap:
+		unveil_rush_stacks += 1
+	unveil_spike_left += duration
 
 
 func set_featured_stand(stand_id: String) -> bool:
@@ -1007,16 +1348,7 @@ func set_featured_stand(stand_id: String) -> bool:
 
 
 func museum_income() -> float:
-	var total: float = Tuning.exhibit_flat_income
-	for piece_id in pieces:
-		var rate: float = piece_income(str(piece_id))
-		if stand_for_piece(str(piece_id)) == featured_stand_id and featured_stand_id != "":
-			rate *= Tuning.spotlight_mult
-		total += rate
-	total *= Tuning.museum_income_mult
-	if unveil_spike_left > 0.0:
-		total *= Tuning.unveil_spike_mult
-	return total
+	return museum_income_base() + unveil_rush_rate()
 
 
 func has_piece(piece_id: String) -> bool:
@@ -1034,6 +1366,30 @@ func _item(id: String) -> Dictionary:
 	return {}
 
 
+func reset_progress(path: String = SAVE_PATH) -> void:
+	money = 0
+	pieces.clear()
+	featured_stand_id = ""
+	pending_unveils.clear()
+	pending_notices.clear()
+	last_unlock_title = ""
+	last_unlocked_ids.clear()
+	_clear_unveil_rush()
+	_income_accum = 0.0
+	precision_on = false
+	for item in catalog:
+		levels[item["id"]] = 0
+	levels.erase("precision")
+	apply_upgrades()
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	money_changed.emit()
+	collection_changed.emit()
+	upgrades_changed.emit()
+	hall_changed.emit()
+	progress_reset.emit()
+
+
 func has_save(path: String = SAVE_PATH) -> bool:
 	return FileAccess.file_exists(path)
 
@@ -1048,6 +1404,9 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"featured_stand_id": featured_stand_id,
 		"pending_unveils": pending_unveils.duplicate(),
 		"pending_notices": pending_notices.duplicate(true),
+		"unveil_spike_left": unveil_spike_left,
+		"unveil_rush_stacks": unveil_rush_stacks,
+		"unveil_rush_unit": unveil_rush_unit,
 	}
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
@@ -1091,6 +1450,9 @@ func load_game(path: String = SAVE_PATH) -> bool:
 	for raw_id in raw_unveils:
 		if bool(raw_unveils[raw_id]):
 			pending_unveils[str(raw_id)] = true
+	unveil_spike_left = float(data.get("unveil_spike_left", 0.0))
+	unveil_rush_stacks = int(data.get("unveil_rush_stacks", 0))
+	unveil_rush_unit = float(data.get("unveil_rush_unit", 0.0))
 	pending_notices.clear()
 	var raw_notices: Variant = data.get("pending_notices", [])
 	if raw_notices is Array:

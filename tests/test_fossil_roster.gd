@@ -69,6 +69,10 @@ func _reset() -> void:
 	GS.featured_stand_id = ""
 	GS.pending_unveils.clear()
 	GS.unveil_spike_left = 0.0
+	if "unveil_rush_stacks" in GS:
+		GS.unveil_rush_stacks = 0
+	if "unveil_rush_unit" in GS:
+		GS.unveil_rush_unit = 0.0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
 	GS.apply_upgrades()
@@ -308,6 +312,13 @@ func _test_museum_regions_unveil() -> void:
 	GS.install_find("t_rex_tooth", "T. rex Tooth", 1.0, true)
 	_assert(bool(GS.call("stand_region_filled", "t_rex", "jaw")), "rex tooth fills the jaw")
 	_assert(bool(GS.stand_has_pending_unveil("t_rex")), "rex tooth waits under a ribbon")
+	if GS.has_method("pending_unveil_label"):
+		_assert(str(GS.call("pending_unveil_label", "t_rex")).to_lower().find("tooth") >= 0, "rex ribbon names the tooth")
+	GS.unveil_stand("t_rex")
+	GS.install_find("t_rex_tail", "T. rex Tail", 1.0, true)
+	_assert(bool(GS.stand_has_pending_unveil("t_rex")), "a new tail re-ribbons the T. rex stand")
+	if GS.has_method("unveil_title"):
+		_assert(str(GS.call("unveil_title", "t_rex")).to_lower().find("tail") >= 0, "second unveil names the tail")
 	_assert(not bool(GS.call("stand_region_filled", "t_rex", "head")), "empty rex head stays silhouette")
 	GS.install_find("velociraptor_claw", "Sickle Claw", 1.0, true)
 	_assert(bool(GS.stand_is_filled("velociraptor")), "raptor claw lights the Velociraptor stand")

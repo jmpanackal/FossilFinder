@@ -6,30 +6,65 @@ signal end_shift
 
 const Ui := preload("res://ui_style.gd")
 const ClockFace := preload("res://clock_face.gd")
-const StarRating := preload("res://star_rating.gd")
 const ToolIcon := preload("res://tool_icon.gd")
+const ShopIcon := preload("res://shop_icon.gd")
+const FindChipScript := preload("res://find_chip.gd")
+
+const CLOCK_SIZE := 72.0
+const CLOCK_TIME_SIZE := 32
+const CLOCK_GAP := 12.0
+const RAIL_PAD := 8.0
+const DOCK_W := 120.0
+const TOOL_CARD_H := 110.0
+const TOOL_CARD_MIN_H := 70.0
+const TOOL_CARD_INSET := 6.0
+const TOOL_CARD_INSET_TIGHT := 3.0
+const TOOL_STACK_GAP := 8.0
+const TOOL_STACK_GAP_TIGHT := 2.0
+const RAIL_LABEL_GAP := 10.0
+const SECTION_PAD := 10.0
+const SECTION_TITLE_TOP := 14.0
+const TOOL_ROW := Vector2(DOCK_W, TOOL_CARD_H)
+const CHIP_COPY_W := 100.0
+const HEADER_BTN_H := 36.0
+const TOOLS_TITLE := "Tools"
+const FINDS_TITLE := "Finds"
+const CHIP_COMFORT_MIN := 232.0
+const CHIP_COMFORT_MAX := 300.0
+const CHIP_MIN_W := 90.0
+const CHIP_GAP := 8.0
+const WALLET_MONEY_SAMPLE := "$8888888"
+const WALLET_RATE_SAMPLE := "$8888.88/s"
+const WALLET_RIGHT_PAD := 20.0
 
 var _clock
+var _wallet: PanelContainer
 var _money: Label
 var _pouch: Control
 var _income: Label
+var _income_row: HBoxContainer
+var _income_mark: Control
 var _money_flash: float = 0.0
 var _pouch_pop: float = 0.0
 var _shown_money: int = -1
-var _chip: Button
-var _goal_key: String = ""
-var _goal_pop: float = 0.0
-var _tool_role: Label
+var _clock_time: Label
+var _clock_caption: Label
+var _menu_btn: Button
+var _end_btn: Button
+var _header_bar: HBoxContainer
+var _tool_rail: VBoxContainer
+var _tools_label: Label
+var _finds_label: Label
+var _tools_frame: Panel
+var _finds_frame: Panel
+var _tool_roles: Array[Label] = []
 var _tool_buttons: Array[Button] = []
 var _tool_slots: Array[Control] = []
 var _slot_tools: Array[int] = []
-var _stars
-var _headline: Label
-var _grade: Label
-var _value: Label
-var _dirt_label: Label
-var _dirt_fill: ColorRect
-var _find_box: VBoxContainer
+var _hovered_tool: int = -1
+var _headline: String = ""
+var _find_box: HFlowContainer
+var _chips: Array = []
 var _tool_colors := [
 	Color("E4B75A"),
 	Color("D96A4A"),
@@ -47,199 +82,256 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
-	var tools := HBoxContainer.new()
-	tools.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	tools.offset_left = -260
-	tools.offset_right = 260
-	tools.offset_top = 6
-	tools.offset_bottom = 94
-	tools.add_theme_constant_override("separation", 18)
-	tools.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(tools)
-	_add_tool_slot(tools, Tuning.TOOL_HANDS)
-	_add_tool_slot(tools, Tuning.TOOL_SHOVEL)
-	_add_tool_slot(tools, Tuning.TOOL_PICKAXE)
-	_add_tool_slot(tools, Tuning.TOOL_BRUSH)
-	_tool_role = Label.new()
-	_tool_role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tool_role.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_tool_role.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tool_role.custom_minimum_size = Vector2(72, 16)
-	_tool_role.clip_text = false
-	Ui.apply_label(_tool_role, 11, Color("2C2118"))
-	_tool_role.add_theme_color_override("font_outline_color", Color("F6EDE0"))
-	_tool_role.add_theme_constant_override("outline_size", 3)
+	_tool_rail = VBoxContainer.new()
+	_tool_rail.name = "ToolRail"
+	_tool_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tool_rail.add_theme_constant_override("separation", 6)
+	root.add_child(_tool_rail)
+	_add_tool_slot(_tool_rail, Tuning.TOOL_HANDS)
+	_add_tool_slot(_tool_rail, Tuning.TOOL_SHOVEL)
+	_add_tool_slot(_tool_rail, Tuning.TOOL_PICKAXE)
+	_add_tool_slot(_tool_rail, Tuning.TOOL_BRUSH)
+
+	_tools_label = _make_rail_title("ToolsLabel")
+	root.add_child(_tools_label)
 
 	_clock = Control.new()
 	_clock.set_script(ClockFace)
-	_clock.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_clock.offset_left = -96
-	_clock.offset_top = 12
-	_clock.offset_right = -16
-	_clock.offset_bottom = 92
+	_clock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_clock.custom_minimum_size = Vector2(CLOCK_SIZE, CLOCK_SIZE)
+	_clock.size = Vector2(CLOCK_SIZE, CLOCK_SIZE)
 	root.add_child(_clock)
 
-	var menu := Button.new()
-	menu.text = "Menu"
-	menu.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	menu.offset_left = 16
-	menu.offset_right = 132
-	menu.offset_top = -48
-	menu.offset_bottom = -12
-	menu.custom_minimum_size = Vector2(112, 32)
-	menu.clip_text = false
-	menu.add_theme_font_size_override("font_size", 13)
-	Ui.apply_button(menu)
-	menu.pressed.connect(func() -> void: Settings.toggle_menu())
-	root.add_child(menu)
+	_clock_time = Label.new()
+	_clock_time.name = "ClockTime"
+	_clock_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_clock_time.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(_clock_time, CLOCK_TIME_SIZE, Ui.PAPER_DEEP)
+	root.add_child(_clock_time)
 
-	var finish := Button.new()
-	finish.text = "End shift"
-	finish.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	finish.offset_left = -140
-	finish.offset_right = -16
-	finish.offset_top = -48
-	finish.offset_bottom = -12
-	finish.custom_minimum_size = Vector2(120, 32)
-	finish.clip_text = false
-	finish.add_theme_font_size_override("font_size", 13)
-	Ui.apply_button(finish)
-	finish.pressed.connect(func() -> void:
-		Sfx.play("ui")
-		end_shift.emit()
-	)
-	root.add_child(finish)
+	_clock_caption = Label.new()
+	_clock_caption.name = "ClockCaption"
+	_clock_caption.text = "Shift remaining"
+	_clock_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_clock_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_caption(_clock_caption)
+	root.add_child(_clock_caption)
+
+	_wallet = PanelContainer.new()
+	_wallet.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet.add_theme_stylebox_override("panel", Ui.wallet_box())
+	root.add_child(_wallet)
+
+	var wallet_row := HBoxContainer.new()
+	wallet_row.add_theme_constant_override("separation", 8)
+	wallet_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_wallet.add_child(wallet_row)
 
 	_pouch = Control.new()
-	_pouch.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_pouch.offset_left = 16
-	_pouch.offset_top = 20
-	_pouch.offset_right = 48
-	_pouch.offset_bottom = 58
+	_pouch.custom_minimum_size = Vector2(32, 38)
 	_pouch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pouch.pivot_offset = Vector2(16, 19)
 	_pouch.draw.connect(_draw_pouch)
-	root.add_child(_pouch)
+	wallet_row.add_child(_pouch)
+
+	var wallet_stack := VBoxContainer.new()
+	wallet_stack.add_theme_constant_override("separation", 0)
+	wallet_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	wallet_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wallet_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wallet_row.add_child(wallet_stack)
 
 	_money = Label.new()
 	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_money.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_money.offset_left = 50
-	_money.offset_right = 300
-	_money.offset_top = 22
-	_money.offset_bottom = 70
 	_money.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_money, 28, Ui.GOLD)
-	root.add_child(_money)
+	Ui.apply_wallet(_money)
+	wallet_stack.add_child(_money)
+
+	_income_row = HBoxContainer.new()
+	_income_row.add_theme_constant_override("separation", int(Ui.ICON_GAP))
+	_income_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_income_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_income_row.visible = false
+	wallet_stack.add_child(_income_row)
+
+	_income_mark = Control.new()
+	_income_mark.name = "MuseumRateMark"
+	_income_mark.set_script(ShopIcon)
+	ShopIcon.apply_action(_income_mark)
+	_income_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _income_mark.has_method("setup"):
+		_income_mark.setup(ShopIcon.glyph_for_action("Museum"), Ui.GOLD)
+	_income_row.add_child(_income_mark)
 
 	_income = Label.new()
 	_income.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_income.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_income.offset_left = 26
-	_income.offset_right = 280
-	_income.offset_top = 64
-	_income.offset_bottom = 84
 	_income.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_income.visible = false
-	Ui.apply_label(_income, 14, Ui.MUTED)
-	root.add_child(_income)
+	Ui.apply_caption(_income)
+	_income_row.add_child(_income)
 
-	_chip = Button.new()
-	_chip.text = ""
-	_chip.custom_minimum_size = Vector2(360, 44)
-	_chip.clip_contents = true
-	_chip.clip_text = true
-	_chip.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_chip.add_theme_font_size_override("font_size", 13)
-	Ui.apply_button(_chip)
-	_chip.pressed.connect(_on_next_chip)
-	root.add_child(_chip)
-	_chip.visible = false
+	_header_bar = HBoxContainer.new()
+	_header_bar.name = "HeaderActions"
+	_header_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_header_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	_header_bar.add_theme_constant_override("separation", 8)
+	root.add_child(_header_bar)
 
-	_find_box = VBoxContainer.new()
+	_menu_btn = _make_header_button("Menu", func() -> void:
+		if Settings != null and Settings.has_method("toggle_menu"):
+			Settings.toggle_menu()
+	)
+	_header_bar.add_child(_menu_btn)
+
+	_end_btn = _make_header_button("End shift", func() -> void:
+		Sfx.play("ui")
+		end_shift.emit()
+	)
+	root.add_child(_end_btn)
+
+	_tools_frame = _make_section_frame("ToolsFrame")
+	root.add_child(_tools_frame)
+	_finds_frame = _make_section_frame("FindsFrame")
+	root.add_child(_finds_frame)
+
+	_finds_label = _make_rail_title("FindsLabel")
+	root.add_child(_finds_label)
+
+	_find_box = HFlowContainer.new()
+	_find_box.name = "FindTray"
 	_find_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_find_box.clip_contents = true
-	_find_box.add_theme_constant_override("separation", 0)
+	_find_box.alignment = FlowContainer.ALIGNMENT_CENTER
+	_find_box.add_theme_constant_override("h_separation", int(CHIP_GAP))
+	_find_box.add_theme_constant_override("v_separation", 4)
 	_find_box.visible = false
 	root.add_child(_find_box)
-	var title_row := HBoxContainer.new()
-	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	title_row.add_theme_constant_override("separation", 10)
-	_find_box.add_child(title_row)
-	_headline = Label.new()
-	_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_headline.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_headline.custom_minimum_size = Vector2(0, 18)
-	_headline.visible = false
-	Ui.apply_label(_headline, 18, Ui.GOLD)
-	title_row.add_child(_headline)
-	_value = Label.new()
-	_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_value.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_value.custom_minimum_size = Vector2(0, 18)
-	Ui.apply_label(_value, 16, Ui.GOLD)
-	title_row.add_child(_value)
-	_grade = Label.new()
-	_grade.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_grade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_grade.custom_minimum_size = Vector2(0, 14)
-	Ui.apply_label(_grade, 12, Ui.MUTED)
-	_find_box.add_child(_grade)
-	_stars = Control.new()
-	_stars.set_script(StarRating)
-	_stars.custom_minimum_size = Vector2(140, 16)
-	_find_box.add_child(_stars)
-	_dirt_label = Label.new()
-	_dirt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dirt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dirt_label.custom_minimum_size = Vector2(0, 12)
-	Ui.apply_label(_dirt_label, 11, Ui.MUTED)
-	_find_box.add_child(_dirt_label)
-	var track := ColorRect.new()
-	track.custom_minimum_size = Vector2(220, 6)
-	track.color = Color("2A2118")
-	track.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_find_box.add_child(track)
-	_dirt_fill = ColorRect.new()
-	_dirt_fill.color = Color("C9B8A2")
-	_dirt_fill.position = Vector2(1, 1)
-	_dirt_fill.size = Vector2(0, 4)
-	_dirt_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	track.add_child(_dirt_fill)
 
 	GameState.money_changed.connect(_on_money_changed)
+	_reserve_wallet_width()
 	_set_money_text(false)
 	_highlight_tool(Tuning.TOOL_HANDS)
+	_layout_chrome()
 
 
-func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_find: bool = false, stars: int = 0, grade: String = "", clean: float = 0.0, value: int = 0) -> void:
+func set_header_actions_visible(on: bool) -> void:
+	if _header_bar != null:
+		_header_bar.visible = on
+
+
+func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_find: bool = false, _stars: int = 0, _grade: String = "", _clean: float = 0.0, _value: int = 0) -> void:
 	visible = digging
 	_equipped_tool = tool
 	if _clock.has_method("set_time"):
 		_clock.set_time(time_left, time_max)
+	_set_clock_copy(time_left)
 	_set_money_text(false)
 	_highlight_tool(tool)
 	_apply_tool_flashes()
-	_find_box.visible = show_find
-	_value.text = "$%d" % value
-	_grade.text = grade
-	if _stars.has_method("set_rating"):
-		_stars.set_rating(stars)
-	_dirt_label.text = Tuning.dirt_label(clean)
-	_dirt_fill.size.x = 218.0 * clampf(clean, 0.0, 1.0)
-	_dirt_fill.size.y = 4.0
-	_dirt_fill.color = Color("E4B75A") if clean >= 0.99 else Color("C9B8A2")
-	_refresh_goal_chrome()
+	_find_box.visible = show_find or not _chips.is_empty()
+	_layout_chrome()
+
+
+func set_find_cards(cards: Array) -> void:
+	var shown: Array = []
+	for raw in cards:
+		if raw is Dictionary and _card_is_uncovered(raw):
+			shown.append(raw)
+	while _chips.size() > shown.size():
+		var extra: Node = _chips.pop_back()
+		if extra != null:
+			extra.queue_free()
+	while _chips.size() < shown.size():
+		var chip: Control = FindChipScript.new() as Control
+		_find_box.add_child(chip)
+		_chips.append(chip)
+	var tray_w: float = maxf(160.0, Tuning.pit_grid_size().x)
+	var n: int = shown.size()
+	var each: float = _chip_width_for_count(n, tray_w)
+	var crowded: bool = n >= 4 or each < 220.0
+	for i in shown.size():
+		var card: Dictionary = shown[i]
+		if not card.has("index"):
+			card["index"] = i
+		var chip: Control = _chips[i] as Control
+		if chip != null and chip.has_method("apply_card"):
+			chip.call("apply_card", card)
+		if chip != null and chip.has_method("fit_tray"):
+			chip.call("fit_tray", each, crowded)
+	_apply_headline_to_chips()
+	_find_box.visible = not shown.is_empty()
+	_layout_chrome()
+	if _find_box != null:
+		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
+
+
+func _chip_width_for_count(n: int, tray_w: float) -> float:
+	if n <= 0:
+		return CHIP_COMFORT_MIN
+	var row_n: int = n
+	var each: float = (tray_w - CHIP_GAP * float(maxi(row_n - 1, 0))) / float(row_n)
+	if n <= 3:
+		return clampf(each, CHIP_COMFORT_MIN, CHIP_COMFORT_MAX)
+	if each < CHIP_MIN_W:
+		row_n = int(ceili(float(n) * 0.5))
+		each = (tray_w - CHIP_GAP * float(maxi(row_n - 1, 0))) / float(maxi(row_n, 1))
+	return maxf(CHIP_MIN_W, each)
+
+
+func find_chip_catch_pos(index: int) -> Vector2:
+	var chip: Control = _chip_for_find(index)
+	if chip != null and chip.has_method("catch_pos"):
+		return chip.call("catch_pos")
+	return Vector2(Tuning.view_w * 0.5, Tuning.footer_find_top() + 34.0)
+
+
+func catch_find(index: int) -> void:
+	var chip: Control = _chip_for_find(index)
+	if chip != null and chip.has_method("light_up"):
+		chip.call("light_up")
+
+
+func set_bone_warning(_on: bool) -> void:
+	pass
+
+
+func _set_clock_copy(time_left: float) -> void:
+	if _clock_time == null:
+		return
+	var secs: int = maxi(0, int(ceil(time_left)))
+	_clock_time.text = "%d:%02d" % [secs / 60, secs % 60]
+	_clock_time.add_theme_color_override("font_color", Ui.PAPER_DEEP)
+	if _clock_caption != null:
+		_clock_caption.text = "Shift remaining"
+		_clock_caption.add_theme_color_override("font_color", Color("7A1E1E") if time_left <= 10.0 else Ui.PAPER_DEEP)
+
+
+func _card_is_uncovered(card: Dictionary) -> bool:
+	if bool(card.get("extracted", false)) or bool(card.get("fully_exposed", false)):
+		return true
+	var status: String = str(card.get("status", ""))
+	return status == "brush" or status == "bagged" or status == "uncovering" or int(card.get("exposed", 0)) > 0
+
+
+func _chip_for_find(index: int) -> Control:
+	for raw in _chips:
+		var chip: Control = raw as Control
+		if chip != null and int(chip.get("_index")) == index:
+			return chip
+	return null
 
 
 func set_find_headline(text: String) -> void:
-	if _headline == null:
-		return
-	_headline.text = text
-	_headline.visible = not text.is_empty()
+	_headline = text
+	_apply_headline_to_chips()
+
+
+func _apply_headline_to_chips() -> void:
+	for raw in _chips:
+		var chip: Control = raw as Control
+		if chip != null and chip.has_method("set_extra"):
+			chip.call("set_extra", "")
 
 
 func flash_upgraded_tools(tools: Array) -> void:
@@ -263,15 +355,6 @@ func _process(delta: float) -> void:
 		_clock.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - _clock_flash * pulse)
 	elif _clock.modulate != Color.WHITE:
 		_clock.modulate = Color.WHITE
-	if _goal_pop > 0.0:
-		_goal_pop = maxf(0.0, _goal_pop - delta * 2.4)
-	if _chip != null:
-		_chip.scale = Vector2(1.0 + _goal_pop * 0.12, 1.0 + _goal_pop * 0.12)
-	if _chip != null and _chip.visible:
-		var shop_id: String = GameState.next_shop_id(_equipped_tool)
-		var heat: bool = not shop_id.is_empty() and GameState.can_buy(shop_id)
-		var pulse: float = 0.72 + 0.28 * absf(sin(float(Time.get_ticks_msec()) * 0.008))
-		_chip.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - pulse) if heat else Color(0.82, 0.78, 0.72)
 	if _pouch_pop > 0.0:
 		_pouch_pop = maxf(0.0, _pouch_pop - delta * 5.5)
 		if _pouch != null:
@@ -332,59 +415,332 @@ func _set_money_text(flash: bool) -> void:
 	_shown_money = next
 	if _income != null:
 		var rate_line: String = GameState.museum_rate_line()
-		_income.visible = not rate_line.is_empty()
+		var show_rate: bool = not rate_line.is_empty()
+		_income.visible = show_rate
 		_income.text = rate_line
+		if _income_row != null:
+			_income_row.visible = show_rate
+		if _income_mark != null:
+			_income_mark.visible = show_rate
 
 
-func _add_tool_slot(parent: HBoxContainer, tool: int) -> void:
-	var slot := VBoxContainer.new()
-	slot.add_theme_constant_override("separation", 2)
-	slot.alignment = BoxContainer.ALIGNMENT_CENTER
+func _section_frame_width() -> float:
+	var pit := Tuning.pit_grid_rect()
+	var hole_left: float = pit.position.x - Tuning.chunk_pad
+	var left_w: float = hole_left - RAIL_PAD - 10.0
+	return minf(Tuning.hud_rail_w() - RAIL_PAD, maxf(left_w, 1.0))
+
+
+func _section_inner(frame: Rect2, title: Label = null) -> Rect2:
+	var title_h: float = _section_title_h(maxf(frame.size.x - SECTION_PAD * 2.0, 1.0))
+	if title != null:
+		title_h = maxf(title.size.y, float(title.get_theme_font_size("font_size")) + 2.0)
+	var top: float = frame.position.y + SECTION_TITLE_TOP + title_h + RAIL_LABEL_GAP
+	var left: float = frame.position.x + SECTION_PAD
+	var width: float = maxf(frame.size.x - SECTION_PAD * 2.0, 1.0)
+	var height: float = maxf(frame.end.y - SECTION_PAD - top, 1.0)
+	return Rect2(Vector2(left, top), Vector2(width, height))
+
+
+func _section_title_h(copy_w: float) -> float:
+	var h: float = 24.0
+	if _tools_label != null:
+		Ui.apply_field_section(_tools_label, TOOLS_TITLE, copy_w)
+		_paint_rail_title(_tools_label)
+		h = maxf(h, maxf(_tools_label.get_combined_minimum_size().y, float(_tools_label.get_theme_font_size("font_size")) + 2.0))
+	if _finds_label != null:
+		Ui.apply_field_section(_finds_label, FINDS_TITLE, copy_w)
+		_paint_rail_title(_finds_label)
+		h = maxf(h, maxf(_finds_label.get_combined_minimum_size().y, float(_finds_label.get_theme_font_size("font_size")) + 2.0))
+	return h
+
+
+func _tool_card_size() -> Vector2:
+	var frame_w: float = _section_frame_width()
+	var pit := Tuning.pit_grid_rect()
+	var inner := _section_inner(Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y)))
+	return _tool_card_size_in(inner)
+
+
+func _tool_card_size_in(inner: Rect2) -> Vector2:
+	var n: int = _visible_tool_count()
+	var sep: float = 6.0
+	if _tool_rail != null:
+		sep = float(_tool_rail.get_theme_constant("separation"))
+	var avail: float = maxf(inner.size.y - sep * float(maxi(n - 1, 0)), TOOL_CARD_MIN_H)
+	var card_h: float = clampf(floor(avail / float(n)), TOOL_CARD_MIN_H, TOOL_ROW.y)
+	return Vector2(maxf(inner.size.x, 1.0), card_h)
+
+
+func _visible_tool_count() -> int:
+	var n: int = 0
+	for raw in _tool_slots:
+		var slot: Control = raw as Control
+		if slot != null and slot.visible:
+			n += 1
+	return n if n > 0 else 1
+
+
+func _tool_icon_px(card_h: float) -> float:
+	if card_h + 0.5 < TOOL_ROW.y:
+		return 28.0
+	return Ui.RAIL_TOOL_ICON
+
+
+func _tool_stack_gap(card_h: float) -> float:
+	if card_h + 0.5 < TOOL_ROW.y:
+		return TOOL_STACK_GAP_TIGHT
+	return TOOL_STACK_GAP
+
+
+func _tool_card_inset(card_h: float) -> float:
+	if card_h + 0.5 < TOOL_ROW.y:
+		return TOOL_CARD_INSET_TIGHT
+	return TOOL_CARD_INSET
+
+
+func _make_section_frame(node_name: String) -> Panel:
+	var frame := Panel.new()
+	frame.name = node_name
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_theme_stylebox_override("panel", Ui.field_frame_box())
+	return frame
+
+
+func _place_section_frame(frame: Panel, rect: Rect2) -> void:
+	if frame == null:
+		return
+	frame.anchor_left = 0.0
+	frame.anchor_top = 0.0
+	frame.anchor_right = 0.0
+	frame.anchor_bottom = 0.0
+	frame.position = rect.position
+	frame.size = rect.size
+	var parent: Node = frame.get_parent()
+	if parent != null:
+		parent.move_child(frame, 0)
+
+
+func _make_rail_title(node_name: String) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.focus_mode = Control.FOCUS_NONE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	Ui.apply_text_only(label)
+	return label
+
+
+func _layout_section_title(label: Label, text: String, frame: Rect2, title_top: float = SECTION_TITLE_TOP) -> void:
+	if label == null:
+		return
+	var copy_w: float = maxf(frame.size.x - SECTION_PAD * 2.0, 1.0)
+	Ui.apply_field_section(label, text, copy_w)
+	_paint_rail_title(label)
+	var label_h: float = maxf(label.get_combined_minimum_size().y, float(label.get_theme_font_size("font_size")) + 2.0)
+	_place_rail_title(label, Vector2(frame.position.x + SECTION_PAD, frame.position.y + title_top), Vector2(copy_w, label_h))
+
+
+func _paint_rail_title(label: Label) -> void:
+	if label == null:
+		return
+	label.add_theme_color_override("font_color", Ui.INK)
+
+
+func _place_rail_title(label: Label, pos: Vector2, size: Vector2) -> void:
+	if label == null:
+		return
+	label.anchor_left = 0.0
+	label.anchor_top = 0.0
+	label.anchor_right = 0.0
+	label.anchor_bottom = 0.0
+	var min_sz: Vector2 = label.get_combined_minimum_size()
+	var w: float = maxf(min_sz.x, 1.0)
+	var h: float = maxf(min_sz.y, float(label.get_theme_font_size("font_size")))
+	label.size = Vector2(w, h)
+	label.position = Vector2(pos.x + (size.x - w) * 0.5, pos.y)
+
+
+func _apply_tool_card_size(slot: Control, button: Button, card: Vector2) -> void:
+	if slot != null:
+		slot.custom_minimum_size = card
+		slot.size = card
+		slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	if button == null:
+		return
+	button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	button.position = Vector2.ZERO
+	button.custom_minimum_size = card
+	button.size = card
+	var stack: VBoxContainer = button.get_node_or_null("ToolStack") as VBoxContainer
+	if stack != null:
+		var inset: float = _tool_card_inset(card.y)
+		var inner := Vector2(maxf(card.x - inset * 2.0, 1.0), maxf(card.y - inset * 2.0, 1.0))
+		stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		stack.position = Vector2(inset, inset)
+		stack.size = inner
+		stack.alignment = BoxContainer.ALIGNMENT_BEGIN
+		stack.add_theme_constant_override("separation", int(_tool_stack_gap(card.y)))
+		var icon: Control = stack.get_node_or_null("ToolIcon") as Control
+		if icon != null:
+			Ui.apply_rail_tool_icon(icon, _tool_icon_px(card.y))
+		var name: Label = stack.get_node_or_null("ToolName") as Label
+		if name != null:
+			var name_size: int = 11 if card.y + 0.5 < TOOL_ROW.y else Ui.META_SIZE
+			_fit_rail_label(name, name.text, Ui.INK, name_size, inner.x)
+			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var role: Label = stack.get_node_or_null("ToolRole") as Label
+		if role != null:
+			_fit_tool_role(role, inner.x, card.y)
+			var used: float = 0.0
+			if icon != null:
+				used += icon.custom_minimum_size.y
+			if name != null:
+				used += name.get_combined_minimum_size().y
+			used += float(stack.get_theme_constant("separation")) * 2.0
+			var role_room: float = maxf(inner.y - used, 8.0)
+			role.custom_minimum_size.y = minf(role.custom_minimum_size.y, role_room)
+			role.size.y = role.custom_minimum_size.y
+		stack.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	_place_tool_key(button, card)
+
+
+func _add_tool_slot(parent: VBoxContainer, tool: int) -> void:
+	var card: Vector2 = _tool_card_size()
+	var slot := Control.new()
+	slot.custom_minimum_size = card
+	slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	parent.add_child(slot)
 	_tool_slots.append(slot)
 	_slot_tools.append(tool)
 
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(72, 44)
+	button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	button.position = Vector2.ZERO
+	button.custom_minimum_size = card
+	button.size = card
 	button.text = ""
-	Ui.apply_button(button)
+	button.clip_text = true
+	button.clip_contents = false
+	button.focus_mode = Control.FOCUS_NONE
+	Ui.apply_hud_button(button)
 	button.pressed.connect(_on_tool_pressed.bind(tool))
+	button.mouse_entered.connect(_on_tool_hover.bind(tool))
+	button.mouse_exited.connect(_on_tool_unhover.bind(tool))
 	slot.add_child(button)
+
+	var stack := VBoxContainer.new()
+	stack.name = "ToolStack"
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.alignment = BoxContainer.ALIGNMENT_BEGIN
+	stack.add_theme_constant_override("separation", int(TOOL_STACK_GAP))
+	stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	var inset: float = _tool_card_inset(card.y)
+	stack.position = Vector2(inset, inset)
+	stack.size = Vector2(maxf(card.x - inset * 2.0, 1.0), maxf(card.y - inset * 2.0, 1.0))
+	button.add_child(stack)
+
 	var icon := Control.new()
+	icon.name = "ToolIcon"
 	icon.set_script(ToolIcon)
-	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-	icon.offset_left = 8
-	icon.offset_right = -8
-	icon.offset_top = 6
-	icon.offset_bottom = -6
-	button.add_child(icon)
+	Ui.apply_rail_tool_icon(icon, _tool_icon_px(card.y))
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(icon)
 	if icon.has_method("setup"):
 		icon.setup(tool, _tool_colors[tool])
 
+	var name := Label.new()
+	name.name = "ToolName"
+	name.text = GameState.tool_display_name(tool)
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_fit_rail_label(name, name.text, Ui.INK, Ui.META_SIZE, stack.size.x)
+	stack.add_child(name)
+
+	var role := Label.new()
+	role.name = "ToolRole"
+	role.text = GameState.tool_role_line(tool)
+	role.visible = true
+	role.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	role.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	role.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fit_tool_role(role, stack.size.x, card.y)
+	stack.add_child(role)
+	_tool_roles.append(role)
+
 	var key := Label.new()
+	key.name = "ToolKey"
 	key.text = Tuning.hotkey_for_tool(tool)
-	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	key.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(key, 12, Ui.MUTED)
-	slot.add_child(key)
+	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	key.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	button.add_child(key)
+
 	_tool_buttons.append(button)
+	_apply_tool_card_size(slot, button, card)
 
 
-func _place_tool_role(tool: int) -> void:
-	if _tool_role == null:
+func _fit_tool_role(role: Label, max_w: float, card_h: float = TOOL_ROW.y) -> void:
+	if role == null:
 		return
-	_tool_role.text = GameState.tool_role_line(tool)
-	_tool_role.visible = visible and not _tool_role.text.is_empty()
-	var slot_i: int = _slot_tools.find(tool)
-	if slot_i < 0 or slot_i >= _tool_slots.size():
+	var tight: bool = card_h + 0.5 < TOOL_ROW.y
+	var size: int = 10 if tight else 11
+	Ui.apply_copy(role, role.text, size, Ui.MUTED, max_w, true)
+	role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	role.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	role.max_lines_visible = 2
+	role.clip_text = false
+	role.add_theme_constant_override("line_spacing", -4 if tight else -3)
+	if tight:
+		role.custom_minimum_size.y = minf(role.custom_minimum_size.y, 16.0)
+		role.size.y = role.custom_minimum_size.y
+
+
+func _fit_rail_label(label: Label, text: String, color: Color, preferred: int, max_w: float) -> void:
+	Ui.apply_copy(label, text, preferred, color, max_w)
+
+
+func _place_tool_key(button: Button, card: Vector2) -> void:
+	if button == null:
 		return
-	var slot: Control = _tool_slots[slot_i]
-	if _tool_role.get_parent() != slot:
-		var prior: Node = _tool_role.get_parent()
-		if prior != null:
-			prior.remove_child(_tool_role)
-		slot.add_child(_tool_role)
+	var key: Label = button.get_node_or_null("ToolKey") as Label
+	if key == null:
+		return
+	_fit_rail_label(key, key.text, Ui.MUTED, Ui.META_SIZE, 16.0)
+	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	key.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	var w: float = maxf(key.get_combined_minimum_size().x, key.custom_minimum_size.x)
+	var h: float = maxf(key.get_combined_minimum_size().y, float(Ui.META_SIZE) + 2.0)
+	key.size = Vector2(maxf(w, 1.0), maxf(h, 1.0))
+	key.position = Vector2(card.x - key.size.x - 6.0, 4.0)
+
+
+func _on_tool_hover(tool: int) -> void:
+	_hovered_tool = tool
+	_sync_tool_roles()
+
+
+func _on_tool_unhover(tool: int) -> void:
+	if _hovered_tool == tool:
+		_hovered_tool = -1
+	_sync_tool_roles()
+
+
+func _sync_tool_roles() -> void:
+	for i in _tool_roles.size():
+		var role: Label = _tool_roles[i]
+		if role == null:
+			continue
+		role.visible = i < _tool_slots.size() and _tool_slots[i].visible
 
 
 func _on_tool_pressed(tool: int) -> void:
@@ -402,9 +758,10 @@ func _highlight_tool(tool: int) -> void:
 			continue
 		var on: bool = id == tool
 		_tool_buttons[i].disabled = false
-		Ui.apply_button(_tool_buttons[i], on)
-		_tool_buttons[i].modulate = Color.WHITE if on else Color(0.78, 0.74, 0.68)
-	_place_tool_role(tool)
+		Ui.apply_tool_button(_tool_buttons[i], on)
+		_tool_buttons[i].modulate = Color.WHITE
+	_sync_tool_roles()
+	_layout_chrome()
 
 
 func _apply_tool_flashes() -> void:
@@ -417,64 +774,192 @@ func _apply_tool_flashes() -> void:
 		_tool_buttons[i].modulate = Color("FFE08A").lerp(_tool_buttons[i].modulate, 1.0 - glow * pulse)
 
 
-func _refresh_goal_chrome() -> void:
-	if _chip == null:
-		return
-	var shop_id: String = GameState.next_shop_id(_equipped_tool)
-	var show_chip: bool = visible and not shop_id.is_empty()
-	_chip.visible = show_chip
-	if show_chip:
-		var cost: int = GameState.cost_of(shop_id)
-		var caption: String = GameState.next_goal_chip_text(shop_id, cost)
-		_chip.text = caption
-		var can_buy: bool = GameState.can_buy(shop_id)
-		_chip.disabled = not can_buy
-		Ui.apply_button(_chip, can_buy)
-		_chip.add_theme_font_size_override("font_size", 13)
-		_chip.add_theme_color_override("font_color", Ui.INK)
-		_chip.add_theme_color_override("font_disabled_color", Ui.MUTED)
-		if not _goal_key.is_empty() and shop_id != _goal_key:
-			_goal_pop = 1.0
-		_goal_key = shop_id
-	else:
-		_chip.text = ""
-		_chip.disabled = true
-		_goal_key = ""
-	_layout_footer()
-
-
-func _layout_footer() -> void:
-	var footer: float = Tuning.footer_top()
-	var row_h: float = Tuning.footer_goal_h()
-	var side: float = 16.0
-	var chip_w: float = 360.0
-	var available: float = maxf(360.0, Tuning.view_w - side * 2.0)
-	chip_w = minf(chip_w, available)
-	var chip_x: float = (Tuning.view_w - chip_w) * 0.5
-	_chip.anchor_left = 0.0
-	_chip.anchor_top = 0.0
-	_chip.anchor_right = 0.0
-	_chip.anchor_bottom = 0.0
-	_chip.position = Vector2(chip_x, footer)
-	_chip.size = Vector2(chip_w, row_h)
-	_chip.pivot_offset = Vector2(chip_w * 0.5, row_h * 0.5)
-	var gutter: float = Tuning.footer_menu_gutter()
-	var find_top: float = Tuning.footer_find_top()
+func _layout_chrome() -> void:
+	var pit_top: float = Tuning.hud_h + 8.0
+	_wallet.anchor_left = 0.0
+	_wallet.anchor_top = 0.0
+	_wallet.anchor_right = 0.0
+	_wallet.anchor_bottom = 0.0
+	_wallet.position = Vector2(12, 6)
+	_reserve_wallet_width()
+	_wallet.reset_size()
+	var wallet_min: Vector2 = _wallet.get_combined_minimum_size()
+	var wallet_w: float = maxf(_wallet_reserved_width(), wallet_min.x)
+	_wallet.size = Vector2(wallet_w, maxf(_wallet.size.y, wallet_min.y))
+	var pit := Tuning.pit_grid_rect()
+	pit_top = pit.position.y
+	if _clock != null:
+		_clock.anchor_left = 0.0
+		_clock.anchor_top = 0.0
+		_clock.anchor_right = 0.0
+		_clock.anchor_bottom = 0.0
+		_clock.size = Vector2(CLOCK_SIZE, CLOCK_SIZE)
+	if _clock_time != null:
+		Ui.apply_copy(_clock_time, _clock_time.text, CLOCK_TIME_SIZE, Ui.PAPER_DEEP, 180.0)
+		_clock_time.size = _clock_time.get_combined_minimum_size()
+	if _clock_caption != null:
+		Ui.apply_copy(_clock_caption, _clock_caption.text, 16, _clock_caption.get_theme_color("font_color") if _clock_caption.has_theme_color_override("font_color") else Ui.PAPER_DEEP, 200.0)
+		_clock_caption.size = _clock_caption.get_combined_minimum_size()
+	var text_w: float = 0.0
+	var text_h: float = 0.0
+	if _clock_time != null:
+		text_w = maxf(text_w, _clock_time.size.x)
+		text_h += _clock_time.size.y
+	if _clock_caption != null:
+		text_w = maxf(text_w, _clock_caption.size.x)
+		text_h += 4.0 + _clock_caption.size.y
+	if _end_btn != null:
+		_end_btn.custom_minimum_size = Vector2(maxf(_end_btn.custom_minimum_size.x, 96.0), HEADER_BTN_H)
+		_end_btn.size = Vector2(maxf(_end_btn.get_combined_minimum_size().x, _end_btn.custom_minimum_size.x), HEADER_BTN_H)
+	var cluster_w: float = CLOCK_SIZE + CLOCK_GAP + text_w
+	var cluster_h: float = maxf(CLOCK_SIZE, text_h)
+	var header_limit: float = minf(pit_top, Tuning.hud_h) - 4.0
+	var cluster_y: float = maxf(4.0, (header_limit - cluster_h) * 0.5)
+	if cluster_y + cluster_h > header_limit:
+		cluster_y = maxf(4.0, header_limit - cluster_h)
+	var cluster_x: float = (Tuning.view_w - cluster_w) * 0.5
+	var wallet_right: float = _wallet.position.x + _wallet.size.x + 12.0 if _wallet != null else 12.0
+	if cluster_x < wallet_right:
+		cluster_x = wallet_right
+	if _clock != null:
+		_clock.position = Vector2(cluster_x, cluster_y + (cluster_h - CLOCK_SIZE) * 0.5)
+	if _clock_time != null:
+		_clock_time.position = Vector2(cluster_x + CLOCK_SIZE + CLOCK_GAP, cluster_y + (cluster_h - text_h) * 0.5)
+	if _clock_caption != null:
+		_clock_caption.position = Vector2(cluster_x + CLOCK_SIZE + CLOCK_GAP, _clock_time.position.y + _clock_time.size.y + 4.0)
+	if _end_btn != null:
+		_end_btn.anchor_left = 0.0
+		_end_btn.anchor_top = 0.0
+		_end_btn.anchor_right = 0.0
+		_end_btn.anchor_bottom = 0.0
+		_end_btn.position = Vector2(Tuning.view_w - RAIL_PAD - _end_btn.size.x, Tuning.view_h - RAIL_PAD - _end_btn.size.y)
+	if _header_bar != null:
+		var header_w: float = _header_cluster_width()
+		var header_y: float = 6.0
+		_header_bar.anchor_left = 0.0
+		_header_bar.anchor_top = 0.0
+		_header_bar.anchor_right = 0.0
+		_header_bar.anchor_bottom = 0.0
+		_header_bar.position = Vector2(Tuning.view_w - RAIL_PAD - header_w, header_y)
+		_header_bar.size = Vector2(maxf(header_w, 1.0), HEADER_BTN_H)
+		_header_bar.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	_place_header_marks()
+	var frame_w: float = _section_frame_width()
+	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y))
+	_place_section_frame(_tools_frame, tools_frame)
+	_layout_section_title(_tools_label, TOOLS_TITLE, tools_frame)
+	var tools_inner := _section_inner(tools_frame)
+	var card: Vector2 = _tool_card_size_in(tools_inner)
+	if _tool_rail != null:
+		_tool_rail.anchor_left = 0.0
+		_tool_rail.anchor_top = 0.0
+		_tool_rail.anchor_right = 0.0
+		_tool_rail.anchor_bottom = 0.0
+		_tool_rail.position = tools_inner.position
+		for i in _tool_slots.size():
+			var btn: Button = _tool_buttons[i] if i < _tool_buttons.size() else null
+			_apply_tool_card_size(_tool_slots[i], btn, card)
+		_tool_rail.size = Vector2(tools_inner.size.x, tools_inner.size.y)
+		_tool_rail.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	var south_bottom: float = Tuning.pit_face_bottom() + Tuning.chunk_front
+	var find_top: float = maxf(Tuning.footer_find_top(), south_bottom + 14.0)
 	var find_bottom: float = Tuning.view_h - 8.0
+	var finds_band := Rect2(Vector2(pit.position.x, find_top), Vector2(maxf(160.0, pit.size.x), maxf(1.0, find_bottom - find_top)))
+	_place_section_frame(_finds_frame, finds_band)
+	_layout_section_title(_finds_label, FINDS_TITLE, finds_band, 10.0)
+	var finds_top: float = finds_band.position.y + 10.0
+	if _finds_label != null:
+		finds_top = _finds_label.position.y + _finds_label.size.y + 6.0
 	_find_box.anchor_left = 0.0
 	_find_box.anchor_top = 0.0
 	_find_box.anchor_right = 0.0
 	_find_box.anchor_bottom = 0.0
-	var find_h: float = maxf(1.0, find_bottom - find_top)
 	_find_box.custom_minimum_size = Vector2(0, 0)
-	_find_box.position = Vector2(gutter, find_top)
-	_find_box.size = Vector2(maxf(160.0, Tuning.view_w - gutter * 2.0), find_h)
+	_find_box.position = Vector2(finds_band.position.x, finds_top)
+	_find_box.size = Vector2(finds_band.size.x, maxf(find_bottom - finds_top - 6.0, 1.0))
 
 
-func _on_next_chip() -> void:
-	var shop_id: String = GameState.next_shop_id(_equipped_tool)
-	if shop_id.is_empty() or not GameState.buy(shop_id):
-		return
-	GameState.save_game()
-	_goal_pop = 1.0
-	_refresh_goal_chrome()
+func _layout_footer() -> void:
+	_layout_chrome()
+
+
+func _header_cluster_width() -> float:
+	if _header_bar == null:
+		return 1.0
+	var sep: float = float(_header_bar.get_theme_constant("separation"))
+	var width: float = 0.0
+	var shown: int = 0
+	for raw in _header_bar.get_children():
+		var child: Control = raw as Control
+		if child == null or not child.visible:
+			continue
+		width += maxf(child.get_combined_minimum_size().x, child.custom_minimum_size.x)
+		shown += 1
+	if shown > 1:
+		width += sep * float(shown - 1)
+	return maxf(width, _header_bar.get_combined_minimum_size().x)
+
+
+func _place_header_marks() -> void:
+	for raw in [_menu_btn, _end_btn]:
+		var btn: Button = raw as Button
+		if btn == null:
+			continue
+		ShopIcon.place_left_of_label(btn, btn.get_node_or_null("ActionMark") as Control)
+
+
+func _make_header_button(text: String, pressed: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	var font: Font = Ui.display_font()
+	var text_w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, Ui.META_SIZE).x
+	btn.custom_minimum_size = Vector2(maxf(96.0, ceili(text_w + 32.0 + Ui.ACTION_ICON + Ui.ICON_GAP)), HEADER_BTN_H)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.clip_text = false
+	btn.autowrap_mode = TextServer.AUTOWRAP_OFF
+	btn.add_theme_font_size_override("font_size", Ui.META_SIZE)
+	Ui.apply_hud_button(btn)
+	btn.pressed.connect(pressed)
+	var glyph: String = ShopIcon.glyph_for_action(text)
+	if not glyph.is_empty():
+		var mark: Control = ShopIcon.new()
+		mark.name = "ActionMark"
+		ShopIcon.apply_action(mark)
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if mark.has_method("setup"):
+			mark.setup(glyph, Ui.GOLD)
+		btn.add_child(mark)
+	return btn
+
+
+func _wallet_rate_text_width() -> float:
+	var font: Font = Ui.display_font()
+	return font.get_string_size(WALLET_RATE_SAMPLE, HORIZONTAL_ALIGNMENT_LEFT, -1, Ui.CAPTION_SIZE).x
+
+
+func _wallet_text_col_width() -> float:
+	var font: Font = Ui.display_font()
+	var money_w: float = font.get_string_size(WALLET_MONEY_SAMPLE, HORIZONTAL_ALIGNMENT_LEFT, -1, Ui.WALLET_SIZE).x
+	var rate_row: float = _wallet_rate_text_width() + Ui.ACTION_ICON + Ui.ICON_GAP
+	return maxf(money_w, rate_row)
+
+
+func _wallet_reserved_width() -> float:
+	var pad_left: float = 8.0
+	var pad_right: float = WALLET_RIGHT_PAD
+	if _wallet != null:
+		var box: StyleBox = _wallet.get_theme_stylebox("panel")
+		if box != null:
+			pad_left = box.content_margin_left
+			pad_right = box.content_margin_right
+	return pad_left + 32.0 + 8.0 + _wallet_text_col_width() + pad_right
+
+
+func _reserve_wallet_width() -> void:
+	var text_w: float = _wallet_text_col_width()
+	if _money != null:
+		_money.custom_minimum_size.x = text_w
+	if _income != null:
+		_income.custom_minimum_size.x = _wallet_rate_text_width()
+	if _wallet != null:
+		_wallet.custom_minimum_size.x = _wallet_reserved_width()

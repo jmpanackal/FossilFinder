@@ -30,6 +30,7 @@ func _run() -> void:
 	_test_quotas_match_playable_anatomy()
 	_test_set_copies_fill_the_hall()
 	_test_first_piece_unveils_later_pieces_grow()
+	_test_new_piece_type_re_ribbons_and_names_the_bone()
 	_test_extra_after_quota_sells_for_more()
 	_test_unique_extra_stays_the_normal_sale()
 	_test_player_is_told_about_sale_and_progress()
@@ -49,6 +50,10 @@ func _reset() -> void:
 	GS.featured_stand_id = ""
 	GS.pending_unveils.clear()
 	GS.unveil_spike_left = 0.0
+	if "unveil_rush_stacks" in GS:
+		GS.unveil_rush_stacks = 0
+	if "unveil_rush_unit" in GS:
+		GS.unveil_rush_unit = 0.0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
 	GS.apply_upgrades()
@@ -149,6 +154,24 @@ func _test_first_piece_unveils_later_pieces_grow() -> void:
 	_assert(_count("stegosaurus_foot") == 2, "second foot grows the mount")
 	_assert(not GS.stand_has_pending_unveil("stegosaurus"), "later feet do not re-ribbon")
 	_assert(bool(GS.stand_is_filled("stegosaurus")), "the stand stays filled while the set grows")
+
+
+func _test_new_piece_type_re_ribbons_and_names_the_bone() -> void:
+	_reset()
+	GS.install_find("stegosaurus_foot", "Stegosaurus Foot", 1.0, true)
+	GS.unveil_stand("stegosaurus")
+	GS.install_find("stegosaurus_plate", "Stegosaurus Plate", 1.0, true)
+	_assert(bool(GS.stand_has_pending_unveil("stegosaurus")), "a new plate type re-ribbons the stand")
+	_assert(GS.has_method("pending_unveil_label"), "GameState names the waiting bone")
+	if GS.has_method("pending_unveil_label"):
+		var label: String = str(GS.call("pending_unveil_label", "stegosaurus"))
+		_assert(label.to_lower().find("plate") >= 0, "waiting copy names the plate")
+		_assert(label.to_lower().find("stegosaurus plate") >= 0, "waiting copy is the plate, not just the dino")
+	if GS.has_method("unveil_title"):
+		var title: String = str(GS.call("unveil_title", "stegosaurus"))
+		_assert(title.to_lower().begins_with("unveil"), "unveil title starts with Unveil")
+		_assert(title.to_lower().find("plate") >= 0, "unveil title names the plate")
+		_assert(title.to_lower().find("stegosaurus.") < 0, "unveil title does not treat the whole stand as new")
 
 
 func _test_extra_after_quota_sells_for_more() -> void:

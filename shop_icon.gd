@@ -1,5 +1,7 @@
 extends Control
 
+const Ui := preload("res://ui_style.gd")
+
 ## Drawn shop glyphs. Tool shapes match tool_icon.gd; extras cover site, exhibit, ranks, and locked chests.
 
 var glyph: String = "shovel"
@@ -9,6 +11,7 @@ var muted: bool = false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	resized.connect(queue_redraw)
 
 
 func setup(kind: String, color: Color, dim: bool = false) -> void:
@@ -80,6 +83,12 @@ static func glyph_for(id: String) -> String:
 			return "crowds"
 		"restoration":
 			return "restore"
+		"unveil_time":
+			return "shift"
+		"unveil_crowd":
+			return "crowds"
+		"spotlight":
+			return "spotlight"
 		_:
 			return "click"
 
@@ -100,6 +109,28 @@ static func glyph_for_cat(cat: String) -> String:
 			return "exhibit"
 		_:
 			return "hands"
+
+
+static func glyph_for_action(label: String) -> String:
+	match label:
+		"Menu":
+			return "gear"
+		"Museum":
+			return "exhibit"
+		"Upgrades":
+			return "wrench"
+		"End shift":
+			return "shift"
+		_:
+			return ""
+
+
+static func apply_action(mark: Control) -> void:
+	Ui.apply_action_icon(mark)
+
+
+static func place_left_of_label(button: Button, mark: Control, gap: float = -1.0) -> void:
+	Ui.place_icon_left_of_label(button, mark, Ui.ICON_GAP if gap < 0.0 else gap)
 
 
 func _draw() -> void:
@@ -157,6 +188,8 @@ func _draw() -> void:
 			_draw_hired(c, k, ink)
 		"lighting":
 			_draw_lighting(c, k, ink)
+		"spotlight":
+			_draw_spotlight(c, k, ink)
 		"bench":
 			_draw_bench(c, k, ink)
 		"case":
@@ -169,6 +202,10 @@ func _draw() -> void:
 			_draw_crowds(c, k, ink)
 		"restore":
 			_draw_restore(c, k, ink)
+		"gear":
+			_draw_gear(c, k, ink)
+		"wrench":
+			_draw_wrench(c, k, ink)
 		_:
 			_draw_hands(c, k, ink)
 
@@ -278,14 +315,14 @@ func _draw_shift(c: Vector2, k: float, ink: Color) -> void:
 
 
 func _draw_soil(c: Vector2, k: float, ink: Color) -> void:
-	draw_circle(c + Vector2(0, 2) * k, 9.0 * k, ink)
-	draw_circle(c + Vector2(-2, 0) * k, 2.2 * k, Color("2A2118"))
-	draw_line(c + Vector2(-6, 8) * k, c + Vector2(8, 8) * k, ink.darkened(0.25), 2.0 * k)
+	draw_circle(c, 9.0 * k, ink)
+	draw_circle(c + Vector2(-2, -2) * k, 2.2 * k, Color("2A2118"))
+	draw_line(c + Vector2(-6, 6) * k, c + Vector2(6, 6) * k, ink.darkened(0.25), 2.0 * k)
 
 
 func _draw_claim(c: Vector2, k: float, ink: Color) -> void:
-	draw_rect(Rect2(c + Vector2(-11, -7) * k, Vector2(16, 11) * k), ink, false, 1.8 * k)
-	draw_rect(Rect2(c + Vector2(-5, -3) * k, Vector2(16, 11) * k), ink.lightened(0.12), false, 2.0 * k)
+	draw_rect(Rect2(c + Vector2(-10, -8) * k, Vector2(16, 12) * k), ink, false, 1.8 * k)
+	draw_rect(Rect2(c + Vector2(-6, -4) * k, Vector2(16, 12) * k), ink.lightened(0.12), false, 2.0 * k)
 
 
 func _draw_bone(c: Vector2, k: float, ink: Color, scale_mul: float) -> void:
@@ -338,6 +375,17 @@ func _draw_lighting(c: Vector2, k: float, ink: Color) -> void:
 	draw_line(c + Vector2(-3, 11) * k, c + Vector2(3, 11) * k, ink, 2.0 * k)
 
 
+func _draw_spotlight(c: Vector2, k: float, ink: Color) -> void:
+	var cone := PackedVector2Array([
+		c + Vector2(0, -12) * k,
+		c + Vector2(-10, 10) * k,
+		c + Vector2(10, 10) * k,
+	])
+	draw_colored_polygon(cone, ink.lightened(0.08))
+	draw_circle(c + Vector2(0, -12) * k, 3.2 * k, ink)
+	draw_circle(c + Vector2(0, 6) * k, 4.5 * k, ink.lightened(0.2))
+
+
 func _draw_bench(c: Vector2, k: float, ink: Color) -> void:
 	draw_rect(Rect2(c + Vector2(-13, -2) * k, Vector2(26, 4) * k), ink)
 	draw_rect(Rect2(c + Vector2(-11, 2) * k, Vector2(3, 10) * k), ink.darkened(0.1))
@@ -381,6 +429,24 @@ func _draw_crowds(c: Vector2, k: float, ink: Color) -> void:
 func _draw_restore(c: Vector2, k: float, ink: Color) -> void:
 	_draw_brush(c + Vector2(-2, 2) * k, k * 0.78, ink)
 	_draw_star(c + Vector2(8, -9) * k, k * 0.62, ink.lightened(0.2))
+
+
+func _draw_gear(c: Vector2, k: float, ink: Color) -> void:
+	var r: float = 7.4 * k
+	for i in 6:
+		var a: float = -PI * 0.5 + float(i) * TAU / 6.0
+		var tip: Vector2 = c + Vector2(cos(a), sin(a)) * (r + 4.2 * k)
+		var left: Vector2 = c + Vector2(cos(a - 0.32), sin(a - 0.32)) * r
+		var right: Vector2 = c + Vector2(cos(a + 0.32), sin(a + 0.32)) * r
+		draw_colored_polygon(PackedVector2Array([left, tip, right]), ink)
+	draw_circle(c, r, ink)
+	draw_circle(c, 2.8 * k, Color("2A2118"))
+
+
+func _draw_wrench(c: Vector2, k: float, ink: Color) -> void:
+	draw_line(c + Vector2(-8, 8) * k, c + Vector2(6, -5) * k, ink, 3.6 * k)
+	draw_arc(c + Vector2(8, -8) * k, 5.4 * k, PI * 0.2, PI * 1.2, 10, ink, 2.6 * k)
+	draw_rect(Rect2(c + Vector2(-12, 4) * k, Vector2(8, 7) * k), ink)
 
 
 func _draw_star(c: Vector2, k: float, ink: Color) -> void:

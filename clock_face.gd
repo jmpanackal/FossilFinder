@@ -6,7 +6,7 @@ var time_max: float = 60.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(72, 72)
+	custom_minimum_size = Vector2(44, 44)
 
 
 func set_time(left: float, maximum: float) -> void:

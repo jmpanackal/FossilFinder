@@ -18,7 +18,7 @@ func _run() -> void:
 	Site = load("res://site_backdrop.gd") as GDScript
 	_test_script_exists()
 	_test_ground_is_dirt_family_not_void()
-	_test_sky_is_not_void()
+	_test_ground_fills_the_window()
 	_test_pit_cutout_matches_chunk()
 	_test_site_matches_the_pit_camera()
 	_test_chunk_hole_matches_the_cutout()
@@ -26,10 +26,14 @@ func _run() -> void:
 	_test_section_walls_only_on_real_steps()
 	_test_front_rim_has_no_chocolate_slab()
 	_test_pit_rim_is_a_thin_inset()
+	_test_north_edge_recedes_into_the_ground()
+	_test_north_face_fill_is_darker_than_field()
+	_test_north_pad_is_shaft_dark_not_field()
 	_test_chunk_is_not_a_floating_sticker()
 	_test_props_stay_off_cells()
 	_test_backdrop_does_not_eat_clicks()
 	_test_clicks_still_hit_dirt()
+	_test_tool_pointer_only_over_pit()
 	_test_dig_site_does_not_paint_a_black_void()
 	_test_clear_color_is_not_void()
 	_test_main_scene_has_backdrop_behind_pit()
@@ -64,13 +68,22 @@ func _test_ground_is_dirt_family_not_void() -> void:
 	_assert(ground_rgb.distance_to(dirt_rgb) < 0.18, "ground is the same dirt family as cell tops")
 
 
-func _test_sky_is_not_void() -> void:
-	if Site == null or not Site.has_method("sky_color"):
-		_assert(Site != null and Site.has_method("sky_color"), "backdrop exposes sky_color")
+func _test_ground_fills_the_window() -> void:
+	if Site == null:
+		_assert(Site != null, "site_backdrop.gd exists")
 		return
-	var sky: Color = Site.sky_color()
-	_assert(not sky.is_equal_approx(Color("140F0C")), "sky is not the old void")
-	_assert(sky.v > 0.55, "sky is a wash, not a dark hole")
+	_layout()
+	_assert(Site.has_method("horizon_y"), "backdrop still reports the old sky edge")
+	if Site.has_method("horizon_y"):
+		_assert(is_equal_approx(float(Site.horizon_y()), 0.0), "ground starts at y = 0 — no sky strip")
+	var src: String = FileAccess.get_file_as_string("res://site_backdrop.gd")
+	_assert(src.find("func _draw_sky") < 0, "no sky-band painter")
+	_assert(src.find("SKY_TOP") < 0, "no blue-gray sky swatch")
+	_assert(src.find("SKY_WASH") < 0, "no pale horizon wash swatch")
+	_assert(src.find("_draw_sky(") < 0, "draw path does not wash the top")
+	if Site.has_method("sky_color"):
+		var sky: Color = Site.sky_color()
+		_assert(sky.is_equal_approx(Site.ground_color()), "sky helper, if kept, is just the field tan")
 
 
 func _test_pit_cutout_matches_chunk() -> void:
@@ -80,19 +93,17 @@ func _test_pit_cutout_matches_chunk() -> void:
 	_layout()
 	var cut: Rect2 = Site.pit_cutout()
 	var pad: float = float(TN.chunk_pad)
-	var expected := Rect2(
-		TN.grid_origin.x - pad,
-		TN.grid_origin.y - pad,
-		float(TN.grid_w) * TN.cell_w + pad * 2.0,
-		float(TN.grid_h) * TN.cell_h + pad
-	)
-	_assert(cut.is_equal_approx(expected), "pit hole matches the dirt chunk top")
+	var cells_top: float = float(TN.grid_origin.y)
+	var cells_h: float = float(TN.grid_h) * TN.cell_h
+	_assert(cut.position.x <= TN.grid_origin.x - pad + 0.5, "cutout still includes the west pad")
+	_assert(cut.end.x >= TN.grid_origin.x + float(TN.grid_w) * TN.cell_w + pad - 0.5, "cutout still includes the east pad")
+	_assert(cut.position.y < cells_top - pad + 0.5, "cutout starts at or above the north pad")
+	_assert(is_equal_approx(cut.end.y, cells_top + cells_h), "cutout south edge still meets the grid")
 	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "cutout still uses the 1024px pit")
-	_assert(Site.has_method("horizon_y"), "backdrop exposes a far-edge sky wash")
+	_assert(Site.has_method("horizon_y"), "backdrop still exposes horizon_y")
 	if Site.has_method("horizon_y"):
-		var horizon: float = float(Site.horizon_y())
-		_assert(horizon >= 8.0 and horizon <= 48.0, "sky is a thin wash at the far edge of the ground")
-		_assert(horizon < cut.position.y - 40.0, "ground continues around the pit, not a landscape taped above it")
+		_assert(is_equal_approx(float(Site.horizon_y()), 0.0), "no far-edge sky wash — ground fills the window")
+		_assert(float(Site.horizon_y()) < cut.position.y - 40.0, "ground continues around the pit, not a landscape taped above it")
 
 
 func _test_chunk_hole_matches_the_cutout() -> void:
@@ -228,6 +239,207 @@ func _test_pit_rim_is_a_thin_inset() -> void:
 	_assert(pit.find("func _draw_rim") >= 0 or pit.find("SiteBackdrop.rim_width") >= 0, "the pit paints the inset rim")
 
 
+func _test_north_edge_recedes_into_the_ground() -> void:
+	_layout()
+	var script: Script = load("res://dig_site.gd") as Script
+	_assert(script != null, "dig site still loads for the north wall")
+	if script == null:
+		return
+	var site: Node = script.new()
+	root.add_child(site)
+	if site.has_method("start_round"):
+		site.call("start_round")
+	_assert(site.has_method("north_face_h"), "pit exposes north face height")
+	if not site.has_method("north_face_h"):
+		site.free()
+		return
+	var face_h: float = float(site.call("north_face_h"))
+	_assert(face_h > 0.0, "north face has height so the pit recedes at the top")
+	_assert(face_h >= float(TN.chunk_pad) - 0.5, "north wall is at least the pad high")
+	var cells_top: float = float(TN.grid_origin.y)
+	var face_top: float = cells_top - face_h
+	var cut: Rect2 = Site.pit_cutout()
+	_assert(face_top >= cut.position.y - 0.5, "north wall stays in the existing pit hole")
+	var header_bottom: float = (float(TN.hud_h) - 36.0) * 0.5 + 36.0
+	_assert(face_top + 0.5 >= header_bottom, "north wall stays under the header actions")
+	if site.has_method("north_face_rect"):
+		var face: Rect2 = site.call("north_face_rect")
+		_assert(face.size.y > 0.0, "north face draw rect has height")
+		_assert(is_equal_approx(face.size.y, face_h), "north face rect matches the exposed height")
+		_assert(face.end.y <= cells_top + 0.5, "north wall meets the first row, it does not cover the play grid")
+		_assert(is_equal_approx(face.size.x, cut.size.x), "north wall spans the hole, not a center stripe")
+	_assert(site.has_method("east_face_rect") and site.has_method("west_face_rect"), "pit exposes east and west interior walls")
+	if site.has_method("east_face_rect") and site.has_method("west_face_rect"):
+		var east: Rect2 = site.call("east_face_rect")
+		var west: Rect2 = site.call("west_face_rect")
+		var pad: float = float(TN.chunk_pad)
+		_assert(is_equal_approx(east.size.x, pad), "east wall uses the existing pad, not a HUD gutter")
+		_assert(is_equal_approx(west.size.x, pad), "west wall uses the existing pad, not a HUD gutter")
+		_assert(east.size.y >= float(TN.grid_h) * TN.cell_h - 0.5, "east wall runs the pit, not a top stripe")
+		_assert(west.size.y >= float(TN.grid_h) * TN.cell_h - 0.5, "west wall runs the pit, not a top stripe")
+		_assert(east.end.x <= cut.end.x + 0.5, "east wall stays in the pit hole")
+		_assert(west.position.x >= cut.position.x - 0.5, "west wall stays in the pit hole")
+		_assert(east.position.x >= float(TN.grid_origin.x) + float(TN.grid_w) * TN.cell_w - 0.5, "east wall sits in the east pad")
+		_assert(west.end.x <= float(TN.grid_origin.x) + 0.5, "west wall sits in the west pad")
+	if Site.has_method("north_rim_h"):
+		_assert(float(Site.north_rim_h()) <= 2.5, "north rim is a crease, not a packed-earth smear")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(src.find("func _draw_north_face") >= 0, "pit draws a north interior wall")
+	_assert(src.find("_draw_north_face()") >= 0, "the draw path actually paints the north wall")
+	_assert(src.find("func _draw_east_face") >= 0 and src.find("func _draw_west_face") >= 0, "pit draws east and west interior walls")
+	_assert(src.find("_draw_east_face()") >= 0 and src.find("_draw_west_face()") >= 0, "the draw path paints both side walls")
+	_assert(src.find("minf(5.0") < 0, "top-row shade is not a 5px dirty band")
+	if site.has_method("_tool_cursor_visible_at"):
+		var on_wall := Vector2(float(TN.grid_origin.x) + float(TN.cell_w) * 2.5, face_top + face_h * 0.4)
+		_assert(not bool(site.call("_tool_cursor_visible_at", on_wall)), "pointer stays off the north wall")
+		if site.has_method("east_face_rect"):
+			var east_wall: Rect2 = site.call("east_face_rect")
+			var on_east := Vector2(east_wall.get_center().x, cells_top + 24.0)
+			_assert(not bool(site.call("_tool_cursor_visible_at", on_east)), "pointer stays off the east wall")
+		var on_dirt: Vector2 = site.call("cell_center", Vector2i(2, 0))
+		_assert(bool(site.call("_tool_cursor_visible_at", on_dirt)), "pointer still shows on the first dirt row")
+	site.free()
+
+
+func _test_north_face_fill_is_darker_than_field() -> void:
+	_layout()
+	_assert(TN.has_method("shaft_interior_color"), "tuning exposes the shared in-shadow shaft shade")
+	if not TN.has_method("shaft_interior_color"):
+		return
+	var field: Color = Site.ground_color()
+	var top: Color = TN.color_for_layer(0)
+	var fill: Color = TN.shaft_interior_color(0)
+	_assert_wall_luminance_in_shadow(fill, top, field, "north fill")
+	var packed_top: Color = TN.color_for_layer(6)
+	var clay_top: Color = TN.color_for_layer(12)
+	var packed_wall: Color = TN.shaft_interior_color(6)
+	var clay_wall: Color = TN.shaft_interior_color(12)
+	_assert_wall_luminance_in_shadow(packed_wall, packed_top, field, "packed shaft")
+	_assert_wall_luminance_in_shadow(clay_wall, clay_top, field, "clay shaft")
+	_assert(not packed_wall.is_equal_approx(fill), "packed shaft keeps local dirt hue")
+	_assert(not clay_wall.is_equal_approx(packed_wall), "clay shaft is not the packed swatch")
+	var script: Script = load("res://dig_site.gd") as Script
+	_assert(script != null, "dig site still loads for north-face fill")
+	if script == null:
+		return
+	var site: Node = script.new()
+	root.add_child(site)
+	if site.has_method("start_round"):
+		site.call("start_round")
+	_assert(site.has_method("north_face_fill_color"), "pit exposes the shared north-face fill")
+	_assert(site.has_method("shaft_wall_color"), "pit exposes per-cell shaft wall color")
+	if site.has_method("north_face_fill_color"):
+		var painted: Color = site.call("north_face_fill_color")
+		_assert(painted.is_equal_approx(fill), "north face uses the shared in-shadow shade")
+		_assert_wall_luminance_in_shadow(painted, top, field, "painted north fill")
+	if site.has_method("shaft_wall_color"):
+		var loose_wall: Color = site.call("shaft_wall_color", 0, 0)
+		_assert_wall_luminance_in_shadow(loose_wall, top, field, "undug north wall")
+		var west_wall: Color = site.call("shaft_wall_color", 0, 1)
+		var last_x: int = TN.grid_w - 1
+		var east_wall: Color = site.call("shaft_wall_color", last_x, 1)
+		_assert_wall_luminance_in_shadow(west_wall, top, field, "undug west interior")
+		_assert_wall_luminance_in_shadow(east_wall, top, field, "undug east interior")
+		var grid: Array = site.get("_top_layer")
+		if grid.size() > 2 and grid[1].size() > 1:
+			grid[1][0] = 6
+			grid[2][0] = 12
+			grid[0][1] = 6
+			if grid[last_x].size() > 1:
+				grid[last_x][1] = 12
+			var dug_packed: Color = site.call("shaft_wall_color", 1, 0)
+			var dug_clay: Color = site.call("shaft_wall_color", 2, 0)
+			var west_packed: Color = site.call("shaft_wall_color", 0, 1)
+			var east_clay: Color = site.call("shaft_wall_color", last_x, 1)
+			_assert_wall_luminance_in_shadow(dug_packed, packed_top, field, "dug packed north wall")
+			_assert_wall_luminance_in_shadow(dug_clay, clay_top, field, "dug clay north wall")
+			_assert_wall_luminance_in_shadow(west_packed, packed_top, field, "packed west interior")
+			_assert_wall_luminance_in_shadow(east_clay, clay_top, field, "clay east interior")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	var north_fn: String = _func_body(src, "_draw_north_face")
+	var west_fn: String = _func_body(src, "_draw_west_face")
+	var east_fn: String = _func_body(src, "_draw_east_face")
+	_assert(north_fn.find("chunk_side_color") < 0, "north painter does not lock chunk_side_color")
+	_assert(west_fn.find("chunk_side_color") < 0, "west painter does not lock chunk_side_color")
+	_assert(east_fn.find("chunk_side_color") < 0, "east painter does not lock chunk_side_color")
+	_assert(north_fn.find("_draw_strata_stack") >= 0 or north_fn.find("shaft_wall_color") >= 0, "north painter paints the remaining dirt stack")
+	_assert(west_fn.find("_draw_shaft_face") >= 0 or west_fn.find("_draw_strata_stack") >= 0, "west painter paints the remaining dirt stack")
+	_assert(east_fn.find("_draw_shaft_face") >= 0 or east_fn.find("_draw_strata_stack") >= 0, "east painter paints the remaining dirt stack")
+	site.free()
+
+
+func _test_north_pad_is_shaft_dark_not_field() -> void:
+	_layout()
+	_assert(Site.has_method("north_pad_rect"), "backdrop exposes the north pad strip")
+	_assert(Site.has_method("shaft_back_color"), "backdrop exposes the excavation-back fill")
+	_assert(Site.has_method("north_lip_y"), "backdrop exposes the field lip above the hole")
+	if not Site.has_method("north_pad_rect") or not Site.has_method("shaft_back_color"):
+		return
+	var field: Color = Site.ground_color()
+	var tan := Color("C4A36A")
+	var shaft: Color = TN.shaft_interior_color(0)
+	var back: Color = Site.shaft_back_color()
+	_assert(back.is_equal_approx(shaft), "open hole back is the shared shaft-interior shade")
+	_assert(not back.is_equal_approx(field), "open hole back is not field tan")
+	_assert(not back.is_equal_approx(tan), "open hole back is not #C4A36A")
+	_assert_wall_luminance_in_shadow(back, TN.color_for_layer(0), field, "north pad back")
+	var pad: Rect2 = Site.north_pad_rect()
+	var lip_y: float = float(Site.north_lip_y()) if Site.has_method("north_lip_y") else pad.position.y
+	var cells_top: float = float(TN.grid_origin.y)
+	_assert(pad.size.y >= float(TN.chunk_pad) - 0.5, "north pad is the whole gap above row 0, not a hairline")
+	_assert(pad.position.y >= lip_y - 0.5, "north pad sits below the field lip")
+	_assert(pad.end.y <= cells_top + 0.5, "north pad stops at the first cell tops")
+	_assert(pad.position.y < cells_top - 8.0, "north pad has real height between lip and row 0")
+	var header_bottom: float = (float(TN.hud_h) - 36.0) * 0.5 + 36.0
+	_assert(pad.position.y + 0.5 >= header_bottom, "north pad does not steal the HUD header")
+	var src: String = FileAccess.get_file_as_string("res://site_backdrop.gd")
+	_assert(src.find("shaft_back_color") >= 0, "backdrop names the excavation-back fill")
+	_assert(src.find("draw_rect(hole, shaft_back_color()") >= 0 or src.find("draw_rect(pad") >= 0 and src.find("shaft_back_color") >= 0, "open hole / north pad is painted shaft-dark")
+	_assert(src.find("if _cover_hole") >= 0, "covered hole can still plug with field tan")
+	var script: Script = load("res://dig_site.gd") as Script
+	_assert(script != null, "dig site still loads for the north pad")
+	if script == null:
+		return
+	var site: Node = script.new()
+	root.add_child(site)
+	if site.has_method("start_round"):
+		site.call("start_round")
+	if site.has_method("north_face_rect"):
+		var face: Rect2 = site.call("north_face_rect")
+		_assert(face.position.y <= pad.position.y + 0.5, "north face starts at the pad")
+		_assert(face.end.y >= pad.end.y - 0.5, "north face fills down to row 0")
+		_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "play cells stay 1024 wide")
+		_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "play cells stay 400 tall")
+	site.free()
+
+
+func _func_body(src: String, name: String) -> String:
+	var start: int = src.find("func %s" % name)
+	if start < 0:
+		return ""
+	var next: int = src.find("\nfunc ", start + 1)
+	if next < 0:
+		return src.substr(start)
+	return src.substr(start, next - start)
+
+
+func _rgb_distance(a: Color, b: Color) -> float:
+	return Vector3(a.r, a.g, a.b).distance_to(Vector3(b.r, b.g, b.b))
+
+
+func _assert_wall_luminance_in_shadow(wall: Color, cell_top: Color, field: Color, label: String) -> void:
+	var wall_l: float = wall.get_luminance()
+	var top_l: float = cell_top.get_luminance()
+	var field_l: float = field.get_luminance()
+	## 0.14 darken of tan only drops ~0.09 luminance — almost equal, not a hole.
+	_assert(wall_l < top_l * 0.78, "%s is clearly darker than its cell top (not almost equal)" % label)
+	_assert(wall_l < field_l * 0.78, "%s is clearly darker than the field tan (not almost equal)" % label)
+	_assert(wall_l < field_l - 0.16, "%s luminance is substantially below the field tan" % label)
+	_assert(wall_l < top_l - 0.08, "%s luminance is below its cell top" % label)
+	_assert(not wall.is_equal_approx(cell_top.darkened(0.14)), "%s is not the weak 0.14 same-fill darken" % label)
+	_assert(not wall.is_equal_approx(cell_top) and not wall.is_equal_approx(field), "%s is never the sand swatch" % label)
+
+
 func _test_chunk_is_not_a_floating_sticker() -> void:
 	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
 	_assert(not src.is_empty(), "dig_site.gd loads")
@@ -312,6 +524,45 @@ func _test_clicks_still_hit_dirt() -> void:
 	site.free()
 
 
+func _test_tool_pointer_only_over_pit() -> void:
+	_layout()
+	var script: Script = load("res://dig_site.gd") as Script
+	_assert(script != null, "dig site still loads for the tool pointer")
+	if script == null:
+		return
+	var site: Node = script.new()
+	root.add_child(site)
+	if site.has_method("start_round"):
+		site.call("start_round")
+	_assert(site.has_method("_tool_cursor_visible_at"), "dig site exposes tool pointer visibility")
+	if not site.has_method("_tool_cursor_visible_at"):
+		site.free()
+		return
+	var on_dirt: Vector2 = site.call("cell_center", Vector2i(2, 1))
+	_assert(bool(site.call("_tool_cursor_visible_at", on_dirt)), "pointer shows over a dirt cell")
+	var pit: Rect2 = TN.pit_grid_rect()
+	var below: Vector2 = Vector2(pit.get_center().x, pit.end.y + 40.0)
+	_assert(not bool(site.call("_tool_cursor_visible_at", below)), "pointer hides below the pit")
+	var hud_script: Script = load("res://hud.gd") as Script
+	_assert(hud_script != null, "HUD loads so the rail can be sampled")
+	if hud_script == null:
+		site.free()
+		return
+	var hud: CanvasLayer = hud_script.new() as CanvasLayer
+	root.add_child(hud)
+	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
+	var rail: Control = hud.get("_tool_rail") as Control
+	_assert(rail != null and rail.size.x > 1.0, "HUD exposes the tool rail")
+	if rail != null and rail.size.x > 1.0:
+		var rail_pt: Vector2 = rail.position + rail.size * 0.5
+		_assert(not bool(site.call("_tool_cursor_visible_at", rail_pt)), "pointer hides over the HUD rail")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(src.find("_draw_tool_cursor") >= 0, "the aim mark still lives on the fx overlay")
+	_assert(src.find("if not _tool_cursor_visible_at") >= 0, "cursor draw uses the pit hide rule")
+	hud.free()
+	site.free()
+
+
 func _test_dig_site_does_not_paint_a_black_void() -> void:
 	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
 	_assert(not src.is_empty(), "dig_site.gd loads")
@@ -325,6 +576,8 @@ func _test_clear_color_is_not_void() -> void:
 		return
 	var clear: Color = Site.clear_color()
 	_assert(not clear.is_equal_approx(Color("140F0C")), "clear color is not the old void")
+	_assert(not clear.is_equal_approx(Color.BLACK), "clear color is not black")
+	_assert(clear.r > 0.45 and clear.g > 0.35 and clear.b < 0.75, "clear color stays dirt-family, not void")
 	_assert(clear.v > 0.45, "letterbox / expand wash is a field color")
 	var settings := ConfigFile.new()
 	_assert(settings.load("res://project.godot") == OK, "project.godot loads")

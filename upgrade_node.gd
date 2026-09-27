@@ -4,6 +4,7 @@ signal buy_pressed(id: String)
 
 const Ui := preload("res://ui_style.gd")
 const ShopIcon := preload("res://shop_icon.gd")
+const WELL_PX := 52
 
 var item_id: String = ""
 var title: Label
@@ -31,13 +32,22 @@ func setup(id: String) -> void:
 	row.offset_top = 6
 	row.offset_bottom = -6
 
+	var well_slot := CenterContainer.new()
+	well_slot.custom_minimum_size = Vector2(WELL_PX, WELL_PX)
+	well_slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	well_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	well_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(well_slot)
+
 	well = Panel.new()
-	well.custom_minimum_size = Vector2(56, 56)
+	well.custom_minimum_size = Vector2(WELL_PX, WELL_PX)
+	well.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	well.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_panel(well, Color("1B1410"))
-	row.add_child(well)
+	Ui.apply_icon_well(well, Color("1B1410"))
+	well_slot.add_child(well)
 	icon = ShopIcon.new()
-	icon.custom_minimum_size = Vector2(56, 56)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	well.add_child(icon)
 	if icon.has_method("setup"):
@@ -73,9 +83,10 @@ func setup(id: String) -> void:
 
 	var action := Control.new()
 	action.custom_minimum_size = Vector2(168, 56)
+	action.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(action)
 
-	button = Button.new()
+	button = TipButton.new()
 	button.custom_minimum_size = Vector2(168, 48)
 	button.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	button.offset_left = -84
@@ -118,7 +129,9 @@ func refresh() -> void:
 	var heat: String = GameState.shop_row_heat(item_id)
 	var offer: bool = GameState.is_unlock_offer(item_id)
 	title.text = GameState.shop_display_name(item_id)
-	desc.text = GameState.shop_item_desc(item_id)
+	desc.text = GameState.shop_effect_line(item_id)
+	tooltip_text = ""
+	button.tooltip_text = ""
 	if icon.has_method("setup"):
 		icon.setup(ShopIcon.glyph_for(item_id), Ui.GOLD if heat != "locked" else Color("7A6A58"), heat == "locked")
 
@@ -149,7 +162,11 @@ func refresh() -> void:
 		if heat == "locked":
 			modulate = Color(0.66, 0.62, 0.58)
 	if well != null:
-		Ui.apply_panel(well, Color("3A2A18") if heat == "glow" else Color("1B1410"))
+		Ui.apply_icon_well(well, Color("3A2A18") if heat == "glow" else Color("1B1410"))
+
+
+func _get_tooltip(_at_position: Vector2) -> String:
+	return ""
 
 
 func _juicing() -> bool:
@@ -164,6 +181,11 @@ func _item() -> Dictionary:
 		if str(entry["id"]) == item_id:
 			return entry
 	return {}
+
+
+class TipButton extends Button:
+	func _get_tooltip(_at_position: Vector2) -> String:
+		return ""
 
 
 class PipBar extends Control:
@@ -216,6 +238,6 @@ class MaxSeal extends Control:
 		draw_rect(box, Color("3A2C18"))
 		draw_rect(box, Color("E4B75A"), false, 3.0)
 		draw_rect(Rect2(box.position + Vector2(3, 3), box.size - Vector2(6, 6)), Color("C9A056"), false, 1.0)
-		var font := get_theme_default_font()
+		var font := Ui.display_font()
 		draw_string(font, Vector2(-28, 6), "MAXED", HORIZONTAL_ALIGNMENT_CENTER, 56, 16, Color("F6EDE0"))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

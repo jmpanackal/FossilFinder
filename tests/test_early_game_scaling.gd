@@ -21,6 +21,11 @@ func _run() -> void:
 	_test_starting_pit_is_tiny()
 	_test_pit_footprint_stays_fixed()
 	_test_chunk_matches_surface_dirt()
+	_test_each_depth_has_its_own_dirt_color()
+	_test_pick_stone_breaks_from_shovel_dirt()
+	_test_pick_scales_like_the_shovel()
+	_test_wrong_tool_plays_refuse()
+	_test_chunk_sides_show_the_dirt_stack()
 	_test_site_layout_waits_for_round()
 	_test_shovel_is_first_rank_purchase()
 	_test_gated_shop_rows()
@@ -32,11 +37,18 @@ func _run() -> void:
 	_test_wider_scoop_rank_2_hits_more_than_one_cell()
 	_test_fullscreen_pixels_do_not_become_play_view()
 	_test_footer_chrome_stays_below_pit()
-	_test_find_footer_and_next_chip_stay_on_screen()
+	_test_find_footer_stays_on_screen()
 	_test_extracted_preview_keeps_fossil_value()
 	_test_find_toast_does_not_cover_footer()
 	_test_find_footer_shows_one_extract_readout()
+	_test_dirt_label_rises_as_brushed()
+	_test_find_chip_keeps_related_stats_together()
+	_test_fully_brushed_chip_stays_complete_and_priced()
 	_test_extract_does_not_stack_a_found_toast()
+	_test_two_pit_finds_make_two_footer_chips()
+	_test_buried_finds_do_not_make_footer_chips()
+	_test_find_chips_sit_in_footer_band()
+	_test_full_uncover_flies_to_footer_chip()
 	_test_hands_stay_the_careful_one_cell_tool()
 	print("early_game_scaling %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -124,7 +136,121 @@ func _test_chunk_matches_surface_dirt() -> void:
 	_assert(TN.chunk_top_color().is_equal_approx(dirt), "chunk top matches surface dirt")
 	_assert(TN.chunk_side_color().is_equal_approx(dirt.darkened(0.32)), "chunk sides are same dirt, darkened")
 	_assert(TN.chunk_line_color().is_equal_approx(Color("241C16")), "chunk outline matches cell outlines")
+	_assert(TN.has_method("chunk_line_width"), "Tuning exposes the pit outline width")
+	if TN.has_method("chunk_line_width"):
+		_assert(float(TN.chunk_line_width()) <= 1.5, "pit outline is a thin crease, not a 3px bar")
 	_assert(not TN.chunk_top_color().is_equal_approx(Color("2A2118")), "chunk is not the old chocolate tray")
+
+
+func _test_each_depth_has_its_own_dirt_color() -> void:
+	_assert(int(TN.layer_count) == 24, "depth stay is still 24 layers")
+	_assert(int(TN.material_at_layer(0)) == int(TN.MAT_LOOSE), "surface is still loose dirt")
+	_assert(int(TN.material_at_layer(6)) == int(TN.MAT_PACKED), "mid stack is still packed")
+	_assert(int(TN.material_at_layer(12)) == int(TN.MAT_CLAY), "lower stack is still clay")
+	_assert(int(TN.material_at_layer(18)) == int(TN.MAT_ROCK), "floor is still rock")
+	var last: Color = TN.color_for_layer(0)
+	for layer in range(1, int(TN.layer_count)):
+		var next: Color = TN.color_for_layer(layer)
+		var step: float = absf(last.r - next.r) + absf(last.g - next.g) + absf(last.b - next.b)
+		_assert(not last.is_equal_approx(next), "layer %d is not a copy of the layer above" % layer)
+		_assert(step >= 0.055, "layer %d is a visible step down the hole" % layer)
+		_assert(next.get_luminance() > 0.05, "layer %d stays readable dirt, not a black hole" % layer)
+		last = next
+	_assert(TN.color_for_layer(0).g > TN.color_for_layer(int(TN.layer_count) - 1).g, "the hole cools from sand toward stone")
+
+
+func _test_pick_stone_breaks_from_shovel_dirt() -> void:
+	var dirt: Color = TN.color_for_layer(11)
+	var stone: Color = TN.color_for_layer(12)
+	var seam: float = absf(dirt.r - stone.r) + absf(dirt.g - stone.g) + absf(dirt.b - stone.b)
+	_assert(int(TN.material_at_layer(11)) == int(TN.MAT_PACKED), "layer 11 is still shovel dirt")
+	_assert(int(TN.material_at_layer(12)) == int(TN.MAT_CLAY), "layer 12 is still pick stone")
+	_assert(seam >= 0.22, "first pick layer is not another brown")
+	_assert(dirt.r > dirt.b + 0.08, "last shovel layer stays warm dirt")
+	_assert(stone.b >= stone.r - 0.02, "first pick layer is cool stone")
+
+
+func _test_pick_scales_like_the_shovel() -> void:
+	_reset()
+	GS.levels["shovel_click"] = 1
+	GS.levels["pick_click"] = 1
+	GS.apply_upgrades()
+	_assert(TN.matrix_dirt_chance <= 0.52, "dirt is not a 94% rain")
+	_assert(TN.matrix_stone_chance >= 0.54, "stone hides finds more often than the old 42%")
+	_assert(TN.matrix_stone_chance >= TN.matrix_dirt_chance, "stone pops at least as often as dirt")
+	_assert(TN.pickaxe_splash_mult >= 0.69, "pick splash chips neighbors")
+	var fresh_clay: float = float(TN.damage_for(TN.TOOL_PICKAXE, 12)) * TN.pickaxe_click_mult
+	_assert(fresh_clay < float(TN.hp_for_layer(12)), "a fresh pick still takes more than one hit on clay")
+	var shovel_base: float = TN.shovel_click_mult
+	var pick_base: float = TN.pickaxe_click_mult
+	GS.levels["shovel_click"] = 2
+	GS.levels["pick_click"] = 2
+	GS.apply_upgrades()
+	_assert(is_equal_approx(TN.shovel_click_mult - shovel_base, 0.20), "one shovel rank is +0.20 click")
+	_assert(is_equal_approx(TN.pickaxe_click_mult - pick_base, 0.20), "one pick rank matches shovel click")
+	GS.levels["pick_click"] = 6
+	GS.levels["pick_hold"] = 5
+	GS.levels["shovel_click"] = 6
+	GS.levels["shovel_hold"] = 5
+	GS.apply_upgrades()
+	_assert(is_equal_approx(TN.pickaxe_click_mult - pick_base, TN.shovel_click_mult - shovel_base), "maxed pick click ranks match the shovel")
+	_assert(TN.pickaxe_hold_tick_rate >= 5.0, "maxed pick hold is in the shovel neighborhood")
+	var clay_hit: float = float(TN.damage_for(TN.TOOL_PICKAXE, 12)) * TN.pickaxe_click_mult
+	var rock_hit: float = float(TN.damage_for(TN.TOOL_PICKAXE, 18)) * TN.pickaxe_click_mult
+	_assert(clay_hit >= float(TN.hp_for_layer(12)), "maxed tier-1 pick one-shots clay")
+	_assert(rock_hit >= float(TN.hp_for_layer(18)), "maxed tier-1 pick one-shots rock")
+	_assert(float(TN.damage_for(TN.TOOL_PICKAXE, 0)) < float(TN.damage_for(TN.TOOL_SHOVEL, 0)), "pick stays weaker on dirt than the shovel")
+	var splash: float = float(TN.pickaxe_cell_damage(12, true, TN.pickaxe_click_mult))
+	_assert(splash >= float(TN.hp_for_layer(12)) * 0.55, "splash is a real chip, not a tickle")
+	var loose_pick: float = float(TN.damage_for(TN.TOOL_PICKAXE, 0)) * TN.pickaxe_click_mult
+	var packed_pick: float = float(TN.damage_for(TN.TOOL_PICKAXE, 6)) * TN.pickaxe_click_mult
+	_assert(loose_pick < float(TN.hp_for_layer(0)), "even a maxed pick does not tear loose dirt")
+	_assert(packed_pick < float(TN.hp_for_layer(6)), "even a maxed pick does not tear packed dirt")
+
+
+func _test_wrong_tool_plays_refuse() -> void:
+	_assert(TN.has_method("tool_works_on"), "Tuning says which tool fits a layer")
+	if not TN.has_method("tool_works_on"):
+		return
+	_assert(bool(TN.tool_works_on(TN.TOOL_SHOVEL, 0)), "shovel works on loose dirt")
+	_assert(bool(TN.tool_works_on(TN.TOOL_HANDS, 5)), "hands work on dirt")
+	_assert(not bool(TN.tool_works_on(TN.TOOL_SHOVEL, 12)), "shovel does not work on clay")
+	_assert(not bool(TN.tool_works_on(TN.TOOL_PICKAXE, 5)), "pick does not work on dirt")
+	_assert(bool(TN.tool_works_on(TN.TOOL_PICKAXE, 12)), "pick works on clay")
+	_assert(bool(TN.tool_works_on(TN.TOOL_PICKAXE, 18)), "pick works on rock")
+	var SfxNode: Node = root.get_node("Sfx")
+	var tones: Dictionary = SfxNode.get("_TONES") as Dictionary
+	_assert(tones.has("tool_refuse"), "Sfx has a refuse clack")
+	var site_script: Script = load("res://dig_site.gd") as Script
+	_assert(site_script != null, "dig site loads for refuse sound")
+	if site_script == null:
+		return
+	var site: Node = site_script.new()
+	root.add_child(site)
+	site.set("current_tool", TN.TOOL_SHOVEL)
+	if SfxNode.has_method("reset_throttle"):
+		SfxNode.reset_throttle()
+	site.call("_play_hit", 18)
+	_assert(str(SfxNode.get("last_id")) == "tool_refuse", "shovel on rock plays the refuse clack")
+	site.call("_play_hit", 0)
+	_assert(str(SfxNode.get("last_id")) == "hit_dirt", "shovel on dirt still thuds")
+	site.set("current_tool", TN.TOOL_PICKAXE)
+	if SfxNode.has_method("reset_throttle"):
+		SfxNode.reset_throttle()
+	site.call("_play_hit", 2)
+	_assert(str(SfxNode.get("last_id")) == "tool_refuse", "pick on dirt plays the refuse clack")
+	site.queue_free()
+
+
+func _test_chunk_sides_show_the_dirt_stack() -> void:
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(src.find("func _draw_strata_stack") >= 0, "pit paints remaining dirt as a visible stack")
+	_assert(src.find("_draw_strata_stack(") >= 0, "chunk faces actually call the stack painter")
+	var north_fn: String = src
+	var start: int = src.find("func _draw_north_face")
+	if start >= 0:
+		north_fn = src.substr(start, 900)
+	_assert(north_fn.find("band * float(i)") < 0, "north wall is not three fake shade bands")
 
 
 func _test_site_layout_waits_for_round() -> void:
@@ -215,8 +341,9 @@ func _test_scrap_income_cannot_print_midgame() -> void:
 	_assert(rate < 0.15, "a clean tooth does not print mid-game cash")
 	_assert(bool(GS.set_featured_stand("small_finds")), "a tooth can be featured in its case")
 	var featured: float = float(GS.museum_income())
-	_assert(featured >= 0.10, "a featured tooth is a visible tick")
-	_assert(featured < 0.30, "a featured tooth still does not print mid-game cash")
+	_assert(is_equal_approx(featured, rate), "featuring without ranks does not multiply")
+	_assert(featured >= 0.05, "a featured tooth is a visible tick")
+	_assert(featured < 0.15, "a featured tooth still does not print mid-game cash")
 	var super_cost: int = int(_item("shovel_super").get("cost", 0))
 	_assert(super_cost >= 700, "Super Shovel is a mid-game price")
 	_assert(rate * 1200.0 < float(super_cost), "20 minutes of tooth income cannot buy Super Shovel")
@@ -292,26 +419,27 @@ func _test_footer_chrome_stays_below_pit() -> void:
 	var footer: float = float(TN.footer_top())
 	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "footer layout keeps the 1024px pit")
 	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "footer layout keeps the 400px pit")
-	_assert(footer >= chunk_end, "goal/NEXT/find chrome starts below the dirt chunk")
-	_assert(footer + 130.0 <= TN.view_h - 8.0, "goal, NEXT, and find grade/stars fit under the pit")
+	_assert(footer >= chunk_end, "find chrome starts below the dirt chunk")
+	_assert(footer + 120.0 <= TN.view_h - 8.0, "find grade/stars fit under the pit")
 
 
-func _test_find_footer_and_next_chip_stay_on_screen() -> void:
+func _test_find_footer_stays_on_screen() -> void:
 	TN.view_w = 1280.0
 	TN.view_h = 720.0
 	TN.site_size_rank = 0
 	TN.apply_site_layout()
 	_assert(TN.has_method("footer_find_top"), "Tuning exposes the find-band top")
-	_assert(TN.has_method("footer_menu_gutter"), "Tuning exposes the Menu/End gutter")
+	_assert(TN.has_method("footer_menu_gutter"), "Tuning exposes the chip inset")
 	if not TN.has_method("footer_find_top") or not TN.has_method("footer_menu_gutter"):
 		return
 	var find_top: float = float(TN.footer_find_top())
 	var find_bottom: float = TN.view_h - 8.0
 	var gutter: float = float(TN.footer_menu_gutter())
-	_assert(find_top >= float(TN.footer_top()), "find band stays below the goal/NEXT row")
+	var pit: Rect2 = TN.pit_grid_rect() if TN.has_method("pit_grid_rect") else Rect2(TN.grid_origin, Vector2(float(TN.grid_w) * TN.cell_w, float(TN.grid_h) * TN.cell_h))
+	_assert(find_top >= float(TN.footer_top()), "find band stays below the pit chunk")
 	_assert(find_bottom - find_top >= 88.0, "find band is tall enough for value, grade, and stars")
 	_assert(find_bottom <= TN.view_h - 4.0, "find band stays above the window bottom")
-	_assert(gutter >= 124.0, "Menu and End shift keep a side gutter")
+	_assert(gutter >= 120.0, "chips stay inset to the pit, not the old Menu gutters")
 	var hud_script: Script = load("res://hud.gd") as Script
 	_assert(hud_script != null, "HUD script loads")
 	if hud_script == null:
@@ -320,30 +448,28 @@ func _test_find_footer_and_next_chip_stay_on_screen() -> void:
 	root.add_child(hud)
 	if hud.has_method("refresh"):
 		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 0.4, 80)
-	var find_box: VBoxContainer = hud.get("_find_box") as VBoxContainer
-	var chip: Button = hud.get("_chip") as Button
-	_assert(find_box != null and chip != null, "HUD exposes the find footer and NEXT chip")
-	if find_box == null or chip == null:
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Tooth", "t_rex_tooth", "brush", 5, "Brushed 40%", 80)])
+	var find_box: Control = hud.get("_find_box") as Control
+	_assert(find_box != null, "HUD exposes the find footer")
+	_assert(hud.get("_work_card") == null, "HUD no longer hosts a working-find card")
+	if find_box == null:
 		hud.queue_free()
 		return
-	_assert(is_equal_approx(find_box.position.y, find_top), "HUD parks the find footer in the reserved band")
+	var finds_label: Label = hud.get("_finds_label") as Label
+	if finds_label != null:
+		_assert(is_equal_approx(finds_label.position.y, find_top) or finds_label.position.y >= find_top - 0.5, "HUD parks the Finds label at the reserved band")
+		_assert(find_box.position.y >= finds_label.position.y + finds_label.size.y - 0.5, "chips sit under the Finds label")
+	_assert(find_box.position.y >= find_top - 0.5, "HUD parks the find footer in the reserved band")
 	_assert(find_box.position.y + find_box.size.y <= TN.view_h - 4.0, "HUD find footer stays above the window bottom")
-	_assert(find_box.position.x >= gutter, "HUD find text stays clear of the Menu button")
-	_assert(find_box.position.x + find_box.size.x <= TN.view_w - gutter, "HUD find text stays clear of End shift")
-	var content_h: float = 0.0
-	var visible_kids: int = 0
-	for child in find_box.get_children():
-		var item: Control = child as Control
-		if item == null or not item.visible:
-			continue
-		content_h += item.get_combined_minimum_size().y
-		visible_kids += 1
-	if visible_kids > 1:
-		content_h += float(find_box.get_theme_constant("separation")) * float(visible_kids - 1)
-	_assert(content_h <= find_box.size.y + 1.0, "value, grade, stars, and dirt fit inside the find band")
-	_assert(chip.position.x + chip.size.x <= TN.view_w - 8.0, "NEXT chip stays on screen")
-	_assert(chip.clip_contents, "NEXT chip keeps its label inside the box")
-	_assert(chip.clip_text, "NEXT chip does not paint its buy onto the dirt")
+	_assert(is_equal_approx(find_box.position.x, pit.position.x), "HUD find chips start under the pit")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x), "HUD find chips use the pit width")
+	_assert(find_box.position.x >= gutter - 0.5, "HUD find text stays pit-aligned")
+	_assert(find_box.position.x + find_box.size.x <= TN.view_w - 4.0, "HUD find chips stay on screen in the slim right field")
+	var content_h: float = find_box.get_combined_minimum_size().y
+	if content_h <= 0.0:
+		content_h = _tray_content_h(find_box)
+	_assert(content_h <= find_box.size.y + 1.0, "find chips fit inside the find band")
 	hud.queue_free()
 
 
@@ -389,12 +515,13 @@ func _test_find_toast_does_not_cover_footer() -> void:
 	root.add_child(toast)
 	if hud.has_method("refresh"):
 		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 80)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80)])
 	if hud.has_method("set_find_headline"):
 		hud.call("set_find_headline", "Tooth found!")
 	toast.call("show_toast", "Tooth found!", "Well preserved")
 	var find_box: Control = hud.get("_find_box") as Control
 	var toast_box: Control = toast.get("_box") as Control
-	var chip: Button = hud.get("_chip") as Button
 	_assert(find_box != null and toast_box != null, "find footer and toast expose their boxes")
 	if find_box == null or toast_box == null:
 		hud.queue_free()
@@ -404,12 +531,8 @@ func _test_find_toast_does_not_cover_footer() -> void:
 	var toast_rect := Rect2(toast_box.global_position, toast_box.size)
 	var stacked: bool = find_box.visible and toast_box.modulate.a > 0.05 and find_rect.intersects(toast_rect)
 	_assert(not stacked, "find toast and live footer do not share the same pixels")
-	_assert(toast_box.position.y + toast_box.size.y <= float(TN.footer_top()) + 0.5, "toast stays above NEXT and the goal bar")
+	_assert(toast_box.position.y + toast_box.size.y <= float(TN.footer_top()) + 0.5, "toast stays above the find band")
 	_assert(toast_box.position.y >= float(TN.pit_face_bottom()) - 0.5, "toast stays off the dirt cells")
-	if chip != null:
-		var chip_rect := Rect2(chip.global_position, chip.size)
-		_assert(not chip_rect.intersects(toast_rect), "toast does not draw through NEXT")
-		_assert(not chip_rect.intersects(find_rect), "find readout stays below NEXT")
 	hud.queue_free()
 	toast.queue_free()
 
@@ -427,39 +550,156 @@ func _test_find_footer_shows_one_extract_readout() -> void:
 	root.add_child(hud)
 	if hud.has_method("refresh"):
 		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 80)
+	_assert(hud.has_method("set_find_cards"), "HUD can show a find chip instead of a stacked toast")
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved")])
 	if hud.has_method("set_find_headline"):
 		hud.call("set_find_headline", "Tooth found!")
-	var headline: Label = hud.get("_headline") as Label
-	var value: Label = hud.get("_value") as Label
-	var grade: Label = hud.get("_grade") as Label
-	var dirt: Label = hud.get("_dirt_label") as Label
-	var find_box: VBoxContainer = hud.get("_find_box") as VBoxContainer
-	_assert(headline != null and headline.visible, "extract footer shows a Tooth found headline")
-	if headline != null:
-		_assert(headline.text == "Tooth found!", "extract headline is Tooth found!")
-	_assert(value != null and value.text == "$80", "extract footer shows the fossil value")
-	_assert(grade != null and grade.text == "Well preserved", "extract footer shows one condition line")
+	var find_box: Control = hud.get("_find_box") as Control
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 1, "extract footer shows one chip, not a toast plus a name")
+	if chips.size() == 1:
+		var chip: Control = chips[0] as Control
+		var name_label: Label = chip.get("_name_label") as Label
+		var status_label: Label = chip.get("_status_label") as Label
+		var icon: Control = chip.get("_icon") as Control
+		var grade_label: Label = chip.get("_grade_label") as Label
+		var price_label: Label = chip.get("_price_label") as Label
+		var body: String = ""
+		if grade_label != null:
+			body += grade_label.text
+		if status_label != null:
+			body += "\n" + status_label.text
+		if price_label != null:
+			body += "\n" + price_label.text
+		_assert(name_label != null and name_label.text.find("Tooth") >= 0, "extract chip names the Tooth")
+		_assert(body.find("$80") >= 0, "extract chip shows the fossil value")
+		_assert(body.find("Well preserved") >= 0 or body.find("★") >= 0 or body.find("5") >= 0, "extract chip shows stars or grade")
+		_assert(body.find("Brushed 100%") >= 0, "extract chip shows brushed percent once")
+		_assert(body.find("Dust") < 0 and body.find("Clean") < 0, "extract chip does not say Dust or Clean")
+		_assert(icon != null, "extract chip shows the bone doodle")
 	if find_box != null:
-		var grades: int = 0
-		for child in find_box.get_children():
-			var label: Label = child as Label
-			if label != null and label.visible and label.text == "Well preserved":
-				grades += 1
-		_assert(grades == 1, "Well preserved appears once in the find footer")
-	_assert(dirt != null and dirt.text == "Clean", "extract footer shows dirt/clean once")
+		_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "extract readout stays in the reserved find band")
+		var content_h: float = find_box.get_combined_minimum_size().y
+		if content_h <= 0.0:
+			content_h = _tray_content_h(find_box)
+		_assert(content_h <= find_box.size.y + 1.0, "find chips fit in the find band")
+	hud.queue_free()
+
+
+func _test_dirt_label_rises_as_brushed() -> void:
+	_assert(TN.has_method("dirt_label"), "Tuning prints the chip dirt meter")
+	if not TN.has_method("dirt_label"):
+		return
+	_assert(str(TN.dirt_label(0.0)) == "Brushed 0%", "fully dirty is Brushed 0%")
+	_assert(str(TN.dirt_label(0.25)) == "Brushed 25%", "quarter clean is Brushed 25%")
+	_assert(str(TN.dirt_label(0.75)) == "Brushed 75%", "mostly clean is Brushed 75%")
+	_assert(str(TN.dirt_label(0.99)) == "Brushed 100%", "near-clean rounds to Brushed 100%")
+	_assert(str(TN.dirt_label(1.0)) == "Brushed 100%", "fully clean is Brushed 100%")
+	_assert(str(TN.dirt_label(0.0)).find("Dust") < 0, "dirt label never says Dust")
+	_assert(str(TN.dirt_label(1.0)).find("Clean") < 0, "dirt label never says Clean")
+
+
+func _test_find_chip_keeps_related_stats_together() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	var hud: Node = _make_hud()
+	if hud == null:
+		return
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 0.75, 17)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Brachiosaurus Tooth", "brachiosaurus_tooth", "brush", 5, "Brushed 75%", 17, "Well preserved", 0, "New")])
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 1, "an uncovered sauropod tooth makes one footer chip")
+	if chips.size() == 1:
+		var chip: Control = chips[0] as Control
+		var name_label: Label = chip.get("_name_label") as Label
+		var grade_label: Label = chip.get("_grade_label") as Label
+		var status_label: Label = chip.get("_status_label") as Label
+		var price_label: Label = chip.get("_price_label") as Label
+		_assert(name_label != null and name_label.text.find("Brachiosaurus") >= 0 and name_label.text.find("Tooth") >= 0, "full uncover names the bone")
+		_assert(name_label != null and name_label.text.find("...") < 0, "the name is not ellipsized")
+		_assert(name_label != null and name_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "the name label does not trim with an ellipsis")
+		_assert(name_label != null and name_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the name is centered in the text column")
+		_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "grade stays on the condition line")
+		_assert(grade_label != null and (grade_label.text.find("★") >= 0 or grade_label.text.find("5") >= 0), "stars sit with the condition")
+		_assert(grade_label != null and grade_label.text.find("Dust") < 0, "dust is not jammed onto the star line")
+		_assert(grade_label != null and grade_label.text.find("$") < 0, "price is not jammed onto the star line")
+		_assert(grade_label != null and grade_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "condition stays centered under the name")
+		_assert(status_label != null and (status_label.text.find("New") >= 0 or status_label.text.find("/") >= 0 or status_label.text.find("Brushed 75%") >= 0), "uncover chip shows quota or the brush meter")
+		_assert(status_label != null and status_label.text.find("Dust") < 0, "the meter does not say Dust")
+		_assert(status_label != null and status_label.text.find("$") < 0, "price does not share the quota line")
+		_assert(status_label != null and status_label.text.find("★") < 0, "stars do not share the quota line")
+		_assert(status_label != null and status_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "quota copy is centered under the condition")
+		_assert(price_label != null and price_label.text.find("$17") >= 0, "value sits on its own price tag")
+		_assert(price_label != null and price_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "the price is right-aligned")
+		_assert(price_label != null and price_label.vertical_alignment == VERTICAL_ALIGNMENT_CENTER, "the price is vertically centered")
+		if name_label != null and price_label != null:
+			_assert(name_label.get_theme_font_size("font_size") > price_label.get_theme_font_size("font_size"), "the bone name is louder than the price")
+		if price_label != null and status_label != null:
+			_assert(price_label.get_theme_font_size("font_size") >= status_label.get_theme_font_size("font_size") - 1, "the price stays readable next to the meter")
+	var find_box: Control = hud.get("_find_box") as Control
 	if find_box != null:
-		_assert(is_equal_approx(find_box.position.y, float(TN.footer_find_top())), "extract readout stays in the reserved find band")
-		var content_h: float = 0.0
-		var visible_kids: int = 0
-		for child in find_box.get_children():
-			var item: Control = child as Control
-			if item == null or not item.visible:
-				continue
-			content_h += item.get_combined_minimum_size().y
-			visible_kids += 1
-		if visible_kids > 1:
-			content_h += float(find_box.get_theme_constant("separation")) * float(visible_kids - 1)
-		_assert(content_h <= find_box.size.y + 1.0, "headline, value, grade, stars, and dirt fit in the find band")
+		var content_h: float = find_box.get_combined_minimum_size().y
+		if content_h <= 0.0:
+			content_h = _tray_content_h(find_box)
+		_assert(content_h <= find_box.size.y + 1.0, "grouped chips still fit in the find band")
+		_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "grouped chips stay below the dirt")
+	hud.queue_free()
+
+
+func _test_fully_brushed_chip_stays_complete_and_priced() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	var hud: Node = _make_hud()
+	if hud == null:
+		return
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 90)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Triceratops Vertebra", "triceratops_vertebra", "bagged", 5, "Brushed 100%", 90, "Well preserved")])
+	if hud.has_method("set_find_headline"):
+		hud.call("set_find_headline", "Triceratops Vertebra found!")
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 1, "a fully brushed fossil still makes one footer chip")
+	if chips.size() == 1:
+		var chip: Control = chips[0] as Control
+		var name_label: Label = chip.get("_name_label") as Label
+		var grade_label: Label = chip.get("_grade_label") as Label
+		var status_label: Label = chip.get("_status_label") as Label
+		var price_label: Label = chip.get("_price_label") as Label
+		_assert(name_label != null and name_label.text == "Triceratops Vertebra", "fully brushed chip keeps one name")
+		_assert(name_label != null and name_label.text.find("found") < 0, "the title is not a found toast")
+		_assert(grade_label != null and grade_label.text.find("found") < 0, "condition is not a found line")
+		_assert(grade_label != null and grade_label.text.find("Triceratops") < 0, "condition does not repeat the fossil name")
+		_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "condition stays Well preserved")
+		_assert(grade_label != null and (grade_label.text.find("★") >= 0 or grade_label.text.find("5") >= 0), "stars stay with the condition")
+		_assert(status_label != null and status_label.text.find("Brushed 100%") >= 0, "meter can still say Brushed 100%")
+		_assert(price_label != null and price_label.visible and price_label.text == "$90", "the payout stays on the chip at 100%")
+		_assert(price_label != null and price_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "payout stays on the right")
+		_assert(price_label != null and price_label.vertical_alignment == VERTICAL_ALIGNMENT_CENTER, "payout stays vertically centered")
+		if price_label != null and chip.get_child_count() > 0:
+			var row: Node = chip.get_child(0)
+			_assert(row.get_child_count() >= 3 and row.get_child(row.get_child_count() - 1) == price_label, "layout stays icon | text | $")
+		var done_box: StyleBox = chip.get_theme_stylebox("panel")
+		_assert(done_box != null and "border_color" in done_box, "finished chip uses a brass panel")
+		if done_box != null and "border_color" in done_box:
+			var done_border: Color = done_box.border_color
+			_assert(done_border.r > 0.8 and done_border.g > 0.55, "100% chip rim is fully gold")
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [_card("Triceratops Vertebra", "triceratops_vertebra", "brush", 5, "Brushed 50%", 90, "Well preserved")])
+	var mid_chips: Array = _hud_chips(hud)
+	if mid_chips.size() == 1:
+		var mid: Control = mid_chips[0] as Control
+		var mid_box: StyleBox = mid.get_theme_stylebox("panel")
+		if mid_box != null and "border_color" in mid_box:
+			var mid_border: Color = mid_box.border_color
+			_assert(mid_border.r > 0.5 and mid_border.r < 0.82, "50% chip rim is only half warm")
 	hud.queue_free()
 
 
@@ -467,6 +707,169 @@ func _test_extract_does_not_stack_a_found_toast() -> void:
 	var src: String = FileAccess.get_file_as_string("res://main.gd")
 	_assert(not src.is_empty(), "main.gd loads")
 	_assert(src.find("show_toast(\"%s found!\"") < 0, "extract does not fire a found toast on top of the footer")
+
+
+func _test_two_pit_finds_make_two_footer_chips() -> void:
+	var site: Node = _make_two_finds()
+	_assert(site.has_method("live_find_cards"), "the pit lists every live fossil for the footer")
+	if not site.has_method("live_find_cards"):
+		site.free()
+		return
+	var cards: Array = site.call("live_find_cards")
+	_assert(cards.size() == 2, "two bones in the pit make two cards, not one name")
+	if cards.size() >= 2:
+		_assert(str(cards[0].get("piece_id", "")).find("tooth") >= 0, "first card is still the Tooth find")
+		_assert(str(cards[1].get("piece_id", "")).find("trilobite") >= 0, "second card is still the Trilobite find")
+		_assert(str(cards[0].get("name", "")).find("Tooth") < 0, "partly uncovered card stays mystery Bone")
+		_assert(str(cards[1].get("name", "")).find("Trilobite") < 0, "buried card does not name the Trilobite")
+		_assert(str(cards[0].get("status", "")) == "uncovering", "touched bone is uncovering")
+		_assert(str(cards[1].get("status", "")) == "underground", "untouched extra stays underground")
+	var hud: Node = _make_hud()
+	if hud == null:
+		site.free()
+		return
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true, true, 5, "", 0.0, 40)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", cards)
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 1, "first exposed cell makes one Bone chip")
+	if chips.size() == 1:
+		var mystery: Label = chips[0].get("_name_label") as Label
+		_assert(mystery != null and str(mystery.text) == "Bone", "first-cell chip stays a silhouette Bone")
+	_assert(hud.get("_chip") == null, "NEXT left the live HUD")
+	hud.queue_free()
+	site.free()
+	var uncovered: Node = _make_two_uncovered_finds()
+	var ready: Array = uncovered.call("live_find_cards")
+	_assert(ready.size() == 2, "two fully uncovered bones still make two cards")
+	var ready_hud: Node = _make_hud()
+	if ready_hud == null:
+		uncovered.free()
+		return
+	if ready_hud.has_method("set_find_cards"):
+		ready_hud.call("set_find_cards", ready)
+	var ready_chips: Array = _hud_chips(ready_hud)
+	_assert(ready_chips.size() == 2, "two uncovered bones make two footer chips")
+	if ready_chips.size() >= 2:
+		var a: Label = ready_chips[0].get("_name_label") as Label
+		var b: Label = ready_chips[1].get("_name_label") as Label
+		_assert(a != null and a.text.find("Tooth") >= 0, "first chip names the Tooth at full uncover")
+		_assert(b != null and b.text.find("Trilobite") >= 0, "second chip names the Trilobite at full uncover")
+		_assert(ready_chips[0].get("_icon") != null and ready_chips[1].get("_icon") != null, "each chip shows a bone doodle")
+	_assert(ready_hud.get("_chip") == null, "NEXT stayed gone when two finds are uncovered")
+	ready_hud.queue_free()
+	uncovered.free()
+
+
+func _test_buried_finds_do_not_make_footer_chips() -> void:
+	var hud: Node = _make_hud()
+	if hud == null:
+		return
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true, true, 5, "", 0.0, 40)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [
+			_card("Stegosaurus Foot", "stegosaurus_foot", "underground", 0, "", 0, "", 0),
+			_card("Triceratops Tooth", "triceratops_tooth", "brush", 5, "Brushed 80%", 90, "", 1),
+			_card("Velociraptor Femur", "velociraptor_femur", "uncovering", 0, "", 0, "", 2),
+		])
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 2, "full uncover and first-cell bones both become chips")
+	if chips.size() == 2:
+		var named: Label = chips[0].get("_name_label") as Label
+		var mystery: Label = chips[1].get("_name_label") as Label
+		_assert(named != null and named.text.find("Triceratops") >= 0, "the fully uncovered tooth names the species")
+		_assert(mystery != null and mystery.text.find("Velociraptor") < 0, "partly uncovered names stay hidden")
+		_assert(mystery != null and str(mystery.text) == "Bone", "first exposed cell is a Bone chip")
+	if hud.has_method("find_chip_catch_pos"):
+		var dest: Vector2 = hud.call("find_chip_catch_pos", 1)
+		var fallback := Vector2(TN.view_w * 0.5, TN.footer_find_top() + 34.0)
+		_assert(dest != fallback, "fly targets the uncovered chip by find index")
+	_assert(hud.get("_chip") == null, "NEXT left the live HUD")
+	hud.queue_free()
+
+
+func _test_find_chips_sit_in_footer_band() -> void:
+	TN.view_w = 1280.0
+	TN.view_h = 720.0
+	TN.site_size_rank = 0
+	TN.apply_site_layout()
+	var hud_script: Script = load("res://hud.gd") as Script
+	var hud: Node = hud_script.new()
+	root.add_child(hud)
+	if hud.has_method("refresh"):
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 0.4, 80)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [
+			_card("Tooth", "t_rex_tooth", "brush", 5, "Brushed 40%", 80, "", 0),
+			_card("Trilobite", "trilobite", "bagged", 5, "Brushed 100%", 40, "", 1),
+		])
+	var find_box: Control = hud.get("_find_box") as Control
+	_assert(find_box != null, "find tray lives on the HUD")
+	if find_box == null:
+		hud.queue_free()
+		return
+	_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "chips sit in the reserved footer band")
+	_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "chips sit below the dirt, not on cells")
+	var pit: Rect2 = TN.pit_grid_rect() if TN.has_method("pit_grid_rect") else Rect2(TN.grid_origin, Vector2(float(TN.grid_w) * TN.cell_w, float(TN.grid_h) * TN.cell_h))
+	_assert(is_equal_approx(find_box.position.x, pit.position.x), "chips start at the pit's left edge")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x), "chips use the full pit width")
+	_assert(not pit.intersects(Rect2(find_box.position, find_box.size)), "chips do not sit on the pit grid")
+	_assert(hud.get("_work_card") == null, "find chips have no working-find card to overlap")
+	var chips: Array = _hud_chips(hud)
+	_assert(chips.size() == 2, "the footer row shows both live finds")
+	hud.queue_free()
+
+
+func _test_full_uncover_flies_to_footer_chip() -> void:
+	var Fly: GDScript = load("res://loot_fly.gd") as GDScript
+	_assert(Fly != null, "loot_fly.gd still exists")
+	var can_fly_fossil: bool = false
+	if Fly != null:
+		var probe: Node = Fly.new() as Node
+		can_fly_fossil = probe != null and probe.has_method("setup_fossil")
+		if probe != null:
+			probe.free()
+	_assert(can_fly_fossil, "loot fly can carry a fossil to its chip")
+	if Fly != null and Fly.has_method("arc_point"):
+		var start := Vector2(400, 300)
+		var dest := Vector2(220, 640)
+		var mid: Vector2 = Fly.arc_point(start, dest, 0.5)
+		var linear: Vector2 = start.lerp(dest, 0.5)
+		_assert(mid.y < linear.y, "the fossil arcs up on the way to its chip")
+		_assert(Fly.arc_point(start, dest, 1.0) == dest, "the fossil lands on its footer chip")
+	var site: Node = _make_two_uncovered_finds()
+	if site.has_method("live_find_cards"):
+		var cards: Array = site.call("live_find_cards")
+		var hud: Node = _make_hud()
+		if hud != null and hud.has_method("set_find_cards"):
+			hud.call("set_find_cards", cards)
+		_assert(hud != null and hud.has_method("find_chip_catch_pos"), "HUD exposes each chip as a fly target")
+		if hud != null and hud.has_method("find_chip_catch_pos"):
+			var pos: Vector2 = hud.call("find_chip_catch_pos", 0)
+			_assert(pos.y >= float(TN.footer_find_top()) - 8.0, "fly target is the footer chip, not the wallet")
+			_assert(pos.y > 200.0, "fly target is not the pouch")
+		if hud != null and hud.has_method("catch_find"):
+			hud.call("catch_find", 0)
+			var chips: Array = _hud_chips(hud)
+			if chips.size() > 0:
+				_assert(float(chips[0].get("_pop")) > 0.0 or float(chips[0].get("_lit")) > 0.0, "arrived fossil lights its chip")
+		if hud != null:
+			hud.queue_free()
+	site.free()
+	var main_src: String = FileAccess.get_file_as_string("res://main.gd")
+	_assert(main_src.find("setup_fossil") >= 0 or main_src.find("find_chip_catch_pos") >= 0, "full uncover flies the bone to its chip")
+	_assert(main_src.find("fossil_ready_to_dust") >= 0, "fly starts when every cell is revealed")
+	var ready_at: int = main_src.find("func _on_ready_to_dust")
+	var extract_at: int = main_src.find("func _on_fossil_extracted")
+	_assert(ready_at >= 0 and extract_at > ready_at, "_on_ready_to_dust is a distinct fly hook")
+	if ready_at >= 0 and extract_at > ready_at:
+		var ready_fn: String = main_src.substr(ready_at, extract_at - ready_at)
+		var add_at: int = ready_fn.find("set_find_cards")
+		var fly_at: int = ready_fn.find("_spawn_fossil_fly")
+		_assert(add_at >= 0, "the chip is added when the last cell is revealed")
+		_assert(add_at >= 0 and fly_at > add_at, "fly starts after the chip exists")
 
 
 func _test_hands_stay_the_careful_one_cell_tool() -> void:
@@ -480,6 +883,9 @@ func _test_hands_stay_the_careful_one_cell_tool() -> void:
 		return
 	_assert(float(TN.integrity_hit_for(TN.TOOL_HANDS)) < float(TN.integrity_hit_for(TN.TOOL_SHOVEL)), "hands are safer on bone than the shovel")
 	_assert(is_zero_approx(float(TN.integrity_hit_for(TN.TOOL_HANDS))), "hands do not chip integrity")
+	_assert(is_zero_approx(float(TN.integrity_hit_for(TN.TOOL_BRUSH))), "brush never harms bone")
+	_assert(float(TN.integrity_hit_for(TN.TOOL_SHOVEL)) > 0.0, "shovel always costs integrity on bone")
+	_assert(float(TN.integrity_hit_for(TN.TOOL_PICKAXE)) > 0.0, "pick always costs integrity on bone")
 	_assert(TN.shovel_hit_cells(Vector2i(2, 2), 0.0).size() == 1, "hands stay a one-cell scrape")
 
 
@@ -499,6 +905,118 @@ func _test_passive_miner_is_catalogued() -> void:
 	_assert(bool(GS.requirements_met("passive_miner")), "Hired Hand requires Super Shovel and Rich Bed")
 	_assert(not bool(GS.can_buy("passive_miner")), "Hired Hand still waits for Site II even with those ranks")
 	_assert(not GS.has_method("tick_hired_hands"), "Hired Hand does not auto-dig this pass")
+
+
+func _make_hud() -> Node:
+	var hud_script: Script = load("res://hud.gd") as Script
+	_assert(hud_script != null, "HUD script loads")
+	if hud_script == null:
+		return null
+	var hud: Node = hud_script.new()
+	root.add_child(hud)
+	return hud
+
+
+func _card(find_name: String, piece_id: String, status: String, stars: int, dirt: String, value: int, grade: String = "", index: int = 0, progress: String = "") -> Dictionary:
+	return {
+		"index": index,
+		"name": find_name,
+		"piece_id": piece_id,
+		"status": status,
+		"stars": stars,
+		"grade": grade,
+		"dirt": dirt,
+		"value": value,
+		"progress": progress,
+		"exposed": 1 if status != "underground" else 0,
+		"needed": 1,
+		"centroid": Vector2(400, 300),
+		"fully_exposed": status == "brush" or status == "bagged",
+		"extracted": status == "bagged",
+	}
+
+
+func _make_two_finds() -> Node:
+	var script: Script = load("res://dig_site.gd") as Script
+	var site: Node = script.new()
+	var tooth: Resource = FossilData.new()
+	tooth.set("name", "Tooth")
+	tooth.set("piece_id", "t_rex_tooth")
+	tooth.set("base_value", 80)
+	var bug: Resource = FossilData.new()
+	bug.set("name", "Trilobite")
+	bug.set("piece_id", "trilobite")
+	bug.set("base_value", 40)
+	var cell_a := Vector2i(0, 0)
+	var cell_a2 := Vector2i(1, 0)
+	var cell_b := Vector2i(2, 1)
+	site.set("finds", [
+		{
+			"data": tooth,
+			"piece_id": "t_rex_tooth",
+			"extracted": false,
+			"integrity": 1.0,
+			"cells": {cell_a: true, cell_a2: true},
+			"origin": cell_a,
+			"layer": 0,
+			"ready": false,
+		},
+		{
+			"data": bug,
+			"piece_id": "trilobite",
+			"extracted": false,
+			"integrity": 1.0,
+			"cells": {cell_b: true},
+			"origin": cell_b,
+			"layer": 2,
+			"ready": false,
+		},
+	])
+	site.set("cleanliness", {cell_a: 0.4})
+	site.set("exposed_cells", {cell_a: true})
+	site.set("_focus_index", 0)
+	return site
+
+
+func _make_two_uncovered_finds() -> Node:
+	var site: Node = _make_two_finds()
+	var finds: Array = site.get("finds")
+	var exposed: Dictionary = {}
+	for find in finds:
+		var cells: Dictionary = find.get("cells", {})
+		for cell in cells:
+			exposed[cell] = true
+		find["ready"] = true
+	site.set("exposed_cells", exposed)
+	return site
+
+
+func _hud_chips(hud: Node) -> Array:
+	var raw: Variant = hud.get("_chips")
+	if raw is Array:
+		return raw
+	var box: Node = hud.get("_find_box") as Node
+	if box == null:
+		return []
+	var chips: Array = []
+	for child in box.get_children():
+		if child is Control and child.get("_name_label") != null:
+			chips.append(child)
+	return chips
+
+
+func _tray_content_h(find_box: Control) -> float:
+	var content_h: float = 0.0
+	var visible_kids: int = 0
+	for child in find_box.get_children():
+		var item: Control = child as Control
+		if item == null or not item.visible:
+			continue
+		content_h = maxf(content_h, item.get_combined_minimum_size().y)
+		visible_kids += 1
+	if visible_kids > 1 and find_box is VBoxContainer:
+		content_h += float(find_box.get_theme_constant("separation")) * float(visible_kids - 1)
+	return content_h
 
 
 func _assert(ok: bool, label: String) -> void:

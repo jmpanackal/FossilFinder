@@ -27,9 +27,14 @@ func _run() -> void:
 	_test_filled_stand_can_be_featured()
 	_test_small_finds_can_take_spotlight()
 	_test_empty_stand_does_not_steal_spotlight()
-	_test_spotlight_doubles_that_stand_only()
+	_test_spotlight_does_not_multiply_without_ranks()
+	_test_spotlight_rank_one_is_2x()
+	_test_spotlight_rank_two_is_3x()
 	_test_unveil_pays_and_clears_pending()
 	_test_unveil_starts_income_spike()
+	_test_unveil_rush_stacks_and_adds_time()
+	_test_unveil_rush_caps_at_five_stacks()
+	_test_exhibit_upgrades_lengthen_and_strengthen_rush()
 	_test_scrap_unveil_pays_and_clears()
 	print("museum_management %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -41,6 +46,10 @@ func _reset() -> void:
 	GS.featured_stand_id = ""
 	GS.pending_unveils.clear()
 	GS.unveil_spike_left = 0.0
+	if "unveil_rush_stacks" in GS:
+		GS.unveil_rush_stacks = 0
+	if "unveil_rush_unit" in GS:
+		GS.unveil_rush_unit = 0.0
 	GS._income_accum = 0.0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
@@ -153,7 +162,7 @@ func _test_empty_stand_does_not_steal_spotlight() -> void:
 	_assert(str(GS.featured_stand_id) == "triceratops", "spotlight stays on the filled bay")
 
 
-func _test_spotlight_doubles_that_stand_only() -> void:
+func _test_spotlight_does_not_multiply_without_ranks() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
 	GS.install_find("tooth", "Tooth", 1.0, true)
@@ -162,8 +171,40 @@ func _test_spotlight_doubles_that_stand_only() -> void:
 	var skull: float = float(GS.piece_income("triceratops_skull"))
 	GS.set_featured_stand("triceratops")
 	var featured: float = float(GS.museum_income())
-	_assert(is_equal_approx(featured, base + skull), "spotlight adds one extra copy of that stand")
-	_assert(is_equal_approx(float(GS.stand_income("triceratops")), skull * 2.0), "featured stand reads as 2x")
+	_assert(is_equal_approx(featured, base), "0 ranks keep featured income at 1x")
+	_assert(is_equal_approx(float(GS.stand_income("triceratops")), skull), "featured stand stays 1x until bought")
+
+
+func _test_spotlight_rank_one_is_2x() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.install_find("tooth", "Tooth", 1.0, true)
+	GS.unveil_spike_left = 0.0
+	var base: float = float(GS.museum_income())
+	var skull: float = float(GS.piece_income("triceratops_skull"))
+	_set_spotlight_rank(1)
+	GS.set_featured_stand("triceratops")
+	var featured: float = float(GS.museum_income())
+	_assert(is_equal_approx(featured, base + skull), "rank 1 adds one extra copy of that stand")
+	_assert(is_equal_approx(float(GS.stand_income("triceratops")), skull * 2.0), "rank 1 featured stand reads as 2x")
+	_assert(is_equal_approx(float(GS.stand_income("small_finds")), float(GS.piece_income("tooth"))), "other stands stay 1x")
+
+
+func _test_spotlight_rank_two_is_3x() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_spike_left = 0.0
+	var skull: float = float(GS.piece_income("triceratops_skull"))
+	_set_spotlight_rank(2)
+	GS.set_featured_stand("triceratops")
+	_assert(is_equal_approx(float(GS.stand_income("triceratops")), skull * 3.0), "rank 2 featured stand reads as 3x")
+
+
+func _set_spotlight_rank(rank: int) -> void:
+	if GS._item("spotlight").is_empty():
+		return
+	GS.levels["spotlight"] = rank
+	GS.apply_upgrades()
 
 
 func _test_unveil_pays_and_clears_pending() -> void:
@@ -190,14 +231,89 @@ func _test_unveil_starts_income_spike() -> void:
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
 	var base: float = float(GS.museum_income())
 	GS.unveil_stand("triceratops")
-	_assert(float(GS.unveil_spike_left) > 0.0, "unveil starts a short spike timer")
-	_assert(
-		is_equal_approx(float(GS.museum_income()), base * float(TN.unveil_spike_mult)),
-		"income spikes during the rush"
-	)
+	_assert(float(TN.unveil_spike_seconds) >= 20.0, "default rush lasts longer than the old 5s burst")
+	_assert(float(GS.unveil_spike_left) >= 20.0, "unveil starts a 20s+ rush timer")
+	_assert(_rush_stacks() == 1, "first unveil is one rush stack")
+	var rush: float = _rush_rate()
+	_assert(rush > 0.0, "unveil adds a $/sec rush")
+	_assert(is_equal_approx(float(GS.museum_income()), base + rush), "income applies the rush $/sec")
 	GS._process(float(GS.unveil_spike_left) + 0.05)
 	_assert(float(GS.unveil_spike_left) <= 0.0, "spike expires")
+	_assert(_rush_stacks() == 0, "expired rush clears stacks")
 	_assert(is_equal_approx(float(GS.museum_income()), base), "rate returns to normal")
+
+
+func _test_unveil_rush_stacks_and_adds_time() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	var first_rate: float = _rush_rate()
+	GS._process(4.0)
+	var left_after: float = float(GS.unveil_spike_left)
+	GS.install_find("t_rex_tail", "T. rex Tail", 1.0, true)
+	GS.unveil_stand("t_rex")
+	_assert(_rush_stacks() == 2, "second unveil adds a rush stack")
+	var stacked: float = _rush_rate()
+	_assert(is_equal_approx(stacked, first_rate * 2.0), "stacked rush is two copies of the same $/sec")
+	_assert(float(GS.unveil_spike_left) > left_after + 10.0, "stacking adds duration")
+	if GS.has_method("unveil_rush_line"):
+		var line: String = str(GS.call("unveil_rush_line"))
+		_assert(line.find("×2") >= 0 or line.find("x2") >= 0, "rush line shows the stack count")
+		_assert(line.find("/sec") >= 0, "rush line shows the $/sec")
+		_assert(line.find("s") >= 0, "rush line shows the timer")
+
+
+func _test_unveil_rush_caps_at_five_stacks() -> void:
+	_reset()
+	var ids: Array[String] = ["triceratops_skull", "t_rex_tail", "stegosaurus_plate", "velociraptor_claw", "brachiosaurus_tooth", "tooth"]
+	var stands: Array[String] = ["triceratops", "t_rex", "stegosaurus", "velociraptor", "brachiosaurus", "small_finds"]
+	var names: Array[String] = ["Triceratops Skull", "T. rex Tail", "Stegosaurus Plate", "Velociraptor Claw", "Brachiosaurus Tooth", "Tooth"]
+	for i in ids.size():
+		GS.install_find(ids[i], names[i], 1.0, true)
+		GS.unveil_stand(stands[i])
+	_assert(_rush_stacks() == 5, "rush stacks cap at 5")
+	var capped: float = _rush_rate()
+	GS.install_find("vertebra", "Vertebra", 1.0, true)
+	GS.unveil_stand("small_finds")
+	_assert(_rush_stacks() == 5, "a sixth unveil does not add a sixth stack")
+	_assert(is_equal_approx(_rush_rate(), capped), "capped rush keeps the same $/sec")
+
+
+func _test_exhibit_upgrades_lengthen_and_strengthen_rush() -> void:
+	_reset()
+	_assert(GS._item("unveil_time").is_empty() == false, "Opening Hours is an Exhibit upgrade")
+	_assert(str(GS._item("unveil_time").get("cat", "")) == "Exhibit", "duration upgrade sits on the Exhibit tab")
+	_assert(GS._item("unveil_crowd").is_empty() == false, "Opening Crowd is an Exhibit upgrade")
+	_assert(str(GS._item("unveil_crowd").get("cat", "")) == "Exhibit", "strength upgrade sits on the Exhibit tab")
+	var base_secs: float = float(TN.unveil_spike_seconds)
+	GS.levels["unveil_time"] = 1
+	GS.levels["unveil_crowd"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.unveil_spike_seconds) > base_secs, "Opening Hours lengthens the rush")
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	var base: float = _income_base()
+	GS.unveil_stand("triceratops")
+	var rush: float = _rush_rate()
+	_assert(rush > base + 0.0001, "Opening Crowd makes the rush stronger than one copy of base income")
+	_assert(float(GS.unveil_spike_left) > base_secs, "upgraded unveil uses the longer timer")
+
+
+func _rush_stacks() -> int:
+	if not ("unveil_rush_stacks" in GS):
+		return 0
+	return int(GS.unveil_rush_stacks)
+
+
+func _rush_rate() -> float:
+	if not GS.has_method("unveil_rush_rate"):
+		return 0.0
+	return float(GS.call("unveil_rush_rate"))
+
+
+func _income_base() -> float:
+	if GS.has_method("museum_income_base"):
+		return float(GS.call("museum_income_base"))
+	return float(GS.museum_income())
 
 
 func _assert(ok: bool, label: String) -> void:

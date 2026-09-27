@@ -3,8 +3,6 @@ extends Node2D
 
 ## Top-down field camp around the fixed pit. Draw-only — never steals dig clicks.
 
-const SKY_TOP := Color("C5D0D6")
-const SKY_WASH := Color("D7C9B0")
 const GROUND := Color("C4A36A")
 const GROUND_SHADE := Color("B08A52")
 const GROUND_DEEP := Color("9A7544")
@@ -12,6 +10,7 @@ const PACKED := Color("B89458")
 const LIP_LINE := Color("241C16")
 const RIM_SHADOW := Color(0.16, 0.11, 0.07, 0.22)
 const RIM_W := 3.0
+const HEADER_ROW_H := 36.0
 const STRING := Color("E4B75A")
 const WOOD := Color("5C4030")
 const CANVAS := Color("D8C08A")
@@ -44,7 +43,7 @@ static func ground_color() -> Color:
 
 
 static func sky_color() -> Color:
-	return SKY_TOP
+	return GROUND
 
 
 static func clear_color() -> Color:
@@ -57,16 +56,35 @@ static func hole_fill_color() -> Color:
 
 static func pit_cutout() -> Rect2:
 	var pad: float = Tuning.chunk_pad
+	var cut_top: float = minf(Tuning.grid_origin.y - pad, north_lip_y())
+	var north: float = Tuning.grid_origin.y - cut_top
 	return Rect2(
 		Tuning.grid_origin.x - pad,
-		Tuning.grid_origin.y - pad,
+		cut_top,
 		float(Tuning.grid_w) * Tuning.cell_w + pad * 2.0,
-		float(Tuning.grid_h) * Tuning.cell_h + pad
+		float(Tuning.grid_h) * Tuning.cell_h + north
 	)
 
 
+static func header_row_bottom() -> float:
+	return (Tuning.hud_h - HEADER_ROW_H) * 0.5 + HEADER_ROW_H
+
+
+static func north_lip_y() -> float:
+	return Tuning.hud_h
+
+
+static func north_pad_rect() -> Rect2:
+	var cut: Rect2 = pit_cutout()
+	return Rect2(cut.position.x, cut.position.y, cut.size.x, Tuning.grid_origin.y - cut.position.y)
+
+
+static func shaft_back_color() -> Color:
+	return Tuning.shaft_interior_color(0)
+
+
 static func horizon_y() -> float:
-	return 32.0
+	return 0.0
 
 
 static func chunk_hole() -> Rect2:
@@ -88,6 +106,10 @@ static func rim_rect() -> Rect2:
 	)
 
 
+static func north_rim_h() -> float:
+	return 2.0
+
+
 static func prop_rects() -> Dictionary:
 	var cut: Rect2 = pit_cutout()
 	var survey: Rect2 = cut
@@ -104,21 +126,10 @@ func _draw() -> void:
 	var view := Vector2(Tuning.view_w, Tuning.view_h)
 	if view.x <= 0.0 or view.y <= 0.0:
 		return
-	_draw_sky(view)
 	_draw_ground(view)
 	_draw_pit_lips()
 	_draw_survey()
 	_draw_props()
-
-
-func _draw_sky(view: Vector2) -> void:
-	var wash: float = horizon_y()
-	var bands: int = 4
-	for i in bands:
-		var t: float = float(i) / float(maxi(bands - 1, 1))
-		var y: float = wash * float(i) / float(bands)
-		var h: float = wash / float(bands) + 1.0
-		draw_rect(Rect2(0.0, y, view.x, h), SKY_TOP.lerp(SKY_WASH, t))
 
 
 func _draw_ground(view: Vector2) -> void:
@@ -133,6 +144,8 @@ func _draw_ground(view: Vector2) -> void:
 	_fill_around(packed, hole, PACKED.lerp(GROUND, 0.35))
 	if _cover_hole:
 		draw_rect(hole, hole_fill_color())
+	else:
+		draw_rect(hole, shaft_back_color())
 
 
 func _fill_around(area: Rect2, hole: Rect2, color: Color) -> void:
@@ -163,9 +176,12 @@ func _mottle_ground(view: Vector2, hole: Rect2, wash: float) -> void:
 func _draw_pit_lips() -> void:
 	var cut: Rect2 = pit_cutout()
 	var shade := Color(0.16, 0.11, 0.07, 0.20)
-	draw_rect(Rect2(cut.position.x - 4.0, cut.position.y - 3.0, cut.size.x + 8.0, 3.0), shade)
-	draw_rect(Rect2(cut.position.x - 4.0, cut.position.y, 4.0, cut.size.y), shade)
-	draw_rect(Rect2(cut.end.x, cut.position.y, 4.0, cut.size.y), shade)
+	var lip_h: float = north_rim_h()
+	var north_lip := Rect2(cut.position.x - 3.0, cut.position.y - lip_h, cut.size.x + 6.0, lip_h)
+	draw_rect(north_lip, GROUND.lightened(0.14))
+	draw_line(Vector2(cut.position.x, cut.position.y), Vector2(cut.end.x, cut.position.y), LIP_LINE, 2.0)
+	draw_rect(Rect2(cut.position.x - 1.0, cut.position.y, 1.0, cut.size.y), shade)
+	draw_rect(Rect2(cut.end.x, cut.position.y, 1.0, cut.size.y), shade)
 	var near := Rect2(cut.position.x - 3.0, cut.end.y, cut.size.x + 6.0, 6.0)
 	draw_rect(near, GROUND_DEEP.lerp(GROUND, 0.28))
 	draw_line(Vector2(cut.position.x, cut.end.y), Vector2(cut.end.x, cut.end.y), LIP_LINE, 1.5)
@@ -209,10 +225,7 @@ func _stake(pos: Vector2) -> void:
 
 func _draw_props() -> void:
 	var props: Dictionary = prop_rects()
-	_draw_tent_footprint(props["tent"])
 	_draw_spoil(props["spoil"])
-	_draw_crate(props["crate"])
-	_draw_jug(props["jug"])
 
 
 func _draw_tent_footprint(rect: Rect2) -> void:

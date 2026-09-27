@@ -3,6 +3,8 @@ extends RefCounted
 
 ## Junk screened out of a popped layer. This is the money — not a dirt sale.
 
+const ArtCatalogScript := preload("res://art_catalog.gd")
+
 const RARITY_COMMON := 0
 const RARITY_UNCOMMON := 1
 const RARITY_RARE := 2
@@ -61,9 +63,9 @@ static func payout_for(layer: int, rarity: int, chance: float, tool: int = -1) -
 	var rmult: float = 0.78
 	match clampi(rarity, RARITY_COMMON, RARITY_RARE):
 		RARITY_UNCOMMON:
-			rmult = 1.35 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 1.05
+			rmult = 1.35 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 2.0
 		RARITY_RARE:
-			rmult = 2.55 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 2.0
+			rmult = 2.55 if Tuning.material_at_layer(layer) <= Tuning.MAT_PACKED else 3.6
 	var tool_mult: float = Tuning.matrix_clear_pay if _is_clear_tool(tool) else maxf(Tuning.matrix_hands_pay, 0.25)
 	return maxi(1, int(round(base * rmult * tool_mult / maxf(chance, 0.25))))
 
@@ -140,6 +142,9 @@ static func icon_color(kind: String, rarity: int = RARITY_COMMON) -> Color:
 
 
 static func draw_icon(c: CanvasItem, kind: String, center: Vector2, radius: float, alpha: float = 1.0, rarity: int = RARITY_COMMON) -> void:
+	var dest := Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0))
+	if ArtCatalogScript.draw_if_present(c, "scraps", kind, dest, Color(1, 1, 1, clampf(alpha, 0.0, 1.0))):
+		return
 	var color: Color = icon_color(kind, rarity)
 	color.a = clampf(alpha, 0.0, 1.0)
 	var ink := Color(0.14, 0.1, 0.07, color.a * 0.85)
@@ -217,7 +222,7 @@ static func batch_display(finds: Array, max_floats: int = 5) -> Array:
 		return int(a.get("amount", 0)) > int(b.get("amount", 0))
 	)
 	var juice: Array = []
-	var cap: int = clampi(max_floats, 3, 5)
+	var cap: int = clampi(max_floats, 2, 5)
 	for i in sorted.size():
 		if juice.size() >= cap:
 			break

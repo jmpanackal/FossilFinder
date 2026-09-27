@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
 [ext_resource type="Script" path="res://dig_site.gd" id="2_dig"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://museum.gd" id="6_mus"]
 [ext_resource type="Script" path="res://shop.gd" id="7_shop"]
 [ext_resource type="Script" path="res://site_backdrop.gd" id="8_site"]
+[ext_resource type="Script" path="res://title_screen.gd" id="9_title"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -40,6 +41,10 @@ script = ExtResource("7_shop")
 [node name="Summary" type="CanvasLayer" parent="."]
 visible = false
 script = ExtResource("4_sum")
+
+[node name="Title" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("9_title")
 
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 30

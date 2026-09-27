@@ -24,6 +24,8 @@ func _run() -> void:
 	_test_dirt_pop_is_named_junk()
 	_test_dirt_has_variety_and_rarities()
 	_test_stone_is_chunkier_and_rarer()
+	_test_stone_pays_like_the_money_layer()
+	_test_dirt_scoop_shows_two_flies()
 	_test_early_dirt_ev_stays_near_old_pay()
 	_test_soil_bounty_buffs_matrix_not_dirt_price()
 	_test_stone_bounty_buffs_nodules()
@@ -130,14 +132,75 @@ func _test_stone_is_chunkier_and_rarer() -> void:
 		stone_hits += 1
 		stone_pay += int(stone.get("amount", 0))
 		stone_names[str(stone.get("name", "")).to_lower()] = true
-	_assert(dirt_hits > stone_hits, "stone hides finds less often than dirt")
+	_assert(stone_hits >= dirt_hits, "stone hides finds at least as often as dirt")
+	_assert(float(stone_hits) / 160.0 > 0.40, "stone hides more than a trickle")
 	_assert(float(stone_hits) / 160.0 < 0.62, "stone nodules stay infrequent")
-	_assert(float(dirt_hits) / 160.0 > 0.75, "dirt still pops often enough for clicker dopamine")
+	_assert(float(dirt_hits) / 160.0 < 0.62, "dirt is no longer a 94% rain")
+	_assert(float(dirt_hits) / 160.0 > 0.35, "dirt still pops enough to teach the clicker")
 	if stone_hits > 0 and dirt_hits > 0:
 		_assert(float(stone_pay) / float(stone_hits) > float(dirt_pay) / float(dirt_hits), "a stone find is chunkier than a dirt find")
 	var blob: String = " ".join(PackedStringArray(stone_names.keys()))
 	_assert(blob.find("nodule") >= 0 or blob.find("crystal") >= 0, "stone junk is a nodule or crystal")
 	_assert(blob.find("dirt") < 0, "stone does not sell rock dollars")
+
+
+func _test_stone_pays_like_the_money_layer() -> void:
+	if Matrix == null:
+		return
+	_reset()
+	_assert(TN.matrix_dirt_chance <= 0.52, "dirt chance starts as a grind, not a hose")
+	_assert(TN.matrix_stone_chance >= TN.matrix_dirt_chance, "stone chance is at least dirt chance")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 14
+	var pick_hits: int = 0
+	var pick_pay: int = 0
+	var shovel_hits: int = 0
+	var shovel_pay: int = 0
+	for _i in 120:
+		var dirt_pending: Dictionary = Matrix.roll(rng, 0)
+		if not dirt_pending.is_empty():
+			var shovel: Dictionary = Matrix.harvest(dirt_pending, 0, TN.TOOL_SHOVEL)
+			if not shovel.is_empty():
+				shovel_hits += 1
+				shovel_pay += int(shovel.get("amount", 0))
+		var stone_pending: Dictionary = Matrix.roll(rng, 18)
+		if stone_pending.is_empty():
+			continue
+		var pick: Dictionary = Matrix.harvest(stone_pending, 18, TN.TOOL_PICKAXE)
+		if pick.is_empty():
+			continue
+		pick_hits += 1
+		pick_pay += int(pick.get("amount", 0))
+	_assert(pick_hits > 0, "a pick still pulls nodules from rock")
+	if pick_hits > 0:
+		_assert(float(pick_pay) / float(pick_hits) >= 12.0, "a pick pop reads like +$12 or better")
+	if pick_hits > 0 and shovel_hits > 0:
+		_assert(float(pick_pay) / float(pick_hits) > float(shovel_pay) / float(shovel_hits), "pick spoil on stone beats shovel spoil on dirt")
+
+
+func _test_dirt_scoop_shows_two_flies() -> void:
+	if Matrix == null:
+		return
+	var pile: Array = []
+	for i in 8:
+		pile.append({"name": "pebble", "amount": 1, "rarity": 0})
+	_assert(Matrix.has_method("batch_display"), "scoops still batch find floats")
+	if not Matrix.has_method("batch_display"):
+		return
+	var juice: Array = Matrix.batch_display(pile, 2)
+	_assert(juice.size() >= 1, "a dirt scoop still shows a fly")
+	_assert(juice.size() <= 2, "a dirt scoop shows at most two flies")
+	var leftover: int = int(Matrix.batch_leftover(pile, 2))
+	_assert(leftover >= 6, "unshown dirt cash still banks")
+	var site_src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(site_src.find("batch_display") >= 0, "the pit still batches strike juice")
+	_assert(site_src.find("MAT_PACKED") >= 0 and site_src.find("batch_display") >= 0, "dirt strikes cap flies")
+	var finish: String = site_src
+	var start: int = site_src.find("func _finish_strike")
+	if start >= 0:
+		finish = site_src.substr(start, 420)
+	_assert(finish.find("batch_display") >= 0, "juice is chosen when the strike finishes")
+	_assert(finish.find("2") >= 0, "dirt juice uses a two-fly cap")
 
 
 func _test_early_dirt_ev_stays_near_old_pay() -> void:
@@ -271,6 +334,11 @@ func _test_shop_copy_is_matrix_language() -> void:
 	_assert(stone.find("rock pay") < 0, "Stone Bounty drops rock-dollar language")
 	_assert(soil_feel.find("dirt pays") < 0, "Soil Bounty toast is not dirt pays more")
 	_assert(stone_feel.find("stone pays") < 0, "Stone Bounty toast is not stone pays more")
+	_assert(GS.has_method("shop_effect_line"), "Soil Bounty tooltip uses shop_effect_line")
+	if GS.has_method("shop_effect_line"):
+		var soil_fx: String = str(GS.shop_effect_line("dirt_pay"))
+		_assert(soil_fx.find("$") >= 0, "Soil Bounty tooltip is a live pay number")
+		_assert(soil_fx.to_lower().find("dirt layers pay") < 0, "Soil Bounty tooltip is not dirt-price copy")
 
 
 func _test_float_is_currency_only() -> void:
@@ -308,6 +376,10 @@ func _test_sprite_is_the_item() -> void:
 			var mid: Vector2 = Fly.arc_point(Vector2(100, 400), Vector2(40, 40), 0.5)
 			_assert(mid.y < 400.0 and mid.y < 220.0, "the object arcs up on the way to $")
 			_assert(Fly.arc_point(Vector2(100, 400), Vector2(40, 40), 1.0) == Vector2(40, 40), "the object lands on the wallet")
+		var fly: Node = Fly.new() as Node
+		_assert(fly != null and fly.has_method("setup_fossil"), "the same fly can carry a fossil to its footer chip")
+		if fly != null:
+			fly.free()
 
 
 func _test_toothlet_is_not_a_museum_tooth() -> void:
@@ -319,10 +391,36 @@ func _test_toothlet_is_not_a_museum_tooth() -> void:
 	root.add_child(hud)
 	if hud.has_method("refresh"):
 		hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true, true, 5, "Well preserved", 1.0, 80)
+	if hud.has_method("set_find_cards"):
+		hud.call("set_find_cards", [{
+			"index": 0,
+			"name": "Tooth",
+			"piece_id": "t_rex_tooth",
+			"status": "bagged",
+			"stars": 5,
+			"grade": "Well preserved",
+			"dirt": "Brushed 100%",
+			"value": 80,
+			"exposed": 1,
+			"needed": 1,
+			"centroid": Vector2(400, 300),
+			"fully_exposed": true,
+			"extracted": true,
+		}])
 	if hud.has_method("set_find_headline"):
 		hud.call("set_find_headline", "Tooth found!")
-	var headline: Label = hud.get("_headline") as Label
-	_assert(headline != null and headline.text == "Tooth found!", "named fossils still say Tooth found!")
+	var chips: Variant = hud.get("_chips")
+	var named: bool = false
+	if chips is Array and chips.size() > 0:
+		var name_label: Label = chips[0].get("_name_label") as Label
+		var status_label: Label = chips[0].get("_status_label") as Label
+		named = name_label != null and name_label.text.find("Tooth") >= 0
+		if not named and status_label != null:
+			named = status_label.text.find("Tooth") >= 0
+	if not named:
+		var headline: Label = hud.get("_headline") as Label
+		named = headline != null and headline.text == "Tooth found!"
+	_assert(named, "named fossils still say Tooth on the footer chip")
 	if Matrix != null and Matrix.has_method("float_text"):
 		_assert(str(Matrix.float_text({"name": "tiny toothlet", "amount": 8})) != "Tooth found!", "a toothlet is not the extract footer")
 	hud.queue_free()
@@ -376,7 +474,7 @@ func _test_cells_can_show_a_terrain_tell() -> void:
 					_assert(str(pending.get("name", "")) != "", "a tell names the inclusion, not a fossil extract")
 					_assert(str(pending.get("name", "")).to_lower().find("tooth") < 0 or str(pending.get("name", "")).to_lower().find("toothlet") >= 0, "a dirt speck is not the museum Tooth")
 		_assert(told > 0, "some cells show a pebble or speck before they pop")
-		_assert(empty > 0 or float(TN.matrix_dirt_chance) >= 0.9, "empty cells stay plain dirt")
+		_assert(empty > 0, "empty cells stay plain dirt")
 	site.queue_free()
 
 
