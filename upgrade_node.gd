@@ -16,6 +16,7 @@ var seal: Control
 var lock: Label
 var rank: Label
 var well: Panel
+var _state_key: String = ""
 
 
 func setup(id: String) -> void:
@@ -128,6 +129,12 @@ func refresh() -> void:
 	var max_level: int = int(item.get("max", 1))
 	var heat: String = GameState.shop_row_heat(item_id)
 	var offer: bool = GameState.is_unlock_offer(item_id)
+	## Money ticks refresh the shop constantly. Rebuilding copy (which re-runs
+	## the upgrade math) and restyling is ~1ms per row, so skip unchanged rows.
+	var key: String = "%d|%s|%s|%s|%s|%s" % [level, heat, offer, GameState.can_buy(item_id), GameState.cost_of(item_id), _juicing()]
+	if key == _state_key:
+		return
+	_state_key = key
 	title.text = GameState.shop_display_name(item_id)
 	desc.text = GameState.shop_effect_line(item_id)
 	tooltip_text = ""
@@ -167,6 +174,11 @@ func refresh() -> void:
 
 func _get_tooltip(_at_position: Vector2) -> String:
 	return ""
+
+
+## Force the next refresh() to rebuild even if the row state looks the same.
+func invalidate() -> void:
+	_state_key = ""
 
 
 func _juicing() -> bool:

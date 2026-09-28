@@ -32,6 +32,7 @@ var unveil_rush_unit: float = 0.0
 var _income_accum: float = 0.0
 var _bases: Dictionary = {}
 var _fossil_by_id: Dictionary = {}
+var _stand_ids_cache: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
 	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds, more $, and you feel for bone farther away. Never chips bone.", "cost": 8, "scale": 1.65, "max": 5},
@@ -1183,6 +1184,10 @@ func stand_piece_ids(stand_id: String) -> PackedStringArray:
 	var paths: PackedStringArray = Tuning.main_fossil_paths
 	if stand_id == STAND_SMALL_FINDS or stand_id == STAND_PLANT_FOSSILS:
 		paths = Tuning.extra_fossil_paths
+	## Income math asks for this several times a frame; the roster is static.
+	var key: String = "%s|%d|%s|%s" % [stand_id, paths.size(), paths[0] if paths.size() > 0 else "", paths[paths.size() - 1] if paths.size() > 0 else ""]
+	if _stand_ids_cache.has(key):
+		return _stand_ids_cache[key]
 	for path in paths:
 		var data: FossilData = load(str(path)) as FossilData
 		if data == null or data.stand_id != stand_id:
@@ -1190,6 +1195,7 @@ func stand_piece_ids(stand_id: String) -> PackedStringArray:
 		if data.piece_id.is_empty() or ids.has(data.piece_id):
 			continue
 		ids.append(data.piece_id)
+	_stand_ids_cache[key] = ids
 	return ids
 
 

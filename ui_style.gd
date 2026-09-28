@@ -136,7 +136,8 @@ static func apply_hud_button(button: Button, prominent: bool = false) -> void:
 static func _paint_button(button: Button, prominent: bool, rail: bool) -> void:
 	var fill := Color("8A4E24") if prominent else Color("3F3126")
 	var hover := Color("B86A2E") if prominent else Color("534233")
-	_stamp_button_boxes(button, fill, hover, GOLD if prominent else LINE, 2, rail)
+	if not _stamp_button_boxes(button, fill, hover, GOLD if prominent else LINE, 2, rail):
+		return
 	apply_font(button)
 	button.add_theme_color_override("font_color", INK)
 	button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -157,25 +158,41 @@ static func apply_tool_button(button: Button, selected: bool) -> void:
 	button.add_theme_color_override("font_disabled_color", Color("7A6A58"))
 
 
-static func _stamp_button_boxes(button: Button, fill: Color, hover: Color, border: Color, width: int, rail: bool = false) -> void:
+static var _button_styles: Dictionary = {}
+
+
+static func _stamp_button_boxes(button: Button, fill: Color, hover: Color, border: Color, width: int, rail: bool = false) -> bool:
 	## Isolated theme so Godot's default focus (white, r=3, expand=2) cannot under-draw.
-	var hover_box = button_box(hover, GOLD, false, width, rail)
-	apply_hover_outline(hover_box)
-	var boxes := {
-		"normal": button_box(fill, border, false, width, rail),
-		"hover": hover_box,
-		"pressed": button_box(Color("6E3C1C"), GOLD, true, width, rail),
-		"disabled": button_box(Color("2A221C"), Color("4A3C30"), true, 2, rail),
-		"focus": button_box(fill, border, false, width, rail),
-		"hover_pressed": button_box(Color("6E3C1C"), GOLD, true, width, rail),
-	}
-	var theme := Theme.new()
-	for name in boxes:
-		theme.set_stylebox(str(name), "Button", boxes[name])
-		button.add_theme_stylebox_override(str(name), boxes[name])
-	button.theme = theme
+	## Themes are shared per look: building six boxes + a Theme per call cost
+	## ~0.4ms, and the shop restyles dozens of buttons at once.
+	var key: String = "%s|%s|%s|%d|%s" % [fill.to_html(), hover.to_html(), border.to_html(), width, rail]
+	var style: Dictionary = _button_styles.get(key, {})
+	if style.is_empty():
+		var hover_box = button_box(hover, GOLD, false, width, rail)
+		apply_hover_outline(hover_box)
+		var boxes := {
+			"normal": button_box(fill, border, false, width, rail),
+			"hover": hover_box,
+			"pressed": button_box(Color("6E3C1C"), GOLD, true, width, rail),
+			"disabled": button_box(Color("2A221C"), Color("4A3C30"), true, 2, rail),
+			"focus": button_box(fill, border, false, width, rail),
+			"hover_pressed": button_box(Color("6E3C1C"), GOLD, true, width, rail),
+		}
+		var theme := Theme.new()
+		for name in boxes:
+			theme.set_stylebox(str(name), "Button", boxes[name])
+		style = {"theme": theme, "boxes": boxes}
+		_button_styles[key] = style
+	var shared: Theme = style["theme"]
+	if button.theme == shared:
+		return false
+	var styled: Dictionary = style["boxes"]
+	for name in styled:
+		button.add_theme_stylebox_override(str(name), styled[name])
+	button.theme = shared
 	button.clip_contents = false
 	button.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
+	return true
 
 
 static func apply_tab(button: Button, selected: bool, affordable: bool = false) -> void:

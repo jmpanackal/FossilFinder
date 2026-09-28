@@ -29,6 +29,10 @@ var _fit_queued: bool = false
 const REFRESH_GAP := 0.12
 var _dirty: bool = false
 var _refresh_cooldown: float = 0.0
+var _levels_hash: int = 0
+var _tab_keys: Dictionary = {}
+var _heat: Dictionary = {}
+var _stale_cats: Dictionary = {}
 
 
 func _init() -> void:
@@ -299,6 +303,12 @@ func _add_row(item: Dictionary, cat: String, tier: int) -> void:
 
 func _select_cat(cat: String) -> void:
 	_selected_cat = cat
+	if _stale_cats.has(cat):
+		_stale_cats.erase(cat)
+		for item in GameState.catalog:
+			var id: String = str(item["id"])
+			if str(item.get("cat", "")) == cat and _buttons.has(id) and _buttons[id].has_method("refresh"):
+				_buttons[id].refresh()
 	for page_cat in _pages.keys():
 		var page: VBoxContainer = _pages[page_cat]
 		page.visible = str(page_cat) == cat
@@ -322,7 +332,7 @@ func _on_money_changed() -> void:
 
 func _on_upgrades_changed() -> void:
 	if visible:
-		refresh()
+		refresh(false)
 	else:
 		_dirty = true
 
@@ -332,13 +342,20 @@ func _on_visibility_changed() -> void:
 		refresh()
 
 
-func refresh() -> void:
+func refresh(all_pages: bool = true) -> void:
 	_dirty = false
 	_refresh_cooldown = REFRESH_GAP
 	if not _user_picked_tab:
 		var ready_cat: String = _first_ready_cat()
 		if not ready_cat.is_empty():
 			_selected_cat = ready_cat
+	## Effect copy depends on other upgrades' levels; rebuild every row when any level moves.
+	var levels_hash: int = GameState.levels.hash()
+	var levels_moved: bool = levels_hash != _levels_hash
+	_levels_hash = levels_hash
+	_heat.clear()
+	for item in GameState.catalog:
+		_heat[str(item["id"])] = GameState.shop_row_heat(str(item["id"]))
 	for cat in CATS:
 		var page: VBoxContainer = _pages[cat]
 		page.visible = cat == _selected_cat
@@ -348,8 +365,16 @@ func refresh() -> void:
 		if not _buttons.has(id):
 			continue
 		var row: Panel = _buttons[id]
+		if levels_moved and row.has_method("invalidate"):
+			row.invalidate()
+		## Only the open tab is on screen; other pages catch up when selected.
+		if not all_pages and str(item.get("cat", "")) != _selected_cat:
+			_stale_cats[str(item.get("cat", ""))] = true
+			continue
 		if row.has_method("refresh"):
 			row.refresh()
+	if all_pages:
+		_stale_cats.clear()
 	for cat in CATS:
 		_refresh_tiers(cat)
 
@@ -359,6 +384,10 @@ func _refresh_tab(cat: String) -> void:
 	var button: Button = tab["button"]
 	var glow_count: int = _cat_glow_count(cat)
 	var selected: bool = cat == _selected_cat
+	var key: String = "%s|%d" % [selected, glow_count]
+	if _tab_keys.get(cat, "") == key:
+		return
+	_tab_keys[cat] = key
 	Ui.apply_tab(button, selected, glow_count > 0)
 	var caption: Label = tab["caption"]
 	caption.add_theme_color_override("font_color", Ui.GOLD if selected else Ui.INK)
@@ -431,12 +460,18 @@ func _first_ready_cat() -> String:
 	return ""
 
 
+func _row_heat(id: String) -> String:
+	if _heat.has(id):
+		return str(_heat[id])
+	return GameState.shop_row_heat(id)
+
+
 func _cat_glow_count(cat: String) -> int:
 	var count: int = 0
 	for item in GameState.catalog:
 		if str(item.get("cat", "")) != cat:
 			continue
-		if GameState.shop_row_heat(str(item["id"])) == "glow":
+		if _row_heat(str(item["id"])) == "glow":
 			count += 1
 	return count
 
@@ -495,7 +530,7 @@ func _process(delta: float) -> void:
 	if visible:
 		_refresh_cooldown = maxf(0.0, _refresh_cooldown - delta)
 		if _dirty and _refresh_cooldown <= 0.0:
-			refresh()
+			refresh(false)
 		var pulse: float = 0.78 + 0.22 * absf(sin(float(Time.get_ticks_msec()) * 0.007))
 		for item in GameState.catalog:
 			var id: String = str(item["id"])
@@ -504,7 +539,7 @@ func _process(delta: float) -> void:
 			var card: Panel = _buttons[id]
 			if _card_juicing(card):
 				continue
-			if GameState.shop_row_heat(id) != "glow":
+			if _row_heat(id) != "glow":
 				continue
 			card.modulate = Color("FFE08A").lerp(Color("E4B75A"), 1.0 - pulse)
 		for cat in CATS:

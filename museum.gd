@@ -107,8 +107,6 @@ func _process(delta: float) -> void:
 		_banner_life -= delta
 		if _banner_life <= 0.0:
 			_banner.visible = false
-	if _canvas.has_method("queue_redraw"):
-		_canvas.queue_redraw()
 
 
 func _make_stat_label() -> Label:

@@ -703,7 +703,7 @@ func _depth_offset(x: int, y: int) -> float:
 	if _top_layer.is_empty():
 		return 0.0
 	var raw: float = float(_layer_at(x, y)) * Tuning.wall_per_layer
-	return minf(raw, _max_depth_offset())
+	return minf(raw, _depth_cap if _drawing else _max_depth_offset())
 
 
 func _top_rect(x: int, y: int) -> Rect2:
@@ -728,8 +728,13 @@ func cell_center(cell: Vector2i) -> Vector2:
 
 
 func _cell_at(world: Vector2) -> Vector2i:
+	## Column x-extents do not depend on depth, so only the aimed column and its
+	## neighbors can match; scan those bottom-up like the full-grid search did.
+	var col: int = floori((world.x - Tuning.grid_origin.x) / maxf(Tuning.cell_w, 0.001))
+	var x_from: int = maxi(col - 1, 0)
+	var x_to: int = mini(col + 1, Tuning.grid_w - 1)
 	for y in range(Tuning.grid_h - 1, -1, -1):
-		for x in Tuning.grid_w:
+		for x in range(x_from, x_to + 1):
 			if _top_rect(x, y).grow(2.0).has_point(world):
 				return Vector2i(x, y)
 	var gx := floori((world.x - Tuning.grid_origin.x) / Tuning.cell_w)
@@ -1441,16 +1446,34 @@ func _make_square_texture(size: int) -> ImageTexture:
 	return ImageTexture.create_from_image(image)
 
 
+var _drawing: bool = false
+var _depth_cap: float = 0.0
+var _rects: Array[Rect2] = []
+var _rects_h: int = 0
+var _cell_tex: Dictionary = {}
+
+
 func _draw() -> void:
 	_draw_chunk()
 	if _top_layer.is_empty():
 		return
 	var width: int = _top_layer.size()
 	var height: int = _top_layer[0].size()
+	## A 16x10 redraw used to recompute every rect (and resolve cell art) 3-4x
+	## per cell through autoload lookups. Build the punched rects once per draw.
+	_depth_cap = _max_depth_offset()
+	_drawing = true
+	_rects_h = height
+	_rects.resize(width * height)
+	for x in width:
+		for y in height:
+			_rects[x * height + y] = _punched_rect(_top_rect(x, y), Vector2i(x, y))
+	_cell_tex.clear()
 	for y in height:
 		for x in width:
 			_draw_cell_sides(x, y)
 			_draw_top(x, y)
+	_drawing = false
 	_draw_bone_pulse()
 	_draw_lucky()
 
@@ -1614,16 +1637,23 @@ func _draw_chunk() -> void:
 	draw_rect(Rect2(top.position, Vector2(top.size.x, top.size.y + Tuning.chunk_front)), line, false, Tuning.chunk_line_width())
 
 
+func _drawn_rect(x: int, y: int) -> Rect2:
+	var i: int = x * _rects_h + y
+	if _drawing and i >= 0 and i < _rects.size() and y < _rects_h:
+		return _rects[i]
+	return _punched_rect(_top_rect(x, y), Vector2i(x, y))
+
+
 func _draw_cell_sides(x: int, y: int) -> void:
-	var top := _punched_rect(_top_rect(x, y), Vector2i(x, y))
-	var face := _cell_face_color(x, y)
 	if y + 1 >= Tuning.grid_h:
 		return
-	var below := _punched_rect(_top_rect(x, y + 1), Vector2i(x, y + 1))
+	var top := _drawn_rect(x, y)
+	var below := _drawn_rect(x, y + 1)
 	var drop := below.position.y - top.end.y
 	if drop <= Tuning.cell_gap + 1.0:
 		return
 	var step := Rect2(top.position.x, top.end.y, top.size.x, drop)
+	var face := _cell_face_color(x, y)
 	draw_rect(step, face)
 	draw_rect(step, Tuning.chunk_line_color(), false, 1.0)
 
@@ -1638,38 +1668,54 @@ func _cell_face_color(x: int, y: int) -> Color:
 	return Tuning.color_for_layer(layer).darkened(0.32)
 
 
+const BONE_FLASH := Color("FFF4D2")
+const VOID_CELL := Color("1A1410")
+
+
 func _draw_top(x: int, y: int) -> void:
 	var cell := Vector2i(x, y)
-	var rect := _punched_rect(_top_rect(x, y), cell)
+	var rect := _drawn_rect(x, y)
 	var layer: int = _top_layer[x][y]
 	var color: Color
 	var painted: bool = false
-	if _is_exposed_fossil(cell):
+	var bone: bool = exposed_cells.has(cell)
+	if bone:
 		color = _bone_color(cell)
 		if _bone_pulse > 0.0:
-			color = color.lerp(Color("FFF4D2"), _bone_pulse * 0.7)
+			color = color.lerp(BONE_FLASH, _bone_pulse * 0.7)
 	elif layer >= Tuning.layer_count:
-		color = Color("1A1410")
+		color = VOID_CELL
 	else:
 		color = Tuning.color_for_layer(layer)
-		painted = ArtCatalogScript.draw_if_present(self, "cells", ArtCatalogScript.cell_id_for_layer(layer), rect)
+		painted = _draw_cell_art(layer, rect)
 	if not painted:
 		draw_rect(rect, color)
 	draw_rect(rect, Tuning.cell_line, false, 1.5)
 	var edge := 0.18
-	if _is_exposed_fossil(cell):
+	if bone:
 		edge += float(cleanliness.get(cell, 0.0)) * 0.22
 	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
 	if y == 0:
 		_draw_north_cell_shade(rect, color)
 	_draw_cracks(rect, cell, layer)
-	if not _is_exposed_fossil(cell) and layer < Tuning.layer_count:
+	if not bone and layer < Tuning.layer_count:
 		_draw_inclusion(rect, cell)
-	if is_sensed(cell):
+	if not bone and sensed_cells.has(cell):
 		_draw_sensed(rect)
-	if _is_exposed_fossil(cell):
+	if bone:
 		_draw_bone_mark(rect, cell, float(cleanliness.get(cell, 0.0)))
 		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
+
+
+func _draw_cell_art(layer: int, rect: Rect2) -> bool:
+	var material: int = Tuning.material_at_layer(layer)
+	if not _cell_tex.has(material):
+		_cell_tex[material] = ArtCatalogScript.texture("cells", ArtCatalogScript.cell_id_for_material(material))
+	var tex: Texture2D = _cell_tex[material]
+	if tex == null or rect.size.x < 1.0 or rect.size.y < 1.0:
+		return false
+	draw_texture_rect(tex, rect, false)
+	return true
 
 
 func _draw_north_cell_shade(rect: Rect2, _color: Color) -> void:
@@ -1732,8 +1778,11 @@ func _draw_cracks(rect: Rect2, cell: Vector2i, layer: int) -> void:
 		crack_count = int(round((1.0 - integrity) / 0.18))
 		crack_color = Color(0.25, 0.16, 0.1, 0.85)
 	elif layer < Tuning.layer_count:
+		var hp: float = float(_hp[cell.x][cell.y])
 		var max_hp := Tuning.hp_for_layer(layer)
-		var damaged := 1.0 - clampf(float(_hp[cell.x][cell.y]) / max_hp, 0.0, 1.0)
+		if hp >= max_hp:
+			return
+		var damaged := 1.0 - clampf(hp / max_hp, 0.0, 1.0)
 		crack_count = _dirt_crack_count(damaged)
 	_stroke_cracks(rect, crack_count, crack_color)
 
@@ -1804,7 +1853,10 @@ func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
 	if rarity <= Matrix.RARITY_COMMON:
 		draw_circle(pos, 1.35, Color(0.22, 0.15, 0.1, 0.38 + strength * 0.2))
 		return
-	var kind: String = Matrix.icon_kind(find)
+	## icon_kind string-matches the name; resolve it once per rolled find.
+	if not find.has("_icon"):
+		find["_icon"] = Matrix.icon_kind(find)
+	var kind: String = find["_icon"]
 	var radius: float = 2.4 + strength * 3.2
 	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 

@@ -290,7 +290,19 @@ func money_for_layer(layer: int) -> int:
 	return int(round(amount * money_mult))
 
 
+var _layer_colors: PackedColorArray = PackedColorArray()
+
+
 func color_for_layer(layer: int) -> Color:
+	## Called per cell per redraw; the ramp only depends on layer_count.
+	if _layer_colors.size() != layer_count:
+		_layer_colors.resize(layer_count)
+		for i in layer_count:
+			_layer_colors[i] = _layer_color_uncached(i)
+	return _layer_colors[clampi(layer, 0, layer_count - 1)]
+
+
+func _layer_color_uncached(layer: int) -> Color:
 	## Per-layer steps in two job families: warm shovel dirt, then cool pick stone.
 	var idx: int = clampi(layer, 0, layer_count - 1)
 	if idx <= 11:

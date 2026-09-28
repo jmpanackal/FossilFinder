@@ -60,6 +60,15 @@ var flash_t: float = 0.0
 var pop_t: float = 0.0
 var _crowd_t: float = 0.0
 var _guests: Array = []
+## Guests walk every frame; the hall does not. They draw on their own layer so
+## the ~2000x1480 hall only re-records when an exhibit actually changes.
+var _guest_layer: _GuestLayer
+
+
+func _ready() -> void:
+	_guest_layer = _GuestLayer.new()
+	_guest_layer.host = self
+	add_child(_guest_layer)
 
 
 func play_unveil_flash(stand_id: String) -> void:
@@ -84,11 +93,18 @@ func tick(delta: float) -> void:
 	if visitor_sprite_count() > 0:
 		_crowd_t += delta
 		_step_guests(delta)
-		dirty = true
+		_redraw_guests()
 	elif not _guests.is_empty():
 		_guests.clear()
-		dirty = true
+		_redraw_guests()
 	if dirty:
+		queue_redraw()
+
+
+func _redraw_guests() -> void:
+	if _guest_layer != null:
+		_guest_layer.queue_redraw()
+	else:
 		queue_redraw()
 
 
@@ -147,7 +163,10 @@ func _draw() -> void:
 	_draw_sauropod_bay()
 	_draw_raptor_bay()
 	_draw_stego_bay()
-	_draw_visitors()
+	if _guest_layer == null:
+		_draw_visitors()
+	else:
+		_guest_layer.queue_redraw()
 
 
 func _draw_hall() -> void:
@@ -658,10 +677,10 @@ func visitor_positions() -> PackedVector2Array:
 	return spots
 
 
-func _draw_visitors() -> void:
+func _draw_visitors(c: CanvasItem = null) -> void:
 	_sync_guests()
 	for i in _guests.size():
-		_draw_visitor(_guests[i]["pos"], i)
+		_draw_visitor(_guests[i]["pos"], i, c)
 
 
 func _sync_guests() -> void:
@@ -878,7 +897,9 @@ func _dedupe_path(from: Vector2, pts: Array) -> Array:
 	return out
 
 
-func _draw_visitor(pos: Vector2, index: int) -> void:
+func _draw_visitor(pos: Vector2, index: int, c: CanvasItem = null) -> void:
+	if c == null:
+		c = self
 	var coats: PackedColorArray = PackedColorArray([
 		Color("6A4A32"),
 		Color("3A4A62"),
@@ -887,10 +908,10 @@ func _draw_visitor(pos: Vector2, index: int) -> void:
 		Color("4A3A52"),
 	])
 	var coat: Color = coats[index % coats.size()]
-	draw_circle(pos + Vector2(0, -10), 4.5, Color("E8D4B0"))
-	draw_rect(Rect2(pos.x - 4.0, pos.y - 6.0, 8.0, 11.0), coat)
-	draw_rect(Rect2(pos.x - 3.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
-	draw_rect(Rect2(pos.x + 0.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
+	c.draw_circle(pos + Vector2(0, -10), 4.5, Color("E8D4B0"))
+	c.draw_rect(Rect2(pos.x - 4.0, pos.y - 6.0, 8.0, 11.0), coat)
+	c.draw_rect(Rect2(pos.x - 3.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
+	c.draw_rect(Rect2(pos.x + 0.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
 
 
 func _draw_mount_art(stand_id: String, mount: Rect2) -> bool:
@@ -1657,3 +1678,11 @@ func _draw_label(center: Vector2, text: String, font_size: int, color: Color) ->
 	var size: int = label_font_size(font_size)
 	var width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	draw_string(font, center + Vector2(-width * 0.5, 0.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+
+
+class _GuestLayer extends Node2D:
+	var host: Node2D
+
+	func _draw() -> void:
+		if host != null:
+			host.call("_draw_visitors", self)
