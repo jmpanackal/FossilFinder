@@ -6,11 +6,11 @@ const Ui := preload("res://ui_style.gd")
 const UpgradeRow := preload("res://upgrade_node.gd")
 const ShopIcon := preload("res://shop_icon.gd")
 
-const CATS: Array[String] = ["Hands", "Shovel", "Pickaxe", "Brush", "Site", "Exhibit"]
+const CATS: Array[String] = ["Hands", "Shovel", "Pickaxe", "Brush", "Site", "Museum"]
 const RAIL_W := 176.0
+const TAB_BADGE := Vector2(22, 22)
 
 var _title: Label
-var _wallet: Label
 var _buttons: Dictionary = {}
 var _tabs: Dictionary = {}
 var _pages: Dictionary = {}
@@ -43,33 +43,16 @@ func _ready() -> void:
 	Ui.apply_header_bar(bar)
 	add_child(bar)
 
-	var back := Button.new()
-	back.text = "Back"
-	Ui.apply_nav(back)
-	Ui.place_header_back(back)
-	back.pressed.connect(func() -> void:
-		Sfx.play("ui")
-		closed.emit()
-	)
-	add_child(back)
-
 	_title = Label.new()
 	_title.text = "Upgrades"
 	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Ui.apply_title(_title)
-	Ui.place_header_title(_title)
+	var title_x: float = Ui.HEADER_PAD
+	if Settings != null and Settings.has_method("overlay_content_left"):
+		title_x = Settings.overlay_content_left()
+	_title.position = Vector2(title_x, (Ui.HEADER_H - 36.0) * 0.5)
+	_title.size = Vector2(280, 36)
 	add_child(_title)
-
-	_wallet = Label.new()
-	_wallet.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_wallet.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_wallet.offset_left = -280
-	_wallet.offset_right = -Ui.HEADER_PAD
-	_wallet.offset_top = (Ui.HEADER_H - 36.0) * 0.5
-	_wallet.offset_bottom = _wallet.offset_top + 36.0
-	_wallet.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_wallet(_wallet)
-	add_child(_wallet)
 
 	var body := HBoxContainer.new()
 	add_child(body)
@@ -175,7 +158,7 @@ func _make_tab(cat: String) -> Button:
 	tab.add_child(row)
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.offset_left = 8
-	row.offset_right = -8
+	row.offset_right = -(float(Ui.CORNER) + TAB_BADGE.x + 4.0)
 	row.offset_top = 6
 	row.offset_bottom = -6
 
@@ -190,16 +173,23 @@ func _make_tab(cat: String) -> Button:
 	caption.text = cat
 	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.clip_text = false
 	Ui.apply_body(caption)
 	row.add_child(caption)
 
 	var badge := Label.new()
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.custom_minimum_size = Vector2(22, 22)
+	badge.custom_minimum_size = TAB_BADGE
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_END
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Ui.apply_label(badge, 13, Color("1B1410"))
-	row.add_child(badge)
+	tab.add_child(badge)
+	tab.resized.connect(func() -> void:
+		_place_tab_badge(tab, badge)
+	)
+	_place_tab_badge(tab, badge)
 
 	_tabs[cat] = {"button": tab, "icon": icon, "caption": caption, "badge": badge}
 	return tab
@@ -321,7 +311,6 @@ func _on_buy(id: String) -> void:
 
 
 func refresh() -> void:
-	_wallet.text = "$%d" % GameState.money
 	if not _user_picked_tab:
 		var ready_cat: String = _first_ready_cat()
 		if not ready_cat.is_empty():
@@ -355,8 +344,21 @@ func _refresh_tab(cat: String) -> void:
 	if glow_count > 0:
 		badge.add_theme_stylebox_override("normal", Ui.badge_box())
 		badge.add_theme_color_override("font_color", Color("1B1410"))
+	_place_tab_badge(button, badge)
 	if tab["icon"].has_method("setup"):
 		tab["icon"].setup(ShopIcon.glyph_for_cat(cat), Ui.GOLD if selected or glow_count > 0 else Color("A88858"))
+
+
+func _place_tab_badge(button: Button, badge: Label) -> void:
+	if button == null or badge == null:
+		return
+	var min_size: Vector2 = badge.get_combined_minimum_size()
+	badge.size = Vector2(maxf(TAB_BADGE.x, min_size.x), maxf(TAB_BADGE.y, min_size.y))
+	var inset: float = float(Ui.CORNER)
+	badge.position = Vector2(
+		button.size.x - badge.size.x - inset,
+		(button.size.y - badge.size.y) * 0.5
+	)
 
 
 func _refresh_tiers(cat: String) -> void:
@@ -575,21 +577,22 @@ func _slam_rank(id: String, text: String) -> void:
 
 
 func _flash_spend(cost: int) -> void:
-	_wallet.modulate = Color("FFE08A")
+	if Settings != null and Settings.has_method("catch_loot"):
+		Settings.catch_loot()
 	var chip := Label.new()
 	chip.text = "-$%d" % cost
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	Ui.apply_label(chip, 22, Color("E24B4B"))
-	chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	chip.offset_left = -280
-	chip.offset_right = -Ui.HEADER_PAD
-	chip.offset_top = Ui.HEADER_H - 38.0
-	chip.offset_bottom = chip.offset_top + 30.0
+	var origin: Vector2 = Vector2(24, 56)
+	if Settings != null and Settings.has_method("wallet_rect"):
+		var bank: Rect2 = Settings.wallet_rect()
+		origin = Vector2(bank.position.x + 8.0, bank.end.y + 4.0)
+	chip.position = origin
+	chip.size = Vector2(120, 30)
 	add_child(chip)
 	var tw := create_tween()
-	tw.tween_property(_wallet, "modulate", Color.WHITE, 0.45)
-	tw.parallel().tween_property(chip, "position:y", chip.position.y - 34.0, 0.55)
+	tw.tween_property(chip, "position:y", chip.position.y - 34.0, 0.55)
 	tw.parallel().tween_property(chip, "modulate:a", 0.0, 0.55)
 	tw.tween_callback(chip.queue_free)
 

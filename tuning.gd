@@ -73,7 +73,12 @@ var main_fossil_paths: PackedStringArray = [
 	"res://brachiosaurus_femur.tres",
 	"res://brachiosaurus_neck.tres",
 ]
-var extra_fossil_paths: PackedStringArray = ["res://trilobite.tres", "res://amber_insect.tres"]
+var extra_fossil_paths: PackedStringArray = [
+	"res://trilobite.tres",
+	"res://amber_insect.tres",
+	"res://cycad.tres",
+	"res://fossil_flower.tres",
+]
 var big_finds_unlocked: bool = false
 var passive_miner_owned: bool = false
 var lucky_shift_chance: float = 0.70
@@ -155,6 +160,7 @@ var pickaxe_click_mult: float = 0.85
 var pickaxe_hold_mult: float = 1.0
 var pickaxe_hold_tick_rate: float = 1.8
 var pickaxe_splash_mult: float = 0.7
+var pickaxe_radius: float = 1.0
 ## Floor so max Steady Shoveling stays snappy without 60 ticks/sec.
 var hold_min_interval: float = 0.065
 
@@ -179,6 +185,15 @@ var piece_income_exhibit: float = 0.09
 var piece_income_exhibit_dirty: float = 0.035
 var dirty_income_factor: float = 1.0
 var exhibit_flat_income: float = 0.0
+var donation_base: float = 0.02
+var donation_mult: float = 1.0
+var donation_flat: float = 0.0
+var visitor_flat: int = 0
+var visitor_draw_scrap_clean: int = 4
+var visitor_draw_scrap_dirty: int = 2
+var visitor_draw_exhibit_clean: int = 5
+var visitor_draw_exhibit_dirty: int = 2
+var unveil_surge_visitors: int = 8
 var duplicate_cash: float = 0.4
 var set_complete_sale_mult: float = 2.0
 var extra_complete_set_chance: float = 0.22

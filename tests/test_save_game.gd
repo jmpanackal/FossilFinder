@@ -208,7 +208,12 @@ func _test_menu_chrome_stays_up() -> void:
 	_assert(menu is Button, "shared Menu button lives on the settings layer")
 	if menu is Button:
 		_assert(str(menu.text) == "Menu", "chrome button is labeled Menu")
-		_assert(bool(menu.visible), "Menu stays visible while the overlay is closed")
+	var back: Variant = settings.get("_back_btn")
+	_assert(back is Button, "shared Back button lives on the settings layer")
+	if back is Button:
+		_assert(str(back.text) == "Back", "chrome button is labeled Back")
+	var end_btn: Variant = settings.get("_end_btn")
+	_assert(end_btn is Button, "shared End shift lives on the settings layer")
 	var new_game: Variant = settings.get("_new_game")
 	_assert(new_game is Button, "New game lives in the pause menu")
 	if new_game is Button:

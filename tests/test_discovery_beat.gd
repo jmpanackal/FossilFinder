@@ -3,6 +3,8 @@ extends SceneTree
 ## Sittings 2–3: discovery peaks + chip hierarchy. No splash, no rarity.
 ## Run: godot --headless --path <project> -s res://tests/test_discovery_beat.gd
 
+const Ui := preload("res://ui_style.gd")
+
 var _failed: int = 0
 var _passed: int = 0
 var GS: Node
@@ -25,6 +27,8 @@ func _run() -> void:
 	_test_crowded_chip_keeps_name_and_price()
 	_test_bagged_chip_stamps_hall_fate()
 	_test_stars_stay_condition()
+	_test_find_chip_stars_are_drawn()
+	_test_find_chip_stars_are_small_and_centered()
 	print("discovery_beat %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -87,12 +91,12 @@ func _test_uncover_celebrates_quota() -> void:
 	if not GS.has_method("uncover_status_line"):
 		return
 	_assert(str(GS.call("uncover_status_line", "t_rex_tooth")) == "New · 1/6", "first T. rex tooth says New · 1/6")
-	_assert(str(GS.call("uncover_status_line", "t_rex_skull")) == "New", "a missing unique bone says New")
+	_assert(str(GS.call("uncover_status_line", "t_rex_skull")) == "New · 1/1", "a missing unique bone says New · 1/1")
 	GS.install_find("t_rex_tooth", "Tooth", 1.0, true)
-	_assert(str(GS.call("uncover_status_line", "t_rex_tooth")) == "2/6", "the next tooth counts toward quota")
+	_assert(str(GS.call("uncover_status_line", "t_rex_tooth")) == "New · 2/6", "the next tooth still counts as New toward quota")
 	for _i in 5:
 		GS.install_find("t_rex_tooth", "Tooth", 1.0, true)
-	_assert(str(GS.call("uncover_status_line", "t_rex_tooth")) == "Duplicate", "over-quota copies say Duplicate")
+	_assert(str(GS.call("uncover_status_line", "t_rex_tooth")) == "Duplicate · 6/6", "over-quota copies say Duplicate · 6/6")
 	var chip: Control = _make_chip()
 	if chip == null:
 		return
@@ -130,15 +134,15 @@ func _test_hall_fate_uses_finder_language() -> void:
 	_assert(GS.has_method("hall_fate_line"), "GameState names hall fate in Finder language")
 	if not GS.has_method("hall_fate_line"):
 		return
-	_assert(str(GS.call("hall_fate_line", "t_rex_skull")) == "needs this", "a missing unique bone says needs this")
-	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "1/6 on display", "a quota piece says 1/6 on display")
+	_assert(str(GS.call("hall_fate_line", "t_rex_skull")) == "New · 1/1", "a missing unique bone says New · 1/1")
+	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "New · 1/6", "a first quota piece says New · 1/6")
 	GS.install_find("t_rex_tooth", "Tooth", 1.0, true)
 	GS.install_find("t_rex_tooth", "Tooth", 1.0, true)
-	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "3/6 on display", "the next bag counts the stand after copies already mounted")
+	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "New · 3/6", "the next bag still counts as New toward the stand")
 	for _i in 4:
 		GS.install_find("t_rex_tooth", "Tooth", 1.0, true)
-	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "extra sold", "over-quota copies say extra sold")
-	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")).find("sold extra") < 0, "fate is extra sold, not sold extra")
+	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")) == "Duplicate · 6/6", "over-quota copies say Duplicate · 6/6")
+	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")).find("needs this") < 0, "fate does not say needs this")
 	_assert(str(GS.call("hall_fate_line", "t_rex_tooth")).find("Rare") < 0, "fate is not an idle rarity word")
 
 
@@ -184,15 +188,15 @@ func _test_bagged_chip_stamps_hall_fate() -> void:
 	var chip: Control = _make_chip()
 	if chip == null:
 		return
-	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "needs this"))
+	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "New · 1/1"))
 	var status_label: Label = chip.get("_status_label") as Label
-	_assert(status_label != null and status_label.text.find("needs this") >= 0, "bag stamps needs this on the chip")
-	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "1/6 on display"))
+	_assert(status_label != null and status_label.text.find("New") >= 0 and status_label.text.find("1/1") >= 0, "bag stamps New · 1/1 on the chip")
+	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "New · 1/6"))
 	status_label = chip.get("_status_label") as Label
-	_assert(status_label != null and status_label.text.find("1/6 on display") >= 0, "bag stamps quota on the chip")
-	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "extra sold"))
+	_assert(status_label != null and status_label.text.find("1/6") >= 0, "bag stamps quota on the chip")
+	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "Duplicate · 6/6"))
 	status_label = chip.get("_status_label") as Label
-	_assert(status_label != null and status_label.text.find("extra sold") >= 0, "bag stamps extra sold on the chip")
+	_assert(status_label != null and status_label.text.find("Duplicate") >= 0, "bag stamps Duplicate on the chip")
 	chip.queue_free()
 
 
@@ -202,9 +206,53 @@ func _test_stars_stay_condition() -> void:
 		return
 	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "needs this"))
 	var grade_label: Label = chip.get("_grade_label") as Label
-	_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "stars stay next to preservation grade")
-	_assert(grade_label != null and grade_label.text.find("★") >= 0, "stars still mean condition")
+	_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "stars stay with preservation grade")
 	_assert(grade_label != null and grade_label.text.find("Rare") < 0, "stars are not a rarity tier")
+	chip.queue_free()
+
+
+func _test_find_chip_stars_are_drawn() -> void:
+	var font: Font = Ui.display_font()
+	_assert(font != null, "catalog font loads")
+	if font != null:
+		_assert(not font.has_char("★".unicode_at(0)), "catalog font has no star glyph for the browser")
+	var chip: Control = _make_chip()
+	if chip == null:
+		return
+	chip.call("apply_card", _card("Tooth", "t_rex_tooth", "bagged", 5, "Brushed 100%", 80, "Well preserved", "needs this"))
+	var grade_label: Label = chip.get("_grade_label") as Label
+	_assert(grade_label != null and grade_label.text.find("★") < 0, "find chips do not put star glyphs in a label")
+	_assert(chip.get("_stars") != null, "find chips keep a drawn star row")
+	var stars: Variant = chip.get("_stars")
+	if stars != null:
+		_assert(bool(stars.visible), "drawn stars show on a graded find")
+		_assert(int(stars.get("filled")) == 5, "drawn stars match the preservation count")
+		_assert(stars.has_method("_draw_star"), "stars are polygons, not font tofu")
+	chip.queue_free()
+
+
+func _test_find_chip_stars_are_small_and_centered() -> void:
+	var chip: Control = _make_chip()
+	if chip == null:
+		return
+	chip.call("apply_card", _card("Amber Insect", "amber_insect", "bagged", 5, "Brushed 100%", 10, "Well preserved", "Duplicate · 1/1"))
+	if chip.has_method("fit_tray"):
+		chip.call("fit_tray", 360.0, false)
+	chip.size = Vector2(360, 70)
+	var grade_row: Node = chip.get("_grade_row")
+	_assert(grade_row is VBoxContainer, "grade copy and stars stack so the words stay centered")
+	var stars: Control = chip.get("_stars") as Control
+	_assert(stars != null, "the compact star row exists")
+	if stars != null:
+		_assert(stars.custom_minimum_size.y <= 8.5, "find-chip stars stay caption-sized")
+		_assert(stars.custom_minimum_size.x <= 48.0, "find-chip stars do not out-shout the grade")
+		_assert(stars.size_flags_horizontal == Control.SIZE_SHRINK_CENTER, "stars sit on the text center")
+	var name_label: Label = chip.get("_name_label") as Label
+	var grade_label: Label = chip.get("_grade_label") as Label
+	if name_label != null and grade_label != null:
+		_assert(name_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the bone name stays centered")
+		_assert(grade_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the grade stays centered")
+		_assert(grade_label.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "grade uses the full text column")
 	chip.queue_free()
 
 

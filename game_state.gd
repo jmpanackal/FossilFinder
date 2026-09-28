@@ -12,6 +12,7 @@ const STAND_BRACHIOSAURUS := "brachiosaurus"
 const STAND_VELOCIRAPTOR := "velociraptor"
 const STAND_STEGOSAURUS := "stegosaurus"
 const STAND_SMALL_FINDS := "small_finds"
+const STAND_PLANT_FOSSILS := "plant_fossils"
 const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
 
@@ -32,40 +33,55 @@ var _bases: Dictionary = {}
 var _fossil_by_id: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
-	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.55, "max": 5},
-	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 32, "scale": 1.55, "max": 4},
-	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 20, "scale": 1.7, "max": 6},
-	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 55, "scale": 1.65, "max": 5, "requires": "shovel_click"},
-	{"id": "shovel_radius", "cat": "Shovel", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The shovel covers more than one cell.", "unlock_action": "Unlock", "cost": 90, "scale": 1.75, "max": 4, "requires": "shovel_click"},
-	{"id": "shovel_super", "cat": "Shovel", "tier": 2, "name": "Super Shovel", "desc": "A heavier class of shovel. Hits harder and covers more.", "cost": 900, "scale": 1.85, "max": 6},
-	{"id": "shovel_soft", "cat": "Shovel", "tier": 2, "name": "Soft Edge", "desc": "Takes more hits to crack bone.", "cost": 720, "scale": 1.75, "max": 5},
-	{"id": "pick_click", "cat": "Pickaxe", "tier": 1, "name": "Sharp Strikes", "desc": "Clicks hit clay and rock harder.", "unlock_name": "Pickaxe", "unlock_desc": "Needed for clay and stone. Weak on dirt.", "cost": 140, "scale": 1.7, "max": 6, "requires": "shovel_click"},
-	{"id": "pick_hold", "cat": "Pickaxe", "tier": 1, "name": "Relentless Picking", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep striking.", "unlock_action": "Unlock", "cost": 160, "scale": 1.65, "max": 5, "requires": "pick_click"},
-	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 1100, "scale": 1.85, "max": 6},
-	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Blunted Point", "desc": "Takes more hits to crack bone.", "cost": 720, "scale": 1.75, "max": 5},
-	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting the bone goes faster.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 220, "scale": 1.7, "max": 5, "requires": "pick_click"},
-	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Even faster dusting once the first brush is maxed.", "cost": 800, "scale": 1.8, "max": 6},
-	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 55, "scale": 1.65, "max": 4},
-	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more, especially by hand.", "cost": 30, "scale": 1.65, "max": 5},
-	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 65, "scale": 1.85, "max": 3},
-	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Scraps", "desc": "More scraps can hide in the pit.", "unlock_name": "Scattered Scraps", "unlock_desc": "A second small bone can hide in the pit.", "unlock_action": "Unlock", "cost": 110, "scale": 1.75, "max": 2},
-	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra scraps too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 480, "scale": 1.8, "max": 3},
-	{"id": "site_expand", "cat": "Site", "tier": 2, "name": "Open Ground", "desc": "Stretch the claim much farther.", "cost": 520, "scale": 1.85, "max": 5},
-	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Nodules and crystals in stone pay more.", "cost": 280, "scale": 1.7, "max": 6},
-	{"id": "money_mult", "cat": "Site", "tier": 2, "name": "Keen Eye", "desc": "Everything you dig is worth more.", "cost": 360, "scale": 1.75, "max": 6},
-	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 340, "scale": 1.75, "max": 6},
+	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
+	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
+	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Hands pull better finds and more $ from the soil.", "cost": 1500, "scale": 1.85, "max": 6},
+	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
+	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
+	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 75, "scale": 2.0, "max": 5, "requires": "shovel_click"},
+	{"id": "shovel_radius", "cat": "Shovel", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The shovel covers more than one cell.", "unlock_action": "Unlock", "cost": 120, "scale": 2.05, "max": 4, "requires": "shovel_click"},
+	{"id": "shovel_super", "cat": "Shovel", "tier": 2, "name": "Super Shovel", "desc": "A heavier class of shovel. Hits harder and covers more.", "cost": 4000, "scale": 1.95, "max": 6},
+	{"id": "shovel_soft", "cat": "Shovel", "tier": 2, "name": "Soft Edge", "desc": "Takes more hits to crack bone.", "cost": 2200, "scale": 1.95, "max": 5},
+	{"id": "shovel_titan", "cat": "Shovel", "tier": 3, "name": "Titan Shovel", "desc": "The heaviest shovel. Hits harder and covers more.", "cost": 80000, "scale": 1.7, "max": 6},
+	{"id": "pick_click", "cat": "Pickaxe", "tier": 1, "name": "Sharp Strikes", "desc": "Clicks hit clay and rock harder.", "unlock_name": "Pickaxe", "unlock_desc": "Needed for clay and stone. Weak on dirt.", "cost": 145, "scale": 1.8, "max": 6, "requires": "shovel_click"},
+	{"id": "pick_hold", "cat": "Pickaxe", "tier": 1, "name": "Relentless Picking", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep striking.", "unlock_action": "Unlock", "cost": 175, "scale": 1.8, "max": 5, "requires": "pick_click"},
+	{"id": "pick_radius", "cat": "Pickaxe", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The pickaxe cracks a wider patch of stone.", "unlock_action": "Unlock", "cost": 150, "scale": 1.9, "max": 4, "requires": "pick_click"},
+	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 4500, "scale": 1.95, "max": 6},
+	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Blunted Point", "desc": "Takes more hits to crack bone.", "cost": 2200, "scale": 1.95, "max": 5},
+	{"id": "pick_titan", "cat": "Pickaxe", "tier": 3, "name": "Titan Pick", "desc": "The heaviest pick. Clay and rock give faster.", "cost": 80000, "scale": 1.7, "max": 6},
+	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting the bone goes faster.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "pick_click"},
+	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Even faster dusting once the first brush is maxed.", "cost": 3500, "scale": 1.95, "max": 6},
+	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
+	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
+	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 100, "scale": 2.1, "max": 3},
+	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Fossils", "desc": "More fossils can hide in the pit.", "unlock_name": "Scattered Fossils", "unlock_desc": "A second small fossil can hide in the pit.", "unlock_action": "Unlock", "cost": 160, "scale": 2.0, "max": 2},
+	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra fossils too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 1400, "scale": 1.9, "max": 3},
+	{"id": "site_expand", "cat": "Site", "tier": 2, "name": "Open Ground", "desc": "Stretch the claim much farther.", "cost": 2200, "scale": 1.95, "max": 5},
+	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Nodules and crystals in stone pay more.", "cost": 1000, "scale": 1.85, "max": 6},
+	{"id": "money_mult", "cat": "Site", "tier": 2, "name": "Keen Eye", "desc": "Everything you dig is worth more.", "cost": 1500, "scale": 1.85, "max": 6},
+	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 1400, "scale": 1.85, "max": 6},
+	{"id": "round_marathon", "cat": "Site", "tier": 3, "name": "Marathon Shift", "desc": "Shifts run longer than a full Longer Shift.", "cost": 25000, "scale": 1.74, "max": 6},
+	{"id": "prime_bed", "cat": "Site", "tier": 3, "name": "Prime Bed", "desc": "More fossils can hide in the pit.", "cost": 28000, "scale": 1.7, "max": 4},
 	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
-	{"id": "lighting", "cat": "Exhibit", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 110, "scale": 1.7, "max": 5},
-	{"id": "spotlight", "cat": "Exhibit", "tier": 1, "name": "Featured exhibit 2x", "desc": "Featured exhibit 3x.", "unlock_name": "Unlock Spotlight", "unlock_desc": "Featured exhibit 2x.", "unlock_action": "Unlock", "cost": 200, "scale": 1.8, "max": 3},
-	{"id": "benches", "cat": "Exhibit", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 100, "scale": 1.65, "max": 5},
-	{"id": "unveil_time", "cat": "Exhibit", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 120, "scale": 1.7, "max": 4},
-	{"id": "unveil_crowd", "cat": "Exhibit", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes pay more each second.", "cost": 140, "scale": 1.7, "max": 4},
-	{"id": "glass_case", "cat": "Exhibit", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 280, "scale": 1.7, "max": 6},
-	{"id": "labels", "cat": "Exhibit", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 250, "scale": 1.7, "max": 6},
-	{"id": "gift_shop", "cat": "Exhibit", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 400, "scale": 1.75, "max": 6},
-	{"id": "crowds", "cat": "Exhibit", "tier": 3, "name": "Weekend Crowds", "desc": "More foot traffic every second.", "cost": 900, "scale": 1.8, "max": 6},
-	{"id": "restoration", "cat": "Exhibit", "tier": 3, "name": "Cleanup Crew", "desc": "Dirty finds still look decent on display.", "cost": 500, "scale": 1.7, "max": 6},
+	{"id": "lighting", "cat": "Museum", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 500, "scale": 2.0, "max": 5},
+	{"id": "spotlight", "cat": "Museum", "tier": 1, "name": "Featured exhibit 2x", "desc": "Featured exhibit 3x.", "unlock_name": "Unlock Spotlight", "unlock_desc": "Featured exhibit 2x.", "unlock_action": "Unlock", "cost": 280, "scale": 1.9, "max": 3},
+	{"id": "benches", "cat": "Museum", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 450, "scale": 2.0, "max": 5},
+	{"id": "unveil_time", "cat": "Museum", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 200, "scale": 1.85, "max": 4},
+	{"id": "unveil_crowd", "cat": "Museum", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes bring more people.", "cost": 220, "scale": 1.85, "max": 4},
+	{"id": "glass_case", "cat": "Museum", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 1000, "scale": 1.85, "max": 6},
+	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
+	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
+	{"id": "crowds", "cat": "Museum", "tier": 3, "name": "Weekend Crowds", "desc": "More foot traffic every second.", "cost": 4000, "scale": 1.95, "max": 6},
+	{"id": "restoration", "cat": "Museum", "tier": 3, "name": "Cleanup Crew", "desc": "Dirty finds still look decent on display.", "cost": 1600, "scale": 1.85, "max": 6},
+	{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4, "name": "Box Office", "desc": "Tickets pay more.", "cost": 120000, "scale": 1.90, "max": 6},
+	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors every second.", "cost": 140000, "scale": 1.75, "max": 5},
+	{"id": "blockbuster_hours", "cat": "Museum", "tier": 4, "name": "Encore Rush", "desc": "Unveiling rushes last longer.", "cost": 130000, "scale": 1.7, "max": 4},
+	{"id": "blockbuster_feature", "cat": "Museum", "tier": 4, "name": "Marquee", "desc": "The featured stand pays even more.", "cost": 150000, "scale": 1.65, "max": 2},
 ]
+
+
+func _init() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
 func _ready() -> void:
@@ -74,6 +90,7 @@ func _ready() -> void:
 		"shovel_click_mult": Tuning.shovel_click_mult,
 		"shovel_hold_tick_rate": Tuning.shovel_hold_tick_rate,
 		"shovel_radius": Tuning.shovel_radius,
+		"pickaxe_radius": Tuning.pickaxe_radius,
 		"pickaxe_click_mult": Tuning.pickaxe_click_mult,
 		"pickaxe_hold_tick_rate": Tuning.pickaxe_hold_tick_rate,
 		"brush_clean_per_pixel": Tuning.brush_clean_per_pixel,
@@ -180,7 +197,7 @@ func lock_reason(id: String) -> String:
 	if tier_unlocked(id):
 		return ""
 	var needed: int = int(item.get("tier", 2)) - 1
-	var roman: PackedStringArray = ["", "I", "II", "III"]
+	var roman: PackedStringArray = ["", "I", "II", "III", "IV"]
 	var mark: String = roman[needed] if needed >= 0 and needed < roman.size() else str(needed)
 	return "Max %s %s first." % [str(item.get("cat", "tier")), mark]
 
@@ -328,9 +345,17 @@ func shop_effect_line(id: String) -> String:
 		return ""
 	var current: int = int(levels.get(id, 0))
 	var max_level: int = int(item.get("max", 1))
-	if current >= max_level:
-		return _shop_effect_at(id, current)
-	return _shop_effect_delta(id, current, current + 1)
+	var line: String = _shop_effect_at(id, current) if current >= max_level else _shop_effect_delta(id, current, current + 1)
+	if line.is_empty():
+		return _shop_effect_fallback(id)
+	return line
+
+
+func _shop_effect_fallback(id: String) -> String:
+	var raw: String = shop_item_desc(id).strip_edges()
+	if raw.ends_with("."):
+		return raw.substr(0, raw.length() - 1)
+	return raw
 
 
 func _shop_effect_at(id: String, level: int) -> String:
@@ -361,6 +386,7 @@ func _tuning_snapshot() -> Dictionary:
 		"shovel_click_mult": Tuning.shovel_click_mult,
 		"shovel_hold_tick_rate": Tuning.shovel_hold_tick_rate,
 		"shovel_radius": Tuning.shovel_radius,
+		"pickaxe_radius": Tuning.pickaxe_radius,
 		"pickaxe_click_mult": Tuning.pickaxe_click_mult,
 		"pickaxe_hold_tick_rate": Tuning.pickaxe_hold_tick_rate,
 		"brush_clean_per_pixel": Tuning.brush_clean_per_pixel,
@@ -371,6 +397,8 @@ func _tuning_snapshot() -> Dictionary:
 		"rock_money_bonus": Tuning.rock_money_bonus,
 		"fossil_value_mult": Tuning.fossil_value_mult,
 		"exhibit_flat_income": Tuning.exhibit_flat_income,
+		"donation": Tuning.donation_base * Tuning.donation_mult + Tuning.donation_flat,
+		"visitor_flat": Tuning.visitor_flat,
 		"dirty_income_factor": Tuning.dirty_income_factor,
 		"site_size_rank": Tuning.site_size_rank,
 		"extra_find_slots": Tuning.extra_find_slots,
@@ -392,19 +420,26 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 	match id:
 		"hands_click":
 			return _pct_over_line("+%d%% click harvest", float(zero["hands_click_mult"]), float(at["hands_click_mult"]))
-		"hands_hold", "shovel_hold":
+		"hands_hold", "hands_swift", "shovel_hold":
 			return _pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"]))
+		"hands_craft":
+			return _join_effects(PackedStringArray([
+				"+%d%% harvest quality" % int(round((float(at["matrix_hands_quality"]) - float(zero["matrix_hands_quality"])) * 100.0)),
+				_pct_over_line("+%d%% harvest pay", float(zero["matrix_hands_pay"]), float(at["matrix_hands_pay"])),
+			]))
 		"shovel_click":
 			if is_equal_approx(float(zero["shovel_click_mult"]), float(at["shovel_click_mult"])):
 				return "Unlocks the shovel"
 			return _pct_over_line("+%d%% shovel clicks", float(zero["shovel_click_mult"]), float(at["shovel_click_mult"]))
 		"shovel_radius":
-			return _radius_delta_line(zero, at)
-		"shovel_super":
+			return _radius_delta_line(zero, at, "shovel_radius")
+		"pick_radius":
+			return _radius_delta_line(zero, at, "pickaxe_radius")
+		"shovel_super", "shovel_titan":
 			return _join_effects(PackedStringArray([
 				_pct_over_line("+%d%% shovel clicks", float(zero["shovel_click_mult"]), float(at["shovel_click_mult"])),
 				_pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"])),
-				_radius_delta_line(zero, at),
+				_radius_delta_line(zero, at, "shovel_radius"),
 			]))
 		"shovel_soft", "pick_soft":
 			return _integrity_line(float(zero["integrity_hit_cost"]), float(at["integrity_hit_cost"]))
@@ -414,10 +449,11 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_over_line("+%d%% pick clicks", float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"]))
 		"pick_hold":
 			return _pct_faster_line("Hold digs %d%% faster", float(zero["pickaxe_hold_tick_rate"]), float(at["pickaxe_hold_tick_rate"]))
-		"pick_super":
+		"pick_super", "pick_titan":
 			return _join_effects(PackedStringArray([
 				_pct_over_line("+%d%% pick clicks", float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"])),
 				_pct_faster_line("Hold digs %d%% faster", float(zero["pickaxe_hold_tick_rate"]), float(at["pickaxe_hold_tick_rate"])),
+				_radius_delta_line(zero, at, "pickaxe_radius"),
 			]))
 		"brush_speed":
 			if is_equal_approx(float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"])):
@@ -425,20 +461,21 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_over_line("+%d%% brush speed", float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"]))
 		"brush_master":
 			return _pct_over_line("+%d%% brush speed", float(zero["brush_clean_per_pixel"]), float(at["brush_clean_per_pixel"]))
-		"round_time":
+		"round_time", "round_marathon":
 			return "+%ds per shift" % int(round(float(at["round_seconds"]) - float(zero["round_seconds"])))
 		"dirt_pay":
 			return "+$%.2f matrix finds" % (float(at["dirt_money_bonus"]) - float(zero["dirt_money_bonus"]))
 		"site_size", "site_expand":
 			var layout: Vector2i = Tuning.site_layout_for_rank(int(at["site_size_rank"]))
 			return "Pit %d×%d" % [layout.x, layout.y]
-		"scrap_bed":
-			return "+%d scrap slot" % int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"])))
+		"scrap_bed", "prime_bed":
+			return _extra_fossil_line(int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"]))))
 		"rich_bed":
 			var slots: int = int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"])))
+			var extra: String = _extra_fossil_line(slots)
 			if bool(at["big_finds_unlocked"]) and not bool(zero["big_finds_unlocked"]):
-				return "Unlocks large bones · +%d scrap slot" % slots
-			return "+%d scrap slot" % slots
+				return "Unlocks large bones · %s" % extra if not extra.is_empty() else "Unlocks large bones"
+			return extra
 		"rock_pay":
 			return "+$%.1f stone finds" % (float(at["rock_money_bonus"]) - float(zero["rock_money_bonus"]))
 		"money_mult":
@@ -447,16 +484,16 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_delta_line("+%d%% fossil sale", float(zero["fossil_value_mult"]), float(at["fossil_value_mult"]))
 		"passive_miner":
 			return "Unlocks a hired hand"
-		"lighting", "labels", "gift_shop", "crowds":
-			return _pct_delta_line("+%d%% exhibit income", float(zero["museum_income_mult"]), float(at["museum_income_mult"]))
-		"spotlight":
+		"lighting", "labels", "gift_shop", "benches", "blockbuster_ticket":
+			return _ticket_this_buy_line(float(at["donation"]) - float(zero["donation"]))
+		"spotlight", "blockbuster_feature":
 			return "Featured exhibit %dx" % int(round(float(at["spotlight_mult"])))
-		"benches", "glass_case":
-			return "+$%.2f/s exhibit" % (float(at["exhibit_flat_income"]) - float(zero["exhibit_flat_income"]))
-		"unveil_time":
-			return "Unveil rush +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
+		"glass_case", "crowds", "blockbuster_crowd":
+			return _visitor_this_buy_line(int(at["visitor_flat"]) - int(zero["visitor_flat"]))
+		"unveil_time", "blockbuster_hours":
+			return "Crowd surge on unveil +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
 		"unveil_crowd":
-			return _pct_delta_line("Unveil rush +%d%%", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
+			return _pct_delta_line("+%d%% visitors on unveil", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
 		"restoration":
 			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
 		_:
@@ -491,11 +528,66 @@ func _integrity_line(before: float, after: float) -> String:
 	return "Hits cost %d%% less integrity" % pct
 
 
-func _radius_delta_line(zero: Dictionary, at: Dictionary) -> String:
-	var delta: float = float(at["shovel_radius"]) - float(zero["shovel_radius"])
+func _extra_fossil_line(slots: int) -> String:
+	if slots <= 0:
+		return ""
+	if slots == 1:
+		return "+1 fossil in the pit"
+	return "+%d fossils in the pit" % slots
+
+
+func _radius_delta_line(zero: Dictionary, at: Dictionary, key: String = "shovel_radius") -> String:
+	var delta: float = float(at.get(key, 0.0)) - float(zero.get(key, 0.0))
 	if delta <= 0.001:
 		return ""
 	return "+%.1f cell radius" % delta
+
+
+func _cents_money(amount: float) -> float:
+	return float(int(round(amount * 100.0))) / 100.0
+
+
+func _ticket_this_buy_line(delta: float) -> String:
+	var per: float = _cents_money(delta)
+	var per_bit: String = "+$%.2f per visitor" % per
+	var visitors: int = museum_visitors()
+	if visitors <= 0:
+		return per_bit
+	return _join_effects(PackedStringArray([
+		"+$%.2f / sec" % _cents_money(float(visitors) * per),
+		per_bit,
+	]))
+
+
+func _visitor_this_buy_line(extra: int) -> String:
+	var people: String = "+%d visitors" % extra
+	var visitors: int = museum_visitors()
+	if visitors <= 0:
+		return people
+	return _join_effects(PackedStringArray([
+		"+$%.2f / sec" % _cents_money(float(extra) * museum_donation()),
+		people,
+	]))
+
+
+func _donation_rank_cents(id: String, ranks: int) -> int:
+	var curve: Array[int] = []
+	match id:
+		"lighting", "benches":
+			curve = [1, 1, 1, 1, 1]
+		"labels":
+			curve = [1, 2, 3, 4, 5, 5]
+		"gift_shop":
+			curve = [2, 2, 3, 4, 5, 10]
+		"blockbuster_ticket":
+			curve = [10, 12, 15, 18, 22, 25]
+		_:
+			return 0
+	var total: int = 0
+	var n: int = mini(maxi(ranks, 0), curve.size())
+	for i in n:
+		total += int(curve[i])
+	return total
 
 
 func _join_effects(parts: PackedStringArray, limit: int = 2) -> String:
@@ -591,9 +683,9 @@ func tool_role_line(tool: int) -> String:
 		Tuning.TOOL_HANDS:
 			return "Harvest · safe on bone"
 		Tuning.TOOL_SHOVEL:
-			return "Clear dirt · spoils bone"
+			return "Clear dirt · damages bone"
 		Tuning.TOOL_PICKAXE:
-			return "Clear stone · spoils bone"
+			return "Clear stone · damages bone"
 		Tuning.TOOL_BRUSH:
 			return "Clean fossil"
 		_:
@@ -736,7 +828,7 @@ func _stand_goal() -> Dictionary:
 
 
 func is_site_upgrade(id: String) -> bool:
-	return id == "round_time" or id == "dirt_pay" or id == "site_size" or id == "scrap_bed" or id == "rich_bed" or id == "site_expand" or id == "rock_pay" or id == "money_mult" or id == "fossil_value" or id == "passive_miner"
+	return id == "round_time" or id == "dirt_pay" or id == "site_size" or id == "scrap_bed" or id == "rich_bed" or id == "site_expand" or id == "rock_pay" or id == "money_mult" or id == "fossil_value" or id == "round_marathon" or id == "prime_bed" or id == "passive_miner"
 
 
 func upgrade_feel_line(id: String) -> String:
@@ -745,14 +837,22 @@ func upgrade_feel_line(id: String) -> String:
 			return "Richer harvest"
 		"hands_hold":
 			return "Hold to keep digging"
+		"hands_craft":
+			return "Richer harvest"
+		"hands_swift":
+			return "Faster hands"
 		"shovel_click":
 			return "Heavier swings" if int(levels.get("shovel_click", 0)) > 1 else "You have a shovel"
 		"shovel_hold":
 			return "Faster shoveling"
 		"shovel_radius":
 			return "Wider scoop"
+		"pick_radius":
+			return "Wider scoop"
 		"shovel_super":
 			return "Super Shovel"
+		"shovel_titan":
+			return "Titan Shovel"
 		"shovel_soft":
 			return "Softer on bone"
 		"pick_click":
@@ -761,6 +861,8 @@ func upgrade_feel_line(id: String) -> String:
 			return "Faster picking"
 		"pick_super":
 			return "Super Pick"
+		"pick_titan":
+			return "Titan Pick"
 		"pick_soft":
 			return "Kinder to bone"
 		"brush_speed":
@@ -769,12 +871,16 @@ func upgrade_feel_line(id: String) -> String:
 			return "Master Brush"
 		"round_time":
 			return "Clock starts fuller"
+		"round_marathon":
+			return "Clock starts fuller"
+		"prime_bed":
+			return "More fossils in the pit"
 		"dirt_pay":
 			return "Richer matrix"
 		"site_size":
 			return "The pit is bigger"
 		"scrap_bed":
-			return "More scraps in the bed"
+			return "More fossils in the pit"
 		"rich_bed":
 			return "Large bones can appear"
 		"site_expand":
@@ -787,6 +893,14 @@ func upgrade_feel_line(id: String) -> String:
 			return "Everything is worth more"
 		"fossil_value":
 			return "Fossils sell for more"
+		"blockbuster_ticket":
+			return "Tickets pay more"
+		"blockbuster_crowd":
+			return "More visitors"
+		"blockbuster_hours":
+			return "Unveils last longer"
+		"blockbuster_feature":
+			return "Featured stand pays more"
 		_:
 			var item: Dictionary = _item(id)
 			return str(item.get("name", id))
@@ -801,11 +915,19 @@ func notice_label(notice: Dictionary) -> String:
 
 
 func tier_title(cat: String, tier: int) -> String:
-	if tier <= 1:
-		return "%s I" % cat
-	if tier == 2:
-		return "%s II" % cat
-	return "%s III" % cat
+	var roman: PackedStringArray = ["", "I", "II", "III", "IV"]
+	var mark: String = roman[tier] if tier >= 0 and tier < roman.size() else str(tier)
+	var names := {
+		"Hands:2": "Fieldcraft",
+		"Shovel:3": "Titan Shovel",
+		"Pickaxe:3": "Titan Pick",
+		"Site:3": "Grand Claim",
+		"Museum:4": "Blockbuster",
+	}
+	var extra: String = str(names.get("%s:%d" % [cat, tier], ""))
+	if extra.is_empty():
+		return "%s %s" % [cat, mark]
+	return "%s %s — %s" % [cat, mark, extra]
 
 
 func _queue_notice(id: String) -> void:
@@ -828,20 +950,28 @@ func apply_upgrades() -> void:
 	var pick_ranks: float = maxf(0.0, _lv("pick_click") - 1.0)
 	var brush_ranks: float = maxf(0.0, _lv("brush_speed") - 1.0)
 	Tuning.hands_click_mult = float(_bases["hands_click_mult"]) + 0.07 * _lv("hands_click")
-	Tuning.matrix_hands_quality = 0.10 * _lv("hands_click") + 0.045 * _lv("dirt_pay")
-	Tuning.matrix_hands_pay = 1.0 + 0.12 * _lv("hands_click") + 0.06 * _lv("dirt_pay")
+	Tuning.matrix_hands_quality = 0.10 * _lv("hands_click") + 0.045 * _lv("dirt_pay") + 0.08 * _lv("hands_craft")
+	Tuning.matrix_hands_pay = 1.0 + 0.12 * _lv("hands_click") + 0.06 * _lv("dirt_pay") + 0.10 * _lv("hands_craft")
 	Tuning.matrix_clear_pay = 0.50
-	Tuning.shovel_click_mult = float(_bases["shovel_click_mult"]) + 0.20 * shovel_ranks + 0.32 * _lv("shovel_super")
-	Tuning.shovel_hold_tick_rate = float(_bases["shovel_hold_tick_rate"]) + 0.55 * _lv("hands_hold") + 0.85 * _lv("shovel_hold") + 0.70 * _lv("shovel_super")
+	Tuning.shovel_click_mult = float(_bases["shovel_click_mult"]) + 0.20 * shovel_ranks + 0.32 * _lv("shovel_super") + 0.32 * _lv("shovel_titan")
+	Tuning.shovel_hold_tick_rate = float(_bases["shovel_hold_tick_rate"]) + 0.55 * _lv("hands_hold") + 0.55 * _lv("hands_swift") + 0.85 * _lv("shovel_hold") + 0.70 * _lv("shovel_super") + 0.70 * _lv("shovel_titan")
 	# Unlock is one cell of reach (a plus). Rank 2 is a 3-wide scoop.
 	# Old 0.40/rank stayed under 1.0 through rank 2, so neighbors were skipped.
 	var scoop: float = _lv("shovel_radius")
-	Tuning.shovel_radius = 0.0 if scoop <= 0.0 else (0.5 + 0.5 * scoop + 0.5 * _lv("shovel_super"))
-	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.20 * pick_ranks + 0.32 * _lv("pick_super")
-	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.70 * _lv("pick_hold") + 0.55 * _lv("pick_super")
+	Tuning.shovel_radius = 0.0 if scoop <= 0.0 else (0.5 + 0.5 * scoop + 0.5 * _lv("shovel_super") + 0.5 * _lv("shovel_titan"))
+	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.20 * pick_ranks + 0.32 * _lv("pick_super") + 0.32 * _lv("pick_titan")
+	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.70 * _lv("pick_hold") + 0.55 * _lv("pick_super") + 0.55 * _lv("pick_titan")
+	Tuning.pickaxe_radius = 1.0 + 0.35 * _lv("pick_radius") + 0.35 * _lv("pick_super") + 0.35 * _lv("pick_titan")
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
-	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time")
-	Tuning.museum_income_mult = float(_bases["museum_income_mult"]) + 0.20 * _lv("lighting") + 0.14 * _lv("labels") + 0.28 * _lv("gift_shop") + 0.40 * _lv("crowds")
+	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time") + 8.0 * _lv("round_marathon")
+	Tuning.museum_income_mult = 1.0
+	var ticket_cents: int = _donation_rank_cents("lighting", int(_lv("lighting")))
+	ticket_cents += _donation_rank_cents("labels", int(_lv("labels")))
+	ticket_cents += _donation_rank_cents("gift_shop", int(_lv("gift_shop")))
+	ticket_cents += _donation_rank_cents("blockbuster_ticket", int(_lv("blockbuster_ticket")))
+	Tuning.donation_mult = 1.0 + float(ticket_cents) / (Tuning.donation_base * 100.0)
+	Tuning.donation_flat = float(_donation_rank_cents("benches", int(_lv("benches")))) / 100.0
+	Tuning.visitor_flat = int(3 * _lv("glass_case") + 8 * _lv("crowds") + 8 * _lv("blockbuster_crowd"))
 	Tuning.precision_damage_bonus = 0.0
 	Tuning.money_mult = float(_bases["money_mult"]) + 0.06 * _lv("money_mult")
 	Tuning.dirt_money_bonus = 0.35 * _lv("dirt_pay")
@@ -849,17 +979,17 @@ func apply_upgrades() -> void:
 	Tuning.matrix_dirt_chance = float(_bases["matrix_dirt_chance"]) + 0.012 * _lv("dirt_pay")
 	Tuning.matrix_stone_chance = float(_bases["matrix_stone_chance"]) + 0.055 * _lv("rock_pay")
 	Tuning.fossil_value_mult = 1.0 + 0.08 * _lv("fossil_value")
-	Tuning.exhibit_flat_income = 0.06 * _lv("glass_case") + 0.04 * _lv("benches") + 0.10 * _lv("crowds")
+	Tuning.exhibit_flat_income = 0.0
 	Tuning.dirty_income_factor = 1.0 + 0.12 * _lv("restoration")
 	Tuning.site_size_rank = int(_lv("site_size") + _lv("site_expand"))
-	Tuning.extra_find_slots = int(_lv("scrap_bed") + _lv("rich_bed"))
-	Tuning.extra_find_chance = 0.28 + 0.12 * _lv("scrap_bed") + 0.16 * _lv("rich_bed")
+	Tuning.extra_find_slots = int(_lv("scrap_bed") + _lv("rich_bed") + _lv("prime_bed"))
+	Tuning.extra_find_chance = 0.28 + 0.12 * _lv("scrap_bed") + 0.16 * _lv("rich_bed") + 0.16 * _lv("prime_bed")
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
 	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
 	Tuning.integrity_hit_cost = maxf(0.035, float(_bases["integrity_hit_cost"]) - 0.018 * (_lv("shovel_soft") + _lv("pick_soft")))
-	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time")
+	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time") + 6.0 * _lv("blockbuster_hours")
 	Tuning.unveil_rush_strength = float(_bases["unveil_rush_strength"]) + 0.25 * _lv("unveil_crowd")
-	Tuning.spotlight_mult = float(_bases["spotlight_mult"]) + _lv("spotlight")
+	Tuning.spotlight_mult = float(_bases["spotlight_mult"]) + _lv("spotlight") + _lv("blockbuster_feature")
 
 
 func piece_need(piece_id: String) -> int:
@@ -888,26 +1018,19 @@ func piece_progress_label(piece_id: String) -> String:
 
 
 func uncover_status_line(piece_id: String) -> String:
-	var need: int = piece_need(piece_id)
-	var count: int = piece_count(piece_id)
-	if count >= need:
-		return "Duplicate"
-	var next: int = count + 1
-	if need > 1:
-		if count == 0:
-			return "New · %d/%d" % [next, need]
-		return "%d/%d" % [next, need]
-	return "New" if count == 0 else "needs this"
+	return collection_status_line(piece_id)
 
 
 func hall_fate_line(piece_id: String) -> String:
-	var need: int = piece_need(piece_id)
+	return collection_status_line(piece_id)
+
+
+func collection_status_line(piece_id: String) -> String:
+	var need: int = maxi(1, piece_need(piece_id))
 	var count: int = piece_count(piece_id)
 	if count >= need:
-		return "extra sold"
-	if need > 1:
-		return "%d/%d on display" % [count + 1, need]
-	return "needs this"
+		return "Duplicate · %d/%d" % [need, need]
+	return "New · %d/%d" % [count + 1, need]
 
 
 func _duplicate_sale(cleanliness: float, set_bonus: bool) -> int:
@@ -915,6 +1038,23 @@ func _duplicate_sale(cleanliness: float, set_bonus: bool) -> int:
 	if set_bonus:
 		bonus *= Tuning.set_complete_sale_mult
 	return int(round(bonus))
+
+
+func try_mount_matrix_find(find: Dictionary) -> bool:
+	var piece_id: String = _matrix_hall_piece(find)
+	if piece_id.is_empty() or has_piece(piece_id):
+		return false
+	var data: FossilData = fossil_data_for(piece_id)
+	var display_name: String = data.name if data != null else "Amber Insect"
+	install_find(piece_id, display_name, 0.35, false)
+	return true
+
+
+func _matrix_hall_piece(find: Dictionary) -> String:
+	var key: String = str(find.get("name", "")).to_lower()
+	if key.find("amber") >= 0:
+		return "amber_insect"
+	return ""
 
 
 func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
@@ -978,6 +1118,8 @@ func stand_for_piece(piece_id: String) -> String:
 		return STAND_BRACHIOSAURUS
 	if piece_id.begins_with("velociraptor"):
 		return STAND_VELOCIRAPTOR
+	if piece_id == "cycad" or piece_id == "fossil_flower":
+		return STAND_PLANT_FOSSILS
 	return STAND_SMALL_FINDS
 
 
@@ -1008,7 +1150,7 @@ func stand_piece_ids(stand_id: String) -> PackedStringArray:
 	if stand_id.is_empty():
 		return ids
 	var paths: PackedStringArray = Tuning.main_fossil_paths
-	if stand_id == STAND_SMALL_FINDS:
+	if stand_id == STAND_SMALL_FINDS or stand_id == STAND_PLANT_FOSSILS:
 		paths = Tuning.extra_fossil_paths
 	for path in paths:
 		var data: FossilData = load(str(path)) as FossilData
@@ -1140,6 +1282,10 @@ func piece_blurb(piece_id: String) -> String:
 			return "A small tooth — first piece for the hall case."
 		"vertebra":
 			return "A vertebra for the Small Finds case."
+		"cycad":
+			return "A cycad for the Plant Fossils case."
+		"fossil_flower":
+			return "A fossil flower for the Plant Fossils case."
 		_:
 			return "Goes on display in the hall."
 
@@ -1158,6 +1304,8 @@ func stand_title(stand_id: String) -> String:
 			return "Stegosaurus"
 		STAND_SMALL_FINDS:
 			return "Small Finds"
+		STAND_PLANT_FOSSILS:
+			return "Plant Fossils"
 		_:
 			return ""
 
@@ -1247,62 +1395,104 @@ func _clear_unveil_rush() -> void:
 	unveil_rush_unit = 0.0
 
 
-func unveil_rush_rate() -> float:
-	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
-		return 0.0
-	return float(unveil_rush_stacks) * unveil_rush_unit * Tuning.unveil_rush_strength
+func museum_donation() -> float:
+	return Tuning.donation_base * Tuning.donation_mult + Tuning.donation_flat
 
 
-func unveil_rush_line() -> String:
-	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
-		return ""
-	var secs: int = maxi(1, int(ceili(unveil_spike_left)))
-	var rate: float = unveil_rush_rate()
-	if unveil_rush_stacks > 1:
-		return "Unveil rush ×%d · +$%.2f/sec · %ds" % [unveil_rush_stacks, rate, secs]
-	return "Unveil rush · +$%.2f/sec · %ds" % [rate, secs]
-
-
-func museum_income_base() -> float:
-	var total: float = Tuning.exhibit_flat_income
-	for piece_id in pieces:
-		var rate: float = piece_income(str(piece_id))
-		if stand_for_piece(str(piece_id)) == featured_stand_id and featured_stand_id != "":
-			rate *= Tuning.spotlight_mult
-		total += rate
-	return total * Tuning.museum_income_mult
-
-
-func piece_income(piece_id: String) -> float:
+func piece_visitors(piece_id: String) -> int:
 	if not has_piece(piece_id):
-		return 0.0
+		return 0
 	var piece: Dictionary = pieces[piece_id]
-	var stand_id: String = stand_for_piece(piece_id)
+	var count: int = piece_count(piece_id)
 	var clean: bool = bool(piece.get("clean", false))
-	if stand_uses_exhibit_rate(stand_id):
-		if clean:
-			return Tuning.piece_income_exhibit
-		return Tuning.piece_income_exhibit_dirty * Tuning.dirty_income_factor
-	if clean:
-		return Tuning.piece_income_clean
-	return Tuning.piece_income_dirty * Tuning.dirty_income_factor
+	var exhibit: bool = stand_uses_exhibit_rate(stand_for_piece(piece_id))
+	var clean_draw: int = Tuning.visitor_draw_exhibit_clean if exhibit else Tuning.visitor_draw_scrap_clean
+	var dirty_draw: int = Tuning.visitor_draw_exhibit_dirty if exhibit else Tuning.visitor_draw_scrap_dirty
+	var draw: int = clean_draw if clean else clampi(int(round(float(dirty_draw) * Tuning.dirty_income_factor)), dirty_draw, clean_draw)
+	return draw * count
 
 
-func stand_income(stand_id: String) -> float:
-	var total: float = 0.0
+func stand_visitors(stand_id: String) -> int:
+	var total: int = 0
 	for piece_id in pieces:
 		if stand_for_piece(str(piece_id)) != stand_id:
 			continue
-		total += piece_income(str(piece_id))
+		total += piece_visitors(str(piece_id))
 	if stand_id != "" and stand_id == featured_stand_id:
-		total *= Tuning.spotlight_mult
+		total = int(round(float(total) * Tuning.spotlight_mult))
 	return total
+
+
+func museum_visitors_base() -> int:
+	var total: int = int(Tuning.visitor_flat)
+	var seen: Dictionary = {}
+	for piece_id in pieces:
+		var stand_id: String = stand_for_piece(str(piece_id))
+		if stand_id.is_empty() or seen.has(stand_id):
+			continue
+		seen[stand_id] = true
+		total += stand_visitors(stand_id)
+	return total
+
+
+func surge_visitors() -> int:
+	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
+		return 0
+	return int(round(float(unveil_rush_stacks) * unveil_rush_unit * Tuning.unveil_rush_strength))
+
+
+func museum_visitors() -> int:
+	return museum_visitors_base() + surge_visitors()
+
+
+func visitor_sprite_count() -> int:
+	return _packed_visitor_sprites(museum_visitors_base()) + surge_visitors()
+
+
+func _packed_visitor_sprites(n: int) -> int:
+	if n <= 24:
+		return n
+	return mini(48, 24 + int((n - 24) / 10))
+
+
+func unveil_rush_rate() -> float:
+	return float(surge_visitors()) * museum_donation()
+
+
+func unveil_rush_line() -> String:
+	var extra: int = surge_visitors()
+	if extra <= 0:
+		return ""
+	var secs: int = maxi(1, int(ceili(unveil_spike_left)))
+	if unveil_rush_stacks > 1:
+		return "Crowd surge ×%d · +%d visitors · %ds" % [unveil_rush_stacks, extra, secs]
+	return "Crowd surge · +%d visitors · %ds" % [extra, secs]
+
+
+func museum_income_base() -> float:
+	return float(museum_visitors_base()) * museum_donation()
+
+
+func museum_crowd_line() -> String:
+	var n: int = museum_visitors()
+	var donation: float = museum_donation()
+	var rate: float = museum_income()
+	if n <= 0:
+		return "$0.00 / sec"
+	return "%d visitors · $%.2f each · $%.2f / sec" % [n, donation, rate]
+
+
+func piece_income(piece_id: String) -> float:
+	return float(piece_visitors(piece_id)) * museum_donation()
+
+
+func stand_income(stand_id: String) -> float:
+	return float(stand_visitors(stand_id)) * museum_donation()
 
 
 func unveil_stand(stand_id: String) -> int:
 	if not stand_has_pending_unveil(stand_id):
 		return 0
-	var burst: int = 0
 	var waiting: Array[String] = []
 	for piece_id in pieces:
 		var id: String = str(piece_id)
@@ -1311,25 +1501,18 @@ func unveil_stand(stand_id: String) -> int:
 		if not bool(pending_unveils.get(id, false)):
 			continue
 		waiting.append(id)
-		var piece: Dictionary = pieces[id]
-		if bool(piece.get("clean", false)):
-			burst += Tuning.unveil_burst_clean
-		else:
-			burst += Tuning.unveil_burst_dirty
 	for id in waiting:
 		pending_unveils.erase(id)
 	_add_unveil_rush_stack()
-	if burst > 0:
-		add_money(burst)
 	collection_changed.emit()
 	hall_changed.emit()
-	return burst
+	return 0
 
 
 func _add_unveil_rush_stack() -> void:
 	var duration: float = Tuning.unveil_spike_seconds
 	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
-		unveil_rush_unit = museum_income_base()
+		unveil_rush_unit = float(Tuning.unveil_surge_visitors)
 		unveil_rush_stacks = 1
 		unveil_spike_left = duration
 		return
@@ -1348,7 +1531,7 @@ func set_featured_stand(stand_id: String) -> bool:
 
 
 func museum_income() -> float:
-	return museum_income_base() + unveil_rush_rate()
+	return float(museum_visitors()) * museum_donation()
 
 
 func has_piece(piece_id: String) -> bool:

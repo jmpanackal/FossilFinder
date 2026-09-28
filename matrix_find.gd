@@ -257,7 +257,7 @@ static func _roll_rarity(rng: RandomNumberGenerator, material: int, tool: int = 
 	if _is_clear_tool(tool):
 		return RARITY_COMMON
 	var pick: float = rng.randf()
-	var quality: float = clampf(Tuning.matrix_hands_quality, 0.0, 0.55)
+	var quality: float = clampf(Tuning.matrix_hands_quality, 0.0, 0.90)
 	if material > Tuning.MAT_PACKED:
 		return RARITY_RARE if pick < 0.20 + quality * 0.28 else RARITY_UNCOMMON
 	if pick < 0.05 + quality * 0.12:

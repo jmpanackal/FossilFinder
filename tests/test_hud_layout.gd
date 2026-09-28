@@ -31,13 +31,21 @@ func _run() -> void:
 	_test_header_actions_carry_glyphs()
 	_test_wallet_width_does_not_follow_digits()
 	_test_find_chips_sit_under_the_pit()
+	_test_deep_cells_stay_off_finds()
 	_test_finds_section_label()
 	_test_find_chips_scale_in_tray()
 	_test_hud_stays_off_the_pit()
 	_test_pit_stays_1024_by_400()
 	_test_tools_section_uses_the_wide_left_gutter()
 	_test_shop_and_museum_open_from_shift_over()
+	_test_shop_overlay_has_dig_museum_menu()
+	_test_museum_overlay_has_dig_upgrades_menu()
+	_test_overlay_dig_starts_a_new_shift()
+	_test_overlay_museum_and_upgrades_swap_screens()
+	_test_overlay_header_clears_wallet_and_museum_stats()
 	_test_overlays_hide_dig_header_menu()
+	_test_wallet_stays_top_left_on_overlays()
+	_test_menu_and_back_stay_top_right()
 	print("hud_layout %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -402,7 +410,8 @@ func _test_dig_buttons_share_gold_hover_and_light_shadow() -> void:
 	if idle != null:
 		_assert_gold_hover_outline(idle, "idle tool")
 		_assert_hud_button_shadow(idle, "idle tool")
-	for raw in [hud.get("_menu_btn"), hud.get("_end_btn")]:
+	var settings: Node = _show_shared_nav()
+	for raw in [_nav_btn(settings, "_menu_btn"), _nav_btn(settings, "_back_btn"), _nav_btn(settings, "_end_btn")]:
 		var header: Button = raw as Button
 		_assert(header != null, "header action is a button")
 		if header != null:
@@ -673,33 +682,43 @@ func _test_header_menu_and_end_shift() -> void:
 	if hud == null:
 		return
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
-	var header: Control = hud.get("_header_bar") as Control
+	var settings: Node = _show_shared_nav()
+	var header: Control = _nav_bar(settings)
 	var wallet: Control = hud.get("_wallet") as Control
 	var clock: Control = hud.get("_clock") as Control
-	var menu_btn: Button = hud.get("_menu_btn") as Button
-	var end_btn: Button = hud.get("_end_btn") as Button
+	var menu_btn: Button = _nav_btn(settings, "_menu_btn")
+	var back_btn: Button = _nav_btn(settings, "_back_btn")
+	var end_btn: Button = _nav_btn(settings, "_end_btn")
 	_assert(hud.get("_shop_btn") == null, "live HUD has no Upgrades door")
 	_assert(hud.get("_museum_btn") == null, "live HUD has no Museum door")
+	_assert(hud.get("_menu_btn") == null and hud.get("_end_btn") == null, "the dig HUD does not host a second Menu")
 	_assert(menu_btn != null and str(menu_btn.text) == "Menu", "header has Menu")
-	_assert(end_btn != null and str(end_btn.text) == "End shift", "End shift stays on the HUD")
+	_assert(back_btn != null and str(back_btn.text) == "Back", "header has Back")
+	_assert(end_btn != null and str(end_btn.text) == "End shift", "End shift stays in the shared header")
 	_assert(header != null, "Menu lives in the header band")
 	if header == null or wallet == null or clock == null:
 		hud.queue_free()
 		return
 	_assert(menu_btn.get_parent() == header, "Menu sits in the header, not the pit")
+	_assert(back_btn.get_parent() == header, "Back sits in the header with Menu")
+	_assert(end_btn.get_parent() == header, "End shift sits in the header with Menu")
 	_assert(hud.get("_right_dock") == null, "End shift is not parked on a working-find rail")
-	_assert(_control_rect(end_btn).position.x >= TN.view_w * 0.7, "End shift sits on the right")
-	_assert(_control_rect(end_btn).position.y >= TN.view_h * 0.85, "End shift sits near the bottom")
+	_assert(_control_rect(end_btn).position.x >= TN.view_w * 0.55, "End shift sits on the right")
 	_assert(_control_rect(end_btn).end.x <= TN.view_w - 4.0, "End shift stays on screen")
-	_assert(_control_rect(end_btn).end.y <= TN.view_h - 4.0, "End shift stays above the window bottom")
+	_assert(_control_rect(end_btn).end.y <= float(TN.hud_h) + 0.5, "End shift stays in the header band")
 	_assert(header.position.y + header.size.y <= float(TN.hud_h) + 0.5, "Menu stays in the header")
 	_assert(header.position.y + header.size.y <= float(TN.grid_origin.y) - 0.5, "header does not grow into the dirt")
-	_assert(header.position.x >= TN.view_w * 0.7, "Menu sits top-right")
+	_assert(header.position.x >= TN.view_w * 0.55, "Menu sits top-right")
 	_assert(header.position.x + header.size.x <= TN.view_w - 4.0, "Menu stays on screen")
+	_assert(_control_rect(menu_btn).position.x > _control_rect(back_btn).position.x, "Menu is the rightmost button")
 	var pit := _pit_rect()
+	var hole := Rect2(pit.position - Vector2(TN.chunk_pad, TN.chunk_pad), pit.size + Vector2(TN.chunk_pad * 2.0, TN.chunk_pad))
+	var finds_frame: Control = hud.get("_finds_frame") as Control
 	_assert(not pit.intersects(Rect2(header.position, header.size)), "Menu does not overlap the pit")
 	_assert(not pit.intersects(_control_rect(end_btn)), "End shift stays off the pit")
-	_assert(_control_rect(end_btn).position.y + 0.5 >= pit.end.y, "End shift sits below the pit")
+	_assert(not hole.intersects(_control_rect(end_btn)), "End shift stays off the whole hole")
+	if finds_frame != null:
+		_assert(not _control_rect(end_btn).intersects(_control_rect(finds_frame)), "End shift does not clip Finds")
 	_assert(_control_rect(clock).end.y <= pit.position.y - 2.0, "timer stays above the pit")
 	_assert(_rail_section_label(hud, "Working find") == null, "Working find is gone so Menu cannot overlap it")
 	hud.queue_free()
@@ -711,8 +730,9 @@ func _test_header_actions_carry_glyphs() -> void:
 	if hud == null:
 		return
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
-	var menu_btn: Button = hud.get("_menu_btn") as Button
-	var end_btn: Button = hud.get("_end_btn") as Button
+	var settings: Node = _show_shared_nav()
+	var menu_btn: Button = _nav_btn(settings, "_menu_btn")
+	var end_btn: Button = _nav_btn(settings, "_end_btn")
 	_assert(menu_btn != null and str(menu_btn.text) == "Menu", "Menu still says Menu")
 	_assert(end_btn != null and str(end_btn.text) == "End shift", "End shift keeps its space")
 	_assert(_action_glyph(menu_btn) == "gear", "Menu carries a gear mark")
@@ -812,6 +832,52 @@ func _test_find_chips_sit_under_the_pit() -> void:
 	hud.queue_free()
 
 
+func _test_deep_cells_stay_off_finds() -> void:
+	_reset()
+	var script: Script = load("res://dig_site.gd") as Script
+	_assert(script != null, "dig site loads")
+	if script == null:
+		return
+	var site: Node = script.new()
+	root.add_child(site)
+	if site.has_method("start_round"):
+		site.call("start_round")
+	var grid: Variant = site.get("_top_layer")
+	_assert(grid is Array and not grid.is_empty(), "the pit has a layer grid")
+	if not (grid is Array) or grid.is_empty():
+		site.free()
+		return
+	for x in grid.size():
+		var col: Array = grid[x]
+		for y in col.size():
+			col[y] = int(TN.layer_count)
+	var last: Rect2 = site.call("_top_rect", 0, int(TN.grid_h) - 1)
+	var south: float = float(TN.pit_face_bottom()) + float(TN.chunk_front)
+	var plan_last_end: float = float(TN.pit_face_bottom()) - float(TN.cell_gap)
+	_assert(last.end.y > plan_last_end + 4.0, "a fully dug last row actually steps down")
+	_assert(last.end.y <= south - 2.0, "deep dirt stays inside the hole, not over Finds")
+	var last_y: int = int(TN.grid_h) - 1
+	if last_y >= 1:
+		var col: Array = grid[0]
+		col[last_y - 1] = 0
+		col[last_y] = int(TN.layer_count)
+		var shallow: Rect2 = site.call("_top_rect", 0, last_y - 1)
+		var deep: Rect2 = site.call("_top_rect", 0, last_y)
+		_assert(deep.position.y > shallow.position.y, "a deep hole still sits lower than the row above")
+		_assert(deep.end.y <= south - 2.0, "interior depth stays off Finds")
+	var hud: CanvasLayer = _make_hud()
+	if hud != null:
+		hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
+		var finds_frame: Control = hud.get("_finds_frame") as Control
+		var find_box: Control = hud.get("_find_box") as Control
+		if finds_frame != null:
+			_assert(last.end.y <= finds_frame.position.y - 2.0, "deep dirt stays off the Finds frame")
+		if find_box != null:
+			_assert(last.end.y <= find_box.position.y - 2.0, "deep dirt stays off the find chips")
+		hud.queue_free()
+	site.free()
+
+
 func _test_finds_section_label() -> void:
 	_reset()
 	var hud: CanvasLayer = _make_hud()
@@ -846,9 +912,13 @@ func _test_finds_section_label() -> void:
 	if find_box != null:
 		_assert(_control_rect(finds).end.y <= _control_rect(find_box).position.y + 0.5, "Finds sits above the chip tray")
 		_assert(absf(_control_rect(finds).get_center().x - _control_rect(find_box).get_center().x) <= 8.0, "Finds is centered on the chip tray")
-	var header: Control = hud.get("_header_bar") as Control
+	var settings: Node = _show_shared_nav()
+	var header: Control = _nav_bar(settings)
 	if header != null:
 		_assert(not _control_rect(finds).intersects(_control_rect(header)), "Finds stays out of the header Menu/End shift row")
+	var end_btn: Control = _nav_btn(settings, "_end_btn")
+	if finds_frame != null and end_btn != null:
+		_assert(not _control_rect(end_btn).intersects(_control_rect(finds_frame)), "End shift does not sit on the Finds tray")
 	hud.queue_free()
 
 
@@ -915,15 +985,17 @@ func _test_hud_stays_off_the_pit() -> void:
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_SHOVEL, true)
 	hud.call("set_find_cards", [_card("Tooth", "t_rex_tooth", "brush", 5, "Brushed 40%", 80)])
 	var pit := _pit_rect()
+	var settings: Node = _show_shared_nav()
 	var boxes: Array = [
 		hud.get("_wallet"),
 		hud.get("_clock"),
 		hud.get("_tool_rail"),
 		hud.get("_tools_frame"),
 		hud.get("_find_box"),
-		hud.get("_header_bar"),
-		hud.get("_menu_btn"),
-		hud.get("_end_btn"),
+		_nav_bar(settings),
+		_nav_btn(settings, "_menu_btn"),
+		_nav_btn(settings, "_back_btn"),
+		_nav_btn(settings, "_end_btn"),
 		hud.get("_tools_label"),
 		hud.get("_finds_label"),
 		hud.get("_clock_time"),
@@ -935,6 +1007,9 @@ func _test_hud_stays_off_the_pit() -> void:
 			continue
 		var rect := _control_rect(box)
 		_assert(not pit.intersects(rect), "%s does not intersect the pit grid" % box.name)
+		var hole := Rect2(pit.position - Vector2(TN.chunk_pad, TN.chunk_pad), pit.size + Vector2(TN.chunk_pad * 2.0, TN.chunk_pad))
+		if box == _nav_bar(settings) or box == _nav_btn(settings, "_menu_btn") or box == _nav_btn(settings, "_back_btn") or box == _nav_btn(settings, "_end_btn"):
+			_assert(not hole.intersects(rect), "%s stays off the dig-site hole" % box.name)
 	hud.queue_free()
 
 
@@ -1004,10 +1079,10 @@ func _test_shop_and_museum_open_from_shift_over() -> void:
 	var shop: Node = main.get_node_or_null("Shop")
 	_assert(shop != null and bool(shop.visible), "full shop stays an overlay")
 	_assert_dig_header_hidden(hud, "shop")
-	_assert(_find_button(shop, "Back") != null, "shop already has Back")
-	if shop != null:
-		shop.closed.emit()
-	_assert(str(main.screen) == "summary" or bool(summary.visible), "Back from Upgrades returns to shift-over")
+	_assert(_find_button(shop, "Back") == null, "shop does not host its own Back")
+	_assert(_find_button(summary, "Dig again") != null, "shift-over still has Dig again")
+	_assert(_find_button(summary, "Museum") != null, "shift-over still has Museum")
+	_assert(_find_button(summary, "Upgrades") != null, "shift-over still has Upgrades")
 	if museum_btn != null:
 		museum_btn.pressed.emit()
 	_assert(str(main.screen) == "museum", "shift-over Museum opens the existing hall")
@@ -1016,6 +1091,145 @@ func _test_shop_and_museum_open_from_shift_over() -> void:
 	_assert_dig_header_hidden(hud, "museum")
 	if museum != null:
 		museum.closed.emit()
+	_cleanup_main(main)
+
+
+func _test_shop_overlay_has_dig_museum_menu() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	_start_and_end_shift(main)
+	var upgrades: Button = _find_button(main.get_node_or_null("Summary"), "Upgrades")
+	if upgrades != null:
+		upgrades.pressed.emit()
+	_assert(str(main.screen) == "shop", "Upgrades opens the shop overlay")
+	var settings: Node = root.get_node_or_null("Settings")
+	var dig: Button = _nav_btn(settings, "_dig_btn")
+	var museum: Button = _nav_btn(settings, "_museum_btn")
+	var menu: Button = _nav_btn(settings, "_menu_btn")
+	var back: Button = _nav_btn(settings, "_back_btn")
+	var shop_btn: Button = _nav_btn(settings, "_upgrades_btn")
+	_assert(dig != null and str(dig.text) == "Dig" and _is_drawn(dig), "shop overlay has Dig")
+	_assert(museum != null and str(museum.text) == "Museum" and _is_drawn(museum), "shop overlay has Museum")
+	_assert(menu != null and str(menu.text) == "Menu" and _is_drawn(menu), "shop overlay has Menu")
+	_assert(not _is_drawn(back), "shop overlay drops Back")
+	_assert(not _is_drawn(shop_btn), "shop overlay does not show Upgrades")
+	_assert(not _is_drawn(_nav_btn(settings, "_end_btn")), "shop overlay has no End shift")
+	_cleanup_main(main)
+
+
+func _test_museum_overlay_has_dig_upgrades_menu() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	_start_and_end_shift(main)
+	var museum_btn: Button = _find_button(main.get_node_or_null("Summary"), "Museum")
+	if museum_btn != null:
+		museum_btn.pressed.emit()
+	_assert(str(main.screen) == "museum", "Museum opens the hall overlay")
+	var settings: Node = root.get_node_or_null("Settings")
+	var dig: Button = _nav_btn(settings, "_dig_btn")
+	var upgrades: Button = _nav_btn(settings, "_upgrades_btn")
+	var menu: Button = _nav_btn(settings, "_menu_btn")
+	var back: Button = _nav_btn(settings, "_back_btn")
+	var hall: Button = _nav_btn(settings, "_museum_btn")
+	_assert(dig != null and str(dig.text) == "Dig" and _is_drawn(dig), "museum overlay has Dig")
+	_assert(upgrades != null and str(upgrades.text) == "Upgrades" and _is_drawn(upgrades), "museum overlay has Upgrades")
+	_assert(menu != null and str(menu.text) == "Menu" and _is_drawn(menu), "museum overlay has Menu")
+	_assert(not _is_drawn(back), "museum overlay drops Back")
+	_assert(not _is_drawn(hall), "museum overlay does not show Museum")
+	_assert(not _is_drawn(_nav_btn(settings, "_end_btn")), "museum overlay has no End shift")
+	_cleanup_main(main)
+
+
+func _test_overlay_dig_starts_a_new_shift() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	_start_and_end_shift(main)
+	var summary: Node = main.get_node_or_null("Summary")
+	var upgrades: Button = _find_button(summary, "Upgrades")
+	if upgrades != null:
+		upgrades.pressed.emit()
+	_assert(str(main.screen) == "shop", "shop is open before Dig")
+	_assert(not bool(main.round_active), "the finished shift is over before Dig")
+	var dig: Button = _nav_btn(root.get_node_or_null("Settings"), "_dig_btn")
+	_assert(dig != null, "shop Dig is its own header button")
+	if dig != null:
+		_assert(str(dig.text) == "Dig", "Dig is the short overlay label")
+		dig.pressed.emit()
+	_assert(str(main.screen) == "dig", "Dig starts a new shift")
+	_assert(bool(main.round_active), "Dig is the same as shift-over Dig again")
+	_assert(summary == null or not bool(summary.visible), "the new shift hides shift-over")
+	_cleanup_main(main)
+
+
+func _test_overlay_museum_and_upgrades_swap_screens() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	_start_and_end_shift(main)
+	var upgrades: Button = _find_button(main.get_node_or_null("Summary"), "Upgrades")
+	if upgrades != null:
+		upgrades.pressed.emit()
+	_assert(str(main.screen) == "shop", "start on the shop overlay")
+	_assert(bool(main.get_tree().paused), "shop keeps the clock paused")
+	var settings: Node = root.get_node_or_null("Settings")
+	var museum: Button = _nav_btn(settings, "_museum_btn")
+	_assert(museum != null and _is_drawn(museum), "shop can swap to Museum")
+	if museum != null:
+		museum.pressed.emit()
+	_assert(str(main.screen) == "museum", "Museum from shop swaps to the hall")
+	if str(main.screen) != "museum":
+		_cleanup_main(main)
+		return
+	_assert(bool(main.get_tree().paused), "the hall swap keeps the clock paused")
+	var shop_btn: Button = _nav_btn(settings, "_upgrades_btn")
+	_assert(shop_btn != null and _is_drawn(shop_btn), "museum can swap to Upgrades")
+	if shop_btn != null:
+		shop_btn.pressed.emit()
+	_assert(str(main.screen) == "shop", "Upgrades from museum swaps back to the shop")
+	_assert(bool(main.get_tree().paused), "the shop swap keeps the clock paused")
+	_cleanup_main(main)
+
+
+func _test_overlay_header_clears_wallet_and_museum_stats() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	_start_and_end_shift(main)
+	var settings: Node = root.get_node_or_null("Settings")
+	var museum_btn: Button = _find_button(main.get_node_or_null("Summary"), "Museum")
+	if museum_btn != null:
+		museum_btn.pressed.emit()
+	_assert(str(main.screen) == "museum", "hall overlay is open")
+	var wallet: Control = settings.get("_wallet") as Control if settings != null else null
+	var nav: Control = _nav_bar(settings)
+	_assert(wallet != null and _is_drawn(wallet), "wallet stays top-left on the hall")
+	_assert(nav != null and _is_drawn(nav), "Dig/Upgrades/Menu stay top-right on the hall")
+	if wallet != null and nav != null:
+		_assert(wallet.position.x <= 16.0 and wallet.position.y <= 16.0, "wallet stays top-left")
+		_assert(wallet.position.x + wallet.size.x + 8.0 <= nav.position.x, "header cluster stays clear of the wallet")
+		_assert(nav.position.y <= 16.0, "overlay nav stays in the 86px header")
+		_assert(nav.position.y + nav.size.y <= 86.0, "overlay nav stays inside HEADER_H")
+	var museum: Node = main.get_node_or_null("Museum")
+	if museum != null and museum.has_method("header_cluster_rect") and settings != null:
+		var cluster: Rect2 = museum.call("header_cluster_rect")
+		_assert(cluster.size.x > 1.0, "museum stats sit in the header")
+		if settings.has_method("overlay_content_right"):
+			_assert(cluster.end.x <= float(settings.call("overlay_content_right")) + 0.5, "museum stats stay clear of Dig/Upgrades/Menu")
+		if nav != null:
+			_assert(cluster.end.x <= nav.position.x - 4.0, "museum stats do not sit under the overlay nav")
+		_assert_museum_header_stats_centered(museum, settings)
+	if main.has_method("start_round"):
+		main.start_round()
+	_assert(str(main.screen) == "dig" and bool(main.round_active), "live pit is back for hole chrome")
+	_assert_live_nav_off_the_hole(main)
 	_cleanup_main(main)
 
 
@@ -1050,6 +1264,98 @@ func _test_overlays_hide_dig_header_menu() -> void:
 	_cleanup_main(main)
 
 
+func _test_wallet_stays_top_left_on_overlays() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	var settings: Node = root.get_node_or_null("Settings")
+	var title: Node = main.get_node_or_null("Title")
+	_assert(settings != null and settings.get("_wallet") != null, "Settings hosts the one bank")
+	if settings == null:
+		_cleanup_main(main)
+		return
+	if title != null:
+		_assert(not _is_drawn(settings.get("_wallet") as CanvasItem), "title hides the bank")
+		var start: Variant = title.get("_start")
+		if start is Button:
+			start.pressed.emit()
+	var hud: Node = main.get_node_or_null("HUD")
+	var wallet: Control = settings.get("_wallet") as Control
+	_assert(wallet != null, "the persistent wallet exists after Start")
+	if wallet != null:
+		_assert(_is_drawn(wallet), "the bank stays up on the live pit")
+		_assert(wallet.position.x <= 16.0 and wallet.position.y <= 16.0, "the bank stays top-left on the pit")
+	if hud != null and hud.has_signal("end_shift"):
+		hud.end_shift.emit()
+	_assert(_is_drawn(wallet), "the bank stays up on shift-over")
+	var summary: Node = main.get_node_or_null("Summary")
+	var upgrades: Button = _find_button(summary, "Upgrades")
+	if upgrades != null:
+		upgrades.pressed.emit()
+	_assert(str(main.screen) == "shop", "Upgrades still opens the shop")
+	_assert(_is_drawn(wallet), "the bank stays up on Upgrades")
+	_assert(wallet.position.x <= 16.0 and wallet.position.y <= 16.0, "the bank stays top-left on Upgrades")
+	var shop: Node = main.get_node_or_null("Shop")
+	if shop != null:
+		_assert(shop.get("_wallet") == null, "Upgrades does not keep its own $")
+		shop.closed.emit()
+	var museum_btn: Button = _find_button(summary, "Museum")
+	if museum_btn != null:
+		museum_btn.pressed.emit()
+	_assert(_is_drawn(wallet), "the bank stays up in the hall")
+	_assert(wallet.position.x <= 16.0 and wallet.position.y <= 16.0, "the bank stays top-left in the hall")
+	_cleanup_main(main)
+
+
+func _test_menu_and_back_stay_top_right() -> void:
+	_reset()
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	var settings: Node = root.get_node_or_null("Settings")
+	_assert(settings != null, "Settings hosts the shared header")
+	if settings == null:
+		_cleanup_main(main)
+		return
+	var title: Node = main.get_node_or_null("Title")
+	_assert(not _is_drawn(settings.get("_menu_btn") as CanvasItem), "title hides Menu")
+	_assert(not _is_drawn(settings.get("_back_btn") as CanvasItem), "title hides Back")
+	if title != null:
+		var start: Variant = title.get("_start")
+		if start is Button:
+			start.pressed.emit()
+	var menu: Control = settings.get("_menu_btn") as Control
+	var back: Control = settings.get("_back_btn") as Control
+	var end_btn: Control = settings.get("_end_btn") as Control
+	_assert(_is_drawn(menu) and _is_drawn(back) and _is_drawn(end_btn), "the live pit keeps Menu, Back, and End shift")
+	_assert(menu.position.y <= 16.0 and back.position.y <= 16.0 and end_btn.position.y <= 16.0, "the cluster stays top-right on the pit")
+	_assert(menu.global_position.x > back.global_position.x, "Menu stays the rightmost button")
+	var hud: Node = main.get_node_or_null("HUD")
+	if hud != null and hud.has_signal("end_shift"):
+		hud.end_shift.emit()
+	_assert(_is_drawn(menu) and _is_drawn(back), "shift-over keeps Menu and Back")
+	_assert(not _is_drawn(end_btn), "End shift leaves after the shift ends")
+	var upgrades: Button = _find_button(main.get_node_or_null("Summary"), "Upgrades")
+	if upgrades != null:
+		upgrades.pressed.emit()
+	var dig: Control = settings.get("_dig_btn") as Control
+	var hall: Control = settings.get("_museum_btn") as Control
+	var shop_btn: Control = settings.get("_upgrades_btn") as Control
+	_assert(_is_drawn(menu) and _is_drawn(dig) and _is_drawn(hall), "Upgrades keeps Dig, Museum, and Menu")
+	_assert(not _is_drawn(back), "Upgrades drops Back")
+	_assert(not _is_drawn(end_btn), "End shift stays off Upgrades")
+	_assert(not _is_drawn(shop_btn), "Upgrades does not show itself")
+	_assert(_control_rect(menu).position.x >= TN.view_w * 0.55, "Menu stays top-right on Upgrades")
+	var museum_btn: Button = _nav_btn(settings, "_museum_btn")
+	if museum_btn != null:
+		museum_btn.pressed.emit()
+	_assert(_is_drawn(menu) and _is_drawn(dig) and _is_drawn(shop_btn), "the hall keeps Dig, Upgrades, and Menu")
+	_assert(not _is_drawn(back), "the hall drops Back")
+	_assert(_control_rect(menu).position.x >= TN.view_w * 0.55, "Menu stays top-right in the hall")
+	_cleanup_main(main)
+
+
 func _make_hud() -> CanvasLayer:
 	var hud_script: Script = load("res://hud.gd") as Script
 	_assert(hud_script != null, "HUD script loads")
@@ -1068,6 +1374,37 @@ func _boot_main() -> Node:
 	var main: Node = packed.instantiate()
 	root.add_child(main)
 	return main
+
+
+func _start_and_end_shift(main: Node) -> void:
+	var title: Node = main.get_node_or_null("Title")
+	if title != null:
+		var start: Variant = title.get("_start")
+		if start is Button:
+			start.pressed.emit()
+	var hud: Node = main.get_node_or_null("HUD")
+	if hud != null and hud.has_signal("end_shift"):
+		hud.end_shift.emit()
+
+
+func _assert_live_nav_off_the_hole(main: Node) -> void:
+	var settings: Node = root.get_node_or_null("Settings")
+	if settings != null and settings.has_method("set_nav_context"):
+		settings.call("set_nav_context", "dig")
+	if settings != null and settings.has_method("set_end_shift_visible"):
+		settings.call("set_end_shift_visible", true)
+	if settings != null and settings.has_method("set_nav_visible"):
+		settings.call("set_nav_visible", true)
+	if settings != null and settings.has_method("_layout_nav_chrome"):
+		settings.call("_layout_nav_chrome")
+	var pit := _pit_rect()
+	var hole := Rect2(pit.position - Vector2(TN.chunk_pad, TN.chunk_pad), pit.size + Vector2(TN.chunk_pad * 2.0, TN.chunk_pad))
+	var header: Control = _nav_bar(settings)
+	for raw in [header, _nav_btn(settings, "_menu_btn"), _nav_btn(settings, "_back_btn"), _nav_btn(settings, "_end_btn")]:
+		var box: Control = raw as Control
+		if box == null or not _is_drawn(box):
+			continue
+		_assert(not hole.intersects(_control_rect(box)), "%s stays off the dig-site hole" % box.name)
 
 
 func _cleanup_main(main: Node) -> void:
@@ -1259,10 +1596,74 @@ func _control_rect(box: Control) -> Rect2:
 	return rect
 
 
+func _assert_museum_header_stats_centered(mus: Node, settings: Node) -> void:
+	var left: float = 16.0
+	var right: float = float(TN.view_w) - 16.0
+	if settings != null and settings.has_method("overlay_content_left"):
+		left = float(settings.call("overlay_content_left"))
+	if settings != null and settings.has_method("overlay_content_right"):
+		right = float(settings.call("overlay_content_right"))
+	var header_mid: float = float(TN.view_w) * 0.5
+	if mus.has_method("_view"):
+		header_mid = mus._view().x * 0.5
+	var text_cluster := Rect2()
+	var started := false
+	for pair in [
+		["_visitors", "_visitors_cap", "visitors"],
+		["_each", "_each_cap", "each"],
+		["_rate", "_rate_cap", "rate"],
+	]:
+		var value: Label = mus.get(str(pair[0])) as Label
+		var caption: Label = mus.get(str(pair[1])) as Label
+		var name: String = str(pair[2])
+		_assert(value != null and caption != null, "hall %s pair exists in the header" % name)
+		if value == null or caption == null:
+			continue
+		var value_text: Rect2 = _museum_header_text_rect(value)
+		var cap_text: Rect2 = _museum_header_text_rect(caption)
+		_assert(value_text.size.x > 1.0 and cap_text.size.x > 1.0, "hall %s number and word have text" % name)
+		_assert(absf(value_text.get_center().x - cap_text.get_center().x) <= 2.0, "hall %s number and word are centered as a unit" % name)
+		var pair_text: Rect2 = value_text.merge(cap_text)
+		if not started:
+			text_cluster = pair_text
+			started = true
+		else:
+			text_cluster = text_cluster.merge(pair_text)
+	_assert(started, "hall visitor and money text sit in the header gutter")
+	if started:
+		_assert(text_cluster.position.x >= left - 0.5, "hall stats stay right of the wallet")
+		_assert(text_cluster.end.x <= right + 0.5, "hall stats stay left of Dig/Upgrades/Menu")
+		var ideal_left: float = header_mid - text_cluster.size.x * 0.5
+		var placed_left: float = clampf(ideal_left, left, right - text_cluster.size.x)
+		_assert(absf(text_cluster.get_center().x - (placed_left + text_cluster.size.x * 0.5)) <= 8.0, "hall visitor and money text are centered in the museum header")
+
+
+func _museum_header_text_rect(label: Label) -> Rect2:
+	if label == null:
+		return Rect2()
+	var font: Font = label.get_theme_font("font")
+	var sized: int = label.get_theme_font_size("font_size")
+	var text: String = str(label.text)
+	var width: float = 0.0
+	var lines: int = 0
+	for line in text.split("\n"):
+		lines += 1
+		if font != null:
+			width = maxf(width, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x)
+	var height: float = maxf(label.size.y, float(maxi(1, lines) * (sized + 4)))
+	var x: float = label.position.x
+	if int(label.horizontal_alignment) == HORIZONTAL_ALIGNMENT_RIGHT:
+		x = label.position.x + label.size.x - width
+	elif int(label.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER:
+		x = label.position.x + (label.size.x - width) * 0.5
+	return Rect2(x, label.position.y, width, height)
+
+
 func _header_cluster_rect(hud: Node) -> Rect2:
 	var header: Control = hud.get("_header_bar") as Control
 	var buttons: Array = [
 		hud.get("_menu_btn"),
+		hud.get("_end_btn"),
 		hud.get("_museum_btn"),
 		hud.get("_shop_btn"),
 	]
@@ -1393,21 +1794,82 @@ func _partial_card(find_name: String, piece_id: String, integrity: float = 1.0) 
 
 
 func _assert_dig_header_hidden(hud: Node, where: String) -> void:
-	var menu: CanvasItem = hud.get("_menu_btn") as CanvasItem
-	var header: CanvasItem = hud.get("_header_bar") as CanvasItem
-	_assert(not _is_drawn(menu), "HUD Menu is not drawn over %s" % where)
-	_assert(not _is_drawn(header), "header actions are not drawn over %s" % where)
+	_assert(hud.get("_menu_btn") == null, "HUD Menu is not drawn over %s" % where)
+	_assert(hud.get("_header_bar") == null, "header actions are not drawn over %s" % where)
 	var settings: Node = root.get_node_or_null("Settings")
-	if settings != null:
-		var chrome: CanvasItem = settings.get("_menu_btn") as CanvasItem
-		_assert(not _is_drawn(chrome), "settings-layer Menu is not drawn over %s" % where)
+	if settings == null:
+		return
+	var chrome: CanvasItem = settings.get("_menu_btn") as CanvasItem
+	var back: CanvasItem = settings.get("_back_btn") as CanvasItem
+	var end_btn: CanvasItem = settings.get("_end_btn") as CanvasItem
+	if where == "settings":
+		_assert(not _is_drawn(chrome), "settings-layer Menu hides while the overlay is open")
+		_assert(not _is_drawn(back), "Back hides while the overlay is open")
+		return
+	_assert(_is_drawn(chrome), "Menu stays available on %s" % where)
+	var dig: CanvasItem = settings.get("_dig_btn") as CanvasItem
+	var museum: CanvasItem = settings.get("_museum_btn") as CanvasItem
+	var upgrades: CanvasItem = settings.get("_upgrades_btn") as CanvasItem
+	if where == "shop":
+		_assert(not _is_drawn(back), "shop drops Back")
+		_assert(_is_drawn(dig), "shop has Dig")
+		_assert(_is_drawn(museum), "shop has Museum")
+		_assert(not _is_drawn(upgrades), "shop does not show Upgrades")
+		_assert(not _is_drawn(end_btn), "End shift hides on shop")
+		return
+	if where == "museum":
+		_assert(not _is_drawn(back), "museum drops Back")
+		_assert(_is_drawn(dig), "museum has Dig")
+		_assert(_is_drawn(upgrades), "museum has Upgrades")
+		_assert(not _is_drawn(museum), "museum does not show Museum")
+		_assert(not _is_drawn(end_btn), "End shift hides on museum")
+		return
+	_assert(_is_drawn(back), "Back stays available on %s" % where)
+	if where == "shift-over":
+		_assert(not _is_drawn(end_btn), "End shift hides on shift-over")
+		_assert(not _is_drawn(dig), "shift-over header has no Dig")
+		_assert(not _is_drawn(museum), "shift-over header has no Museum")
+		_assert(not _is_drawn(upgrades), "shift-over header has no Upgrades")
 
 
 func _assert_dig_header_shown(hud: Node, where: String) -> void:
-	var menu: CanvasItem = hud.get("_menu_btn") as CanvasItem
-	_assert(_is_drawn(menu), "header Menu is visible again after %s" % where)
-	var header: CanvasItem = hud.get("_header_bar") as CanvasItem
-	_assert(_is_drawn(header), "header actions are visible again after %s" % where)
+	_assert(hud.get("_menu_btn") == null, "the dig HUD does not keep its own Menu after %s" % where)
+	var settings: Node = root.get_node_or_null("Settings")
+	_assert(_is_drawn(settings.get("_menu_btn") as CanvasItem), "header Menu is visible again after %s" % where)
+	_assert(_is_drawn(settings.get("_back_btn") as CanvasItem), "header Back is visible again after %s" % where)
+	_assert(_is_drawn(settings.get("_end_btn") as CanvasItem), "End shift is visible again after %s" % where)
+	_assert(not _is_drawn(settings.get("_dig_btn") as CanvasItem), "live pit header has no Dig after %s" % where)
+	_assert(not _is_drawn(settings.get("_museum_btn") as CanvasItem), "live pit header has no Museum after %s" % where)
+	_assert(not _is_drawn(settings.get("_upgrades_btn") as CanvasItem), "live pit header has no Upgrades after %s" % where)
+
+
+func _show_shared_nav() -> Node:
+	var settings: Node = root.get_node_or_null("Settings")
+	if settings == null:
+		return null
+	if settings.has_method("set_nav_visible"):
+		settings.call("set_nav_visible", true)
+	elif settings.has_method("set_menu_chrome_visible"):
+		settings.call("set_menu_chrome_visible", true)
+	if settings.has_method("set_end_shift_visible"):
+		settings.call("set_end_shift_visible", true)
+	if settings.has_method("_layout_nav_chrome"):
+		settings.call("_layout_nav_chrome")
+	elif settings.has_method("_layout_menu_chrome"):
+		settings.call("_layout_menu_chrome")
+	return settings
+
+
+func _nav_bar(settings: Node) -> Control:
+	if settings == null:
+		return null
+	return settings.get("_nav_bar") as Control
+
+
+func _nav_btn(settings: Node, key: String) -> Button:
+	if settings == null:
+		return null
+	return settings.get(key) as Button
 
 
 func _is_drawn(node: Node) -> bool:

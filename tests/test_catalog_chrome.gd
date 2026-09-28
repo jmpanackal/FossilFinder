@@ -24,6 +24,7 @@ func _run() -> void:
 	_test_shop_museum_summary_settings_pick_up_shared_boxes()
 	_test_museum_plaques_are_objects()
 	_test_unveil_overflow_copy_stays()
+	_test_museum_header_and_board_split()
 	print("catalog_chrome %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -123,6 +124,12 @@ func _test_shared_boxes_are_brass_inset_or_outset() -> void:
 	var wallet: StyleBox = Ui.wallet_box()
 	_assert(_is_brass(wallet) and _outset(wallet), "wallet chip is outset brass")
 	_assert(_shadow_drop(wallet), "wallet chip keeps a card shadow")
+	_assert(wallet.bg_color.get_luminance() >= 0.45, "wallet plate reads on dark shop and hall headers")
+	var money := Label.new()
+	root.add_child(money)
+	Ui.apply_wallet(money)
+	_assert(money.get_theme_color("font_color").get_luminance() <= 0.35, "wallet $ is ink on the bright plate")
+	money.queue_free()
 
 
 func _test_shop_museum_summary_settings_pick_up_shared_boxes() -> void:
@@ -171,12 +178,77 @@ func _test_unveil_overflow_copy_stays() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var note: String = str(mus._note.text)
-	_assert(note.find("5 unveils waiting") >= 0, "header still says N unveils waiting")
-	_assert(note.find("Triceratops") >= 0, "header still names the featured stand")
 	var exhibit: Node2D = mus._canvas
+	var card: Dictionary = {}
+	if exhibit.has_method("hall_board"):
+		card = exhibit.call("hall_board")
+	_assert(str(GS.pending_unveil_waiting_line()) == "5 unveils waiting", "waiting count still exists for ribbons")
+	_assert(str(card.get("featured", "")).find("Triceratops") >= 0, "the title board still names the featured stand")
+	_assert(str(card.get("visitors", "")).is_empty(), "waiting copy does not put visitors on the wall board")
 	_assert(str(exhibit.call("ribbon_prompt", "brachiosaurus")) == "Unveil Brachiosaurus Skull", "one pending stand is Unveil <Part>")
 	_assert(str(exhibit.call("ribbon_prompt", "stegosaurus")) == "Unveil 2 finds", "several pending on a stand is Unveil N finds")
+	mus.free()
+
+
+func _test_museum_header_and_board_split() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	var settings: Node = root.get_node_or_null("Settings")
+	if settings != null:
+		if settings.has_method("set_nav_visible"):
+			settings.call("set_nav_visible", true)
+		if settings.has_method("_layout_nav_chrome"):
+			settings.call("_layout_nav_chrome")
+	mus._refresh()
+	_assert(mus.has_method("header_stats"), "museum exposes separate header stats")
+	var stats: Dictionary = mus.call("header_stats") if mus.has_method("header_stats") else {}
+	_assert(str(stats.get("visitors", "")).is_valid_int(), "header visitor count is a bare number")
+	_assert(str(stats.get("visitors_label", "")) == "visitors", "header visitors caption is its own word")
+	_assert(str(stats.get("each_value", "")).begins_with("$"), "header donation is its own $ amount")
+	_assert(str(stats.get("each_label", "")) == "each", "header each caption is its own word")
+	_assert(str(stats.get("rate", "")).begins_with("$"), "header rate is its own $ amount")
+	_assert(str(stats.get("rate_label", "")) == "/ sec", "header / sec caption keeps its space")
+	var visitors: Label = mus.get("_visitors") as Label
+	var visitors_cap: Label = mus.get("_visitors_cap") as Label
+	var rate: Label = mus.get("_rate") as Label
+	var rate_cap: Label = mus.get("_rate_cap") as Label
+	_assert(visitors != null and visitors_cap != null, "header uses separate visitor labels")
+	_assert(rate != null and rate_cap != null, "header uses separate rate labels")
+	if visitors != null:
+		_assert(str(visitors.text).find("visitors") < 0, "header does not jam 166visitors")
+	var exhibit: Node2D = mus._canvas
+	var card: Dictionary = {}
+	if exhibit.has_method("hall_board"):
+		card = exhibit.call("hall_board")
+	_assert(str(card.get("title", "")) == "FOSSIL HALL", "the wall board keeps FOSSIL HALL")
+	_assert(str(card.get("featured_label", "")) == "Featured", "the wall board keeps Featured")
+	_assert(str(card.get("featured", "")) == "Triceratops", "the wall board names the stand")
+	_assert(str(card.get("visitors", "")).is_empty(), "the wall board no longer owns visitors")
+	_assert(str(card.get("rate", "")).is_empty(), "the wall board no longer owns hall rate")
+	if exhibit.has_method("hall_board_featured_rect"):
+		var board: Rect2 = exhibit.call("hall_board_rect")
+		var feat: Rect2 = exhibit.call("hall_board_featured_rect")
+		_assert(feat.size.y >= board.size.y * 0.5, "featured grows to fill the wall box")
+	if mus.has_method("header_cluster_rect"):
+		var cluster: Rect2 = mus.call("header_cluster_rect")
+		_assert(cluster.end.y <= float(mus.HEADER_H) + 0.5, "header cluster stays in HEADER_H")
+		if settings != null:
+			if settings.has_method("set_nav_context"):
+				settings.call("set_nav_context", "museum")
+			if settings.has_method("_layout_nav_chrome"):
+				settings.call("_layout_nav_chrome")
+			mus._refresh()
+			cluster = mus.call("header_cluster_rect")
+			if settings.has_method("overlay_content_right"):
+				_assert(cluster.end.x <= float(settings.call("overlay_content_right")) + 0.5, "header cluster stays clear of Dig/Upgrades/Menu")
+			var nav: Control = settings.get("_nav_bar") as Control
+			if nav != null:
+				_assert(cluster.end.x <= nav.global_position.x - 4.0, "header cluster stays clear of the overlay nav")
 	mus.free()
 
 

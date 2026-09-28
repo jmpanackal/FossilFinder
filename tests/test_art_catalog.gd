@@ -12,7 +12,7 @@ var TN: Node
 const CELL_IDS: PackedStringArray = ["dirt_loose", "dirt_packed", "dirt_clay", "rock"]
 const TOOL_IDS: PackedStringArray = ["hands", "shovel", "pickaxe", "brush"]
 const MUSEUM_IDS: PackedStringArray = [
-	"t_rex", "triceratops", "brachiosaurus", "velociraptor", "stegosaurus", "small_finds"
+	"t_rex", "triceratops", "brachiosaurus", "velociraptor", "stegosaurus", "small_finds", "plant_fossils"
 ]
 const SCRAP_IDS: PackedStringArray = [
 	"pebble", "shell", "scale", "seed", "speck", "sparkle", "glint", "amber", "opal", "crystal",

@@ -19,6 +19,7 @@ func _run() -> void:
 	TN = root.get_node("Tuning")
 	_test_new_skull_is_pending_unveil()
 	_test_scraps_mount_in_small_finds()
+	_test_first_amber_speck_fills_the_hall_cell()
 	_test_every_extractable_has_a_stand()
 	_test_old_save_piece_is_not_pending()
 	_test_empty_stands_never_pending()
@@ -36,6 +37,7 @@ func _run() -> void:
 	_test_unveil_rush_caps_at_five_stacks()
 	_test_exhibit_upgrades_lengthen_and_strengthen_rush()
 	_test_scrap_unveil_pays_and_clears()
+	await _test_exhibit_pays_while_the_hall_is_paused()
 	print("museum_management %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -79,6 +81,46 @@ func _test_scraps_mount_in_small_finds() -> void:
 	_assert(float(GS.piece_income("tooth")) < float(TN.piece_income_exhibit), "a tooth stays on scrap income")
 
 
+func _test_first_amber_speck_fills_the_hall_cell() -> void:
+	_reset()
+	_assert(GS.has_method("try_mount_matrix_find"), "matrix juice can claim a hall cell")
+	if not GS.has_method("try_mount_matrix_find"):
+		return
+	var mounted: bool = bool(GS.call("try_mount_matrix_find", {
+		"name": "amber speck",
+		"amount": 8,
+		"rarity": 2,
+	}))
+	_assert(mounted, "the first amber speck is the hall Amber")
+	_assert(GS.has_piece("amber_insect"), "Amber Insect is now in the collection")
+	_assert(GS.stand_for_piece("amber_insect") == "small_finds", "that Amber sits in Small Finds")
+	_assert(GS.stand_is_filled("small_finds"), "the case fills once Amber is collected")
+	_assert(GS.stand_has_pending_unveil("small_finds"), "new Amber waits under a ribbon")
+	var exhibit: Node2D = Node2D.new()
+	exhibit.set_script(load("res://museum_exhibit.gd"))
+	root.add_child(exhibit)
+	_assert(exhibit.has_method("case_owned"), "the case can say which scraps are on display")
+	if exhibit.has_method("case_owned"):
+		_assert(bool(exhibit.call("case_owned", "amber_insect")), "the Amber cell is filled")
+		_assert(not bool(exhibit.call("case_owned", "trilobite")), "the empty trilobite cell stays empty")
+	var extra: bool = bool(GS.call("try_mount_matrix_find", {
+		"name": "amber speck",
+		"amount": 5,
+		"rarity": 2,
+	}))
+	_assert(not extra, "later amber specks stay juice, not a second mount")
+	_assert(int(GS.piece_count("amber_insect")) == 1, "the hall keeps one Amber")
+	_assert(not bool(GS.call("try_mount_matrix_find", {
+		"name": "tiny toothlet",
+		"amount": 3,
+		"rarity": 1,
+	})), "a toothlet still does not become a museum tooth")
+	_assert(not GS.has_piece("tooth") and not GS.has_piece("t_rex_tooth"), "matrix toothlet stays off the mounts")
+	var main_src: String = FileAccess.get_file_as_string("res://main.gd")
+	_assert(main_src.find("try_mount_matrix_find") >= 0, "layer juice offers Amber to the hall")
+	exhibit.free()
+
+
 func _test_every_extractable_has_a_stand() -> void:
 	_reset()
 	var skull: Resource = load("res://triceratops_skull.tres")
@@ -89,9 +131,10 @@ func _test_every_extractable_has_a_stand() -> void:
 		_assert(data != null, "%s loads" % str(path))
 		var piece_id: String = str(data.get("piece_id"))
 		_assert(not piece_id.is_empty(), "%s has a piece id" % str(path))
-		_assert(GS.stand_for_piece(piece_id) == "small_finds", "%s mounts in the case" % piece_id)
+		_assert(GS.stand_for_piece(piece_id) == str(data.get("stand_id")), "%s mounts on its own case" % piece_id)
 	_assert(GS.stand_for_piece("mystery_scrap") == "small_finds", "unknown extractables still get a case cell")
 	_assert(GS.stand_title("small_finds") == "Small Finds", "case plaque is Small Finds")
+	_assert(GS.stand_title("plant_fossils") == "Plant Fossils", "plant plaque is Plant Fossils")
 
 
 func _test_old_save_piece_is_not_pending() -> void:
@@ -115,8 +158,8 @@ func _test_empty_stands_never_pending() -> void:
 func _test_duplicate_does_not_reflag_after_unveil() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
-	var burst: int = int(GS.unveil_stand("triceratops"))
-	_assert(burst > 0, "first unveil pays")
+	GS.unveil_stand("triceratops")
+	_assert(int(GS.call("surge_visitors")) > 0, "first unveil packs a crowd")
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "ribbon is gone after unveil")
 	var money_after: int = int(GS.money)
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
@@ -211,17 +254,31 @@ func _test_unveil_pays_and_clears_pending() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
 	var paid: int = int(GS.unveil_stand("triceratops"))
-	_assert(paid == int(TN.unveil_burst_clean), "clean unveil pays the clean burst")
-	_assert(int(GS.money) == paid, "burst comes from the same money bank")
+	_assert(paid == 0, "unveil does not drop a cash burst")
+	_assert(int(GS.money) == 0, "the bank stays on the visitor tick")
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "pending flag is cleared")
 	_assert(int(GS.unveil_stand("triceratops")) == 0, "second unveil pays nothing")
+
+
+func _test_exhibit_pays_while_the_hall_is_paused() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.money = 0
+	GS._income_accum = 0.0
+	_assert(float(GS.museum_income()) > 0.0, "a mounted skull still shows a /sec rate")
+	_assert(int(GS.process_mode) == Node.PROCESS_MODE_ALWAYS, "exhibit income keeps ticking while the hall pauses the clock")
+	paused = true
+	await create_timer(0.4, true, false, true).timeout
+	_assert(float(GS._income_accum) > 0.0 or int(GS.money) > 0, "the bank still rises while the hall is open")
+	paused = false
 
 
 func _test_scrap_unveil_pays_and_clears() -> void:
 	_reset()
 	GS.install_find("tooth", "Tooth", 0.0, false)
 	var paid: int = int(GS.unveil_stand("small_finds"))
-	_assert(paid == int(TN.unveil_burst_dirty), "dusty scrap unveil pays the dirty burst")
+	_assert(paid == 0, "dusty scrap unveil is a crowd surge")
 	_assert(not GS.stand_has_pending_unveil("small_finds"), "case ribbon clears after unveil")
 	_assert(int(GS.unveil_stand("small_finds")) == 0, "second case unveil pays nothing")
 
@@ -259,7 +316,7 @@ func _test_unveil_rush_stacks_and_adds_time() -> void:
 	if GS.has_method("unveil_rush_line"):
 		var line: String = str(GS.call("unveil_rush_line"))
 		_assert(line.find("×2") >= 0 or line.find("x2") >= 0, "rush line shows the stack count")
-		_assert(line.find("/sec") >= 0, "rush line shows the $/sec")
+		_assert(line.find("visitor") >= 0, "rush line shows the extra visitors")
 		_assert(line.find("s") >= 0, "rush line shows the timer")
 
 
@@ -281,10 +338,10 @@ func _test_unveil_rush_caps_at_five_stacks() -> void:
 
 func _test_exhibit_upgrades_lengthen_and_strengthen_rush() -> void:
 	_reset()
-	_assert(GS._item("unveil_time").is_empty() == false, "Opening Hours is an Exhibit upgrade")
-	_assert(str(GS._item("unveil_time").get("cat", "")) == "Exhibit", "duration upgrade sits on the Exhibit tab")
-	_assert(GS._item("unveil_crowd").is_empty() == false, "Opening Crowd is an Exhibit upgrade")
-	_assert(str(GS._item("unveil_crowd").get("cat", "")) == "Exhibit", "strength upgrade sits on the Exhibit tab")
+	_assert(GS._item("unveil_time").is_empty() == false, "Opening Hours is a Museum upgrade")
+	_assert(str(GS._item("unveil_time").get("cat", "")) == "Museum", "duration upgrade sits on the Museum tab")
+	_assert(GS._item("unveil_crowd").is_empty() == false, "Opening Crowd is a Museum upgrade")
+	_assert(str(GS._item("unveil_crowd").get("cat", "")) == "Museum", "strength upgrade sits on the Museum tab")
 	var base_secs: float = float(TN.unveil_spike_seconds)
 	GS.levels["unveil_time"] = 1
 	GS.levels["unveil_crowd"] = 1

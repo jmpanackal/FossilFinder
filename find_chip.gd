@@ -4,10 +4,13 @@ extends Panel
 const Ui := preload("res://ui_style.gd")
 const ArtCatalogScript := preload("res://art_catalog.gd")
 const FossilDataScript := preload("res://fossil_data.gd")
+const StarRating := preload("res://star_rating.gd")
 
 var _icon: Control
 var _name_label: Label
+var _grade_row: VBoxContainer
 var _grade_label: Label
+var _stars: Control
 var _status_label: Label
 var _price_label: Label
 var _data: FossilDataScript
@@ -57,19 +60,35 @@ func _init() -> void:
 	_name_label.clip_text = false
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	_name_label.add_theme_constant_override("line_spacing", -2)
+	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	Ui.apply_label(_name_label, 16, Ui.GOLD)
 	col.add_child(_name_label)
+	_grade_row = VBoxContainer.new()
+	_grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_grade_row.add_theme_constant_override("separation", 0)
+	_grade_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_grade_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(_grade_row)
 	_grade_label = Label.new()
 	_grade_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_grade_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grade_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_grade_label.clip_text = false
 	_grade_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	Ui.apply_label(_grade_label, 12, Ui.MUTED)
-	col.add_child(_grade_label)
+	_grade_row.add_child(_grade_label)
+	_stars = Control.new()
+	_stars.set_script(StarRating)
+	_stars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stars.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_stars.custom_minimum_size = Vector2(46, 8)
+	_stars.visible = false
+	_grade_row.add_child(_stars)
 	_status_label = Label.new()
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_status_label.clip_text = false
 	_status_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
@@ -140,14 +159,16 @@ func fit_tray(width: float, crowded: bool) -> void:
 	Ui.apply_label(_status_label, meta_size, Ui.MUTED)
 	Ui.apply_label(_price_label, price_size, Ui.GOLD)
 	_price_label.custom_minimum_size = Vector2(28 if tight else (36 if compact else 50), 24 if tight else 28)
+	if _stars != null:
+		_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
 	if _icon != null:
 		var icon_s: float = 22.0 if tight else (28.0 if compact else 36.0)
 		_icon.custom_minimum_size = Vector2(icon_s, icon_s)
 	if tight:
-		_grade_label.visible = false
+		_grade_row.visible = false
 		_status_label.visible = false
 	else:
-		_grade_label.visible = not _grade_label.text.is_empty()
+		_grade_row.visible = not _grade_label.text.is_empty() or (_stars != null and _stars.visible)
 		_status_label.visible = not _status_label.text.is_empty()
 
 
@@ -169,33 +190,35 @@ func _apply_stat_lines() -> void:
 	_grade_label.text = _condition_line(_card)
 	_status_label.text = _meter_line(_card)
 	_price_label.text = _price_text(_card)
+	var stars: int = int(_card.get("stars", 0))
+	var show_stars: bool = stars > 0 and _status != "underground"
+	if _stars != null and _stars.has_method("set_rating"):
+		_stars.call("set_rating", stars)
+	if _stars != null:
+		_stars.visible = show_stars
 	_grade_label.visible = not _grade_label.text.is_empty()
+	_grade_row.visible = _grade_label.visible or show_stars
 	_status_label.visible = not _status_label.text.is_empty()
 	_price_label.visible = not _price_label.text.is_empty()
 
 
 func _condition_line(card: Dictionary) -> String:
-	var bits: PackedStringArray = PackedStringArray()
 	var grade: String = str(card.get("grade", "")).strip_edges()
 	if not grade.is_empty():
-		bits.append(grade)
-	else:
-		match _status:
-			"bagged":
-				bits.append("Bagged")
-			"brush":
-				bits.append("Brush")
-			"uncovering":
-				bits.append("Uncovering")
-			"underground":
-				pass
-			_:
-				if not _status.is_empty():
-					bits.append(_status.capitalize())
-	var stars: int = int(card.get("stars", 0))
-	if stars > 0 and _status != "underground":
-		bits.append(_star_glyphs(stars))
-	return "  ".join(bits)
+		return grade
+	match _status:
+		"bagged":
+			return "Bagged"
+		"brush":
+			return "Brush"
+		"uncovering":
+			return "Uncovering"
+		"underground":
+			return ""
+		_:
+			if not _status.is_empty():
+				return _status.capitalize()
+	return ""
 
 
 func _meter_line(card: Dictionary) -> String:
@@ -239,13 +262,6 @@ func _percent_in(text: String) -> int:
 	if digits.is_empty():
 		return 0
 	return clampi(int(digits), 0, 100)
-
-
-func _star_glyphs(stars: int) -> String:
-	var count: int = clampi(stars, 0, 5)
-	if count <= 0:
-		return ""
-	return "★".repeat(count)
 
 
 func _brush_progress() -> float:

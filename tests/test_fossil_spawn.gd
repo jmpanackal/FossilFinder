@@ -232,8 +232,14 @@ func _test_small_finds_are_not_dino_teeth() -> void:
 				_assert(data != null, "%s extra scrap loads" % str(path))
 				continue
 			var id: String = str(data.get("piece_id"))
-			_assert(id == "trilobite" or id == "amber_insect", "extra slots are trilobite or amber, not %s" % id)
-			_assert(str(GS.stand_for_piece(id)) == "small_finds", "%s stays in Small Finds" % id)
+			_assert(
+				id == "trilobite" or id == "amber_insect" or id == "cycad" or id == "fossil_flower",
+				"extra slots are case scraps, not %s" % id
+			)
+			if id == "cycad" or id == "fossil_flower":
+				_assert(str(GS.stand_for_piece(id)) == "plant_fossils", "%s stays in Plant Fossils" % id)
+			else:
+				_assert(str(GS.stand_for_piece(id)) == "small_finds", "%s stays in Small Finds" % id)
 
 
 func _test_rich_bed_on_start_pit_still_cannot_hide_skull() -> void:
@@ -249,7 +255,7 @@ func _test_rich_bed_on_start_pit_still_cannot_hide_skull() -> void:
 	_assert(not ids.is_empty(), "Rich Bed start pit still hides finds")
 	for id in ids:
 		_assert(id != "triceratops_skull", "Rich Bed cannot bury the skull in a 5x4")
-		_assert(_is_starter_part(id) or id == "trilobite" or id == "amber_insect", "5x4 extras stay 1-cell scraps or starter parts")
+		_assert(_is_starter_part(id) or id == "trilobite" or id == "amber_insect" or id == "cycad" or id == "fossil_flower", "5x4 extras stay 1-cell scraps or starter parts")
 	site.free()
 
 
@@ -315,7 +321,7 @@ func _test_extras_stay_scraps() -> void:
 		_assert(not id.ends_with("_skull"), "extra slots never hide a skull")
 		_assert(id != "brachiosaurus_neck", "a 6x4 never hides the brach neck")
 		_assert(
-			id == "trilobite" or id == "amber_insect" or _is_starter_part(id) or id == "triceratops_vertebra",
+			id == "trilobite" or id == "amber_insect" or id == "cycad" or id == "fossil_flower" or _is_starter_part(id) or id == "triceratops_vertebra",
 			"extra slots stay scraps or a small in-season part, not %s" % id
 		)
 	site.free()

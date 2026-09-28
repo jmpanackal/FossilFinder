@@ -102,6 +102,10 @@ func silhouette_kind() -> String:
 			return "trilobite"
 		"amber_insect":
 			return "amber"
+		"cycad":
+			return "cycad"
+		"fossil_flower":
+			return "flower"
 		"tooth":
 			return "tooth_rex"
 		_:
@@ -261,6 +265,35 @@ func silhouette_polys(rect: Rect2) -> Array[PackedVector2Array]:
 			])))
 			polys.append(_map_poly(rect, PackedVector2Array([
 				Vector2(0.40, 0.36), Vector2(0.60, 0.36), Vector2(0.62, 0.64), Vector2(0.38, 0.64)
+			])))
+		"cycad":
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.40, 0.48), Vector2(0.60, 0.48), Vector2(0.62, 0.92), Vector2(0.38, 0.92)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.50, 0.06), Vector2(0.78, 0.28), Vector2(0.62, 0.50), Vector2(0.38, 0.50), Vector2(0.22, 0.28)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.08, 0.22), Vector2(0.36, 0.34), Vector2(0.30, 0.50), Vector2(0.12, 0.44)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.92, 0.22), Vector2(0.64, 0.34), Vector2(0.70, 0.50), Vector2(0.88, 0.44)
+			])))
+		"flower":
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.50, 0.08), Vector2(0.62, 0.32), Vector2(0.38, 0.32)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.86, 0.30), Vector2(0.64, 0.42), Vector2(0.70, 0.58), Vector2(0.90, 0.50)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.14, 0.30), Vector2(0.36, 0.42), Vector2(0.30, 0.58), Vector2(0.10, 0.50)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.28, 0.82), Vector2(0.50, 0.58), Vector2(0.72, 0.82), Vector2(0.50, 0.70)
+			])))
+			polys.append(_map_poly(rect, PackedVector2Array([
+				Vector2(0.40, 0.40), Vector2(0.60, 0.40), Vector2(0.60, 0.60), Vector2(0.40, 0.60)
 			])))
 		_:
 			polys.append(_map_poly(rect, PackedVector2Array([

@@ -368,6 +368,12 @@ func _test_sprite_is_the_item() -> void:
 	_assert(str(Matrix.icon_kind("nodule")) == "nodule", "a nodule flies as a nodule")
 	_assert(str(Matrix.icon_kind("tiny toothlet")) == "speck", "a toothlet flies as a speck, not a museum tooth")
 	_assert(str(Matrix.icon_kind("tiny toothlet")) != "tooth", "matrix toothlet is not the museum tooth icon")
+	if GS.has_method("try_mount_matrix_find"):
+		_assert(not bool(GS.call("try_mount_matrix_find", {
+			"name": "tiny toothlet",
+			"amount": 3,
+			"rarity": 1,
+		})), "a toothlet does not claim a hall cell")
 	var Fly: GDScript = load("res://loot_fly.gd") as GDScript
 	_assert(Fly != null, "loot_fly.gd exists so the object can fly to $")
 	if Fly != null:

@@ -17,6 +17,7 @@ func _run() -> void:
 	_test_title_copy_is_field_site_not_feast()
 	_test_settings_from_title_returns_to_title()
 	_test_menu_stays_available_after_start()
+	_test_title_hides_the_bank()
 	print("title_screen %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -118,14 +119,28 @@ func _test_menu_stays_available_after_start() -> void:
 		if start is Button:
 			start.pressed.emit()
 	var hud: Node = main.get_node_or_null("HUD")
-	var hud_menu: Variant = hud.get("_menu_btn") if hud != null else null
-	_assert(hud_menu is Button, "Menu sits on the dig rail after Start")
-	if hud_menu is Button:
-		_assert(bool(hud_menu.visible), "Menu stays available after Start")
-		_assert(str(hud_menu.text) == "Menu", "in-game chrome is still Menu")
+	_assert(hud == null or hud.get("_menu_btn") == null, "the dig HUD does not host a second Menu")
 	var settings_menu: Variant = settings.get("_menu_btn")
-	if settings_menu is Button and hud_menu is Button:
-		_assert(not bool(settings_menu.visible) or settings_menu == hud_menu, "Settings does not stack a second Menu over the pit")
+	_assert(settings_menu is Button, "Menu sits on the shared header after Start")
+	if settings_menu is Button:
+		_assert(bool(settings_menu.visible), "Menu stays available after Start")
+		_assert(str(settings_menu.text) == "Menu", "in-game chrome is still Menu")
+	var settings_back: Variant = settings.get("_back_btn")
+	_assert(settings_back is Button and bool(settings_back.visible), "Back stays available after Start")
+	main.free()
+
+
+func _test_title_hides_the_bank() -> void:
+	var main: Node = _boot_main()
+	if main == null:
+		return
+	var settings: Node = root.get_node("Settings")
+	var wallet: CanvasItem = settings.get("_wallet") as CanvasItem
+	_assert(wallet != null, "Settings hosts the one bank")
+	if wallet != null:
+		_assert(not bool(wallet.visible), "title hides the bank")
+	_assert(not bool((settings.get("_menu_btn") as CanvasItem).visible) if settings.get("_menu_btn") != null else true, "title hides Menu")
+	_assert(not bool((settings.get("_back_btn") as CanvasItem).visible) if settings.get("_back_btn") != null else true, "title hides Back")
 	main.free()
 
 

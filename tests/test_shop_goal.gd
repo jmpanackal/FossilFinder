@@ -23,6 +23,8 @@ func _run() -> void:
 	_test_small_finds_goal_when_case_started()
 	_test_affordable_shop_beats_small_finds()
 	_test_museum_rate_line_stays_quiet_until_income()
+	_test_unveil_shop_copy_names_on_unveil()
+	_test_museum_donation_this_buy_is_at_least_a_cent()
 	_test_chip_buys_affordable_goal()
 	_test_hired_hand_is_not_an_early_goal()
 	_test_next_goal_is_named_for_equipped_tool()
@@ -139,6 +141,38 @@ func _test_museum_rate_line_stays_quiet_until_income() -> void:
 	var line: String = str(GS.museum_rate_line())
 	_assert(line.contains("/s"), "hall income shows as a small $/s")
 	_assert(line.contains("$"), "hall income keeps a dollar sign")
+
+
+func _test_unveil_shop_copy_names_on_unveil() -> void:
+	_reset()
+	_assert(GS.has_method("shop_effect_line"), "GameState exposes shop_effect_line for unveil copy")
+	if not GS.has_method("shop_effect_line"):
+		return
+	_assert(str(GS.shop_display_name("unveil_time")) == "Opening Hours", "Opening Hours title stays Opening Hours")
+	_assert(str(GS.shop_display_name("unveil_crowd")) == "Opening Crowd", "Opening Crowd title stays Opening Crowd")
+	_assert(str(GS.shop_effect_line("unveil_time")) == "Crowd surge on unveil +6s", "Opening Hours this-buy is surge on unveil +6s")
+	_assert(str(GS.shop_effect_line("unveil_crowd")) == "+25% visitors on unveil", "Opening Crowd this-buy is +25% visitors on unveil")
+	_assert(str(GS.shop_effect_line("unveil_time")).find("on unveil") >= 0, "Opening Hours names unveil")
+	_assert(str(GS.shop_effect_line("unveil_crowd")).find("on unveil") >= 0, "Opening Crowd names unveil")
+	GS.levels["unveil_time"] = 1
+	GS.levels["unveil_crowd"] = 1
+	GS.apply_upgrades()
+	_assert(str(GS.shop_effect_line("unveil_time")) == "Crowd surge on unveil +6s", "ranked Opening Hours stays +6s on unveil")
+	_assert(str(GS.shop_effect_line("unveil_crowd")) == "+25% visitors on unveil", "ranked Opening Crowd stays +25% on unveil")
+
+
+func _test_museum_donation_this_buy_is_at_least_a_cent() -> void:
+	_reset()
+	if not GS.has_method("shop_effect_line"):
+		_assert(false, "GameState exposes shop_effect_line for donation copy")
+		return
+	for id in ["lighting", "benches", "labels", "gift_shop", "blockbuster_ticket"]:
+		var line: String = str(GS.shop_effect_line(id))
+		_assert(line.find("per visitor") >= 0, "%s this-buy is donation per visitor" % id)
+		_assert(line.find("$0.00") < 0, "%s does not format mill-cents (%s)" % [id, line])
+		_assert(line.find("$0.003") < 0 and line.find("$0.006") < 0, "%s is not a sub-penny bump" % id)
+	_assert(str(GS.shop_effect_line("labels")) == "+$0.01 per visitor", "Clear Labels this-buy is +$0.01 per visitor")
+	_assert(str(GS.shop_effect_line("gift_shop")) == "+$0.02 per visitor", "Gift Counter this-buy is +$0.02 per visitor")
 
 
 func _test_chip_buys_affordable_goal() -> void:

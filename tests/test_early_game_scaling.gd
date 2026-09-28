@@ -33,8 +33,18 @@ func _run() -> void:
 	_test_skull_locked_until_rich_bed()
 	_test_scrap_income_cannot_print_midgame()
 	_test_super_shovel_is_a_wall()
+	_test_shovel_and_pick_one_take_twenty_minutes()
+	_test_super_and_crowds_price_band()
+	_test_mid_rows_last_in_late_band()
+	_test_comfort_rows_pay_a_cent_and_cost_more()
+	_test_late_ticket_ranks_cost_more()
+	_test_existing_shop_reaches_millions_before_apex()
+	_test_apex_chapters_exist_and_gate()
+	_test_apex_ranks_add_power()
+	_test_first_tool_buys_stay_early_victories()
 	_test_passive_miner_is_catalogued()
 	_test_wider_scoop_rank_2_hits_more_than_one_cell()
+	_test_pick_wider_scoop_scales_like_shovel()
 	_test_fullscreen_pixels_do_not_become_play_view()
 	_test_footer_chrome_stays_below_pit()
 	_test_find_footer_stays_on_screen()
@@ -345,7 +355,7 @@ func _test_scrap_income_cannot_print_midgame() -> void:
 	_assert(featured >= 0.05, "a featured tooth is a visible tick")
 	_assert(featured < 0.15, "a featured tooth still does not print mid-game cash")
 	var super_cost: int = int(_item("shovel_super").get("cost", 0))
-	_assert(super_cost >= 700, "Super Shovel is a mid-game price")
+	_assert(super_cost >= 3000, "Super Shovel is a mid-game price")
 	_assert(rate * 1200.0 < float(super_cost), "20 minutes of tooth income cannot buy Super Shovel")
 
 
@@ -355,6 +365,298 @@ func _test_super_shovel_is_a_wall() -> void:
 	_assert(int(_item("site_expand").get("cost", 0)) >= 400, "Wider Claim II is mid-game")
 	_assert(int(_item("site_size").get("max", 0)) >= 3, "early pit is a short ladder")
 	_assert(int(_item("site_expand").get("max", 0)) >= 5, "later pit is a long ladder")
+
+
+func _chapter_total(cat: String, tier: int) -> int:
+	var total: int = 0
+	for item in GS.catalog:
+		if str(item.get("cat", "")) != cat or int(item.get("tier", 1)) != tier:
+			continue
+		total += _row_total(str(item["id"]))
+	return total
+
+
+func _row_total(id: String) -> int:
+	var item: Dictionary = _item(id)
+	if item.is_empty():
+		return 0
+	var saved: int = int(GS.levels.get(id, 0))
+	var total: int = 0
+	for rank in int(item.get("max", 1)):
+		GS.levels[id] = rank
+		total += int(GS.cost_of(id))
+	GS.levels[id] = saved
+	return total
+
+
+func _row_last(id: String) -> int:
+	var item: Dictionary = _item(id)
+	if item.is_empty():
+		return 0
+	var saved: int = int(GS.levels.get(id, 0))
+	GS.levels[id] = maxi(0, int(item.get("max", 1)) - 1)
+	var cost: int = int(GS.cost_of(id))
+	GS.levels[id] = saved
+	return cost
+
+
+func _test_shovel_and_pick_one_take_twenty_minutes() -> void:
+	_reset()
+	GS.install_find("tooth", "Tooth", 1.0, true)
+	var tooth_rate: float = float(GS.museum_income())
+	_assert(tooth_rate >= 0.05 and tooth_rate < 0.15, "first tooth is still the early toaster")
+	var shovel_i: int = _chapter_total("Shovel", 1)
+	var pick_i: int = _chapter_total("Pickaxe", 1)
+	_assert(float(shovel_i) > tooth_rate * 600.0, "tooth-only AFK cannot max Shovel I in 10 minutes")
+	_assert(float(pick_i) > tooth_rate * 600.0, "tooth-only AFK cannot max Pickaxe I in 10 minutes")
+	# Dirt/matrix + first tooth while digging, not a $30/s hall. Current Shovel I
+	# dumps in ~10 minutes at this rate; the stretch should need ≥20 and still
+	# finish in ~25–40.
+	const EARLY_PLAY := 4.4
+	_assert(float(shovel_i) > EARLY_PLAY * 600.0, "Shovel I cannot be maxed in 10 minutes of early play")
+	_assert(float(shovel_i) >= EARLY_PLAY * 1200.0, "Shovel I takes at least 20 minutes of early play")
+	_assert(float(shovel_i) <= EARLY_PLAY * 2400.0, "Shovel I can still be maxed in about 40 minutes of early play")
+	_assert(float(pick_i) > EARLY_PLAY * 600.0, "Pickaxe I cannot be maxed in 10 minutes of early play")
+	_assert(float(pick_i) >= EARLY_PLAY * 1200.0, "Pickaxe I takes at least 20 minutes of early play")
+
+
+func _test_super_and_crowds_price_band() -> void:
+	_reset()
+	for id in ["shovel_super", "pick_super", "brush_master", "crowds"]:
+		var first: int = int(_item(id).get("cost", 0))
+		var last: int = _row_last(id)
+		_assert(first >= 3000 and first <= 5000, "%s first buy is $3k–$5k" % id)
+		_assert(last >= 80000 and last <= 200000, "%s last buy is $80k–$200k" % id)
+
+
+func _test_mid_rows_last_in_late_band() -> void:
+	_reset()
+	for id in ["shovel_soft", "restoration", "site_expand", "money_mult"]:
+		var last: int = _row_last(id)
+		_assert(last >= 25000 and last <= 50000, "%s last buy is $25k–$50k" % id)
+	var museum_i: int = _chapter_total("Museum", 1)
+	_assert(museum_i >= 34000 and museum_i <= 40000, "Museum I chapter is about $35–40k")
+	var site_i: int = _chapter_total("Site", 1)
+	_assert(site_i >= 3000 and site_i <= 4000, "Site I chapter is about $3–4k")
+
+
+func _test_comfort_rows_pay_a_cent_and_cost_more() -> void:
+	_reset()
+	_assert(is_equal_approx(float(TN.donation_base), 0.02), "donation_base stays $0.02")
+	_assert(str(GS.shop_effect_line("lighting")) == "+$0.01 per visitor", "Warm Lights this-buy is +$0.01 per visitor")
+	_assert(str(GS.shop_effect_line("benches")) == "+$0.01 per visitor", "Benches this-buy is +$0.01 per visitor")
+	_assert(str(GS.shop_effect_line("labels")) == "+$0.01 per visitor", "Clear Labels this-buy is +$0.01 per visitor")
+	_assert(str(GS.shop_effect_line("gift_shop")) == "+$0.02 per visitor", "Gift Counter this-buy is +$0.02 per visitor")
+	# Package C snapshot: lighting 200/3200, benches 180/2880, labels 900/19503, gift 1800/44570.
+	_assert(int(_item("lighting").get("cost", 0)) > 200, "Warm Lights first buy rose with the cent floor")
+	_assert(_row_last("lighting") > 3200, "Warm Lights last buy rose with the cent floor")
+	_assert(int(_item("benches").get("cost", 0)) > 180, "Benches first buy rose with the cent floor")
+	_assert(_row_last("benches") > 2880, "Benches last buy rose with the cent floor")
+	_assert(int(_item("labels").get("cost", 0)) > 900, "Clear Labels first buy rose with the cent floor")
+	_assert(_row_last("labels") > 19503, "Clear Labels last buy rose with the cent floor")
+	_assert(int(_item("gift_shop").get("cost", 0)) > 1800, "Gift Counter first buy rose with the cent floor")
+	_assert(_row_last("gift_shop") > 44570, "Gift Counter last buy rose with the cent floor")
+	_assert(int(_item("lighting").get("max", 0)) == 5, "Warm Lights max ranks stay 5")
+	_assert(int(_item("benches").get("max", 0)) == 5, "Benches max ranks stay 5")
+	_assert(int(_item("labels").get("max", 0)) == 6, "Clear Labels max ranks stay 6")
+	_assert(int(_item("gift_shop").get("max", 0)) == 6, "Gift Counter max ranks stay 6")
+	_assert(int(_item("shovel_super").get("cost", 0)) == 4000, "Super Shovel first buy is unchanged")
+	_assert(int(_item("shovel_titan").get("cost", 0)) == 80000, "Titan Shovel first buy is unchanged")
+	_assert(int(_item("blockbuster_ticket").get("cost", 0)) == 120000, "Box Office first buy is unchanged")
+
+
+func _per_visitor_dollars(line: String) -> float:
+	var marker := " per visitor"
+	var end: int = line.find(marker)
+	if end < 0:
+		return 0.0
+	var start: int = line.rfind("$", end)
+	if start < 0:
+		return 0.0
+	return float(line.substr(start + 1, end - start - 1))
+
+
+func _test_late_ticket_ranks_cost_more() -> void:
+	_reset()
+	# Live catalog before juicier late tickets: labels 69344, gift 158470, box 2267482.
+	_assert(_row_last("labels") > 69344, "Clear Labels last buy rose with juicier late ranks")
+	_assert(_row_last("gift_shop") > 158470, "Gift Counter last buy rose with juicier late ranks")
+	_assert(_row_last("blockbuster_ticket") > 2267482, "Box Office last buy rose with juicier late ranks")
+	_assert(_row_last("gift_shop") >= 632000, "last Gift cost rose about 5x with a 5x last-rank ticket")
+	_assert(_row_last("blockbuster_ticket") >= 1000000 and _row_last("blockbuster_ticket") <= 3000000, "Box Office last buy stays in the $1–3M band")
+	_assert(int(_item("shovel_super").get("cost", 0)) == 4000, "Super Shovel first buy stays $4k")
+	_assert(int(_item("shovel_titan").get("cost", 0)) == 80000, "Titan Shovel first buy stays $80k")
+	_assert(int(_item("blockbuster_ticket").get("cost", 0)) == 120000, "Box Office first buy stays $120k")
+	GS.levels["gift_shop"] = 5
+	GS.levels["blockbuster_ticket"] = 5
+	GS.apply_upgrades()
+	_assert(_per_visitor_dollars(str(GS.shop_effect_line("gift_shop"))) + 0.0001 >= 0.05, "last Gift this-buy is at least +$0.05 per visitor")
+	_assert(_per_visitor_dollars(str(GS.shop_effect_line("blockbuster_ticket"))) + 0.0001 >= 0.10, "last Box Office this-buy is at least +$0.10 per visitor")
+
+
+func _test_existing_shop_reaches_millions_before_apex() -> void:
+	_reset()
+	var apex := {
+		"hands_craft": true,
+		"hands_swift": true,
+		"round_marathon": true,
+		"prime_bed": true,
+		"shovel_titan": true,
+		"pick_titan": true,
+		"blockbuster_ticket": true,
+		"blockbuster_crowd": true,
+		"blockbuster_hours": true,
+		"blockbuster_feature": true,
+	}
+	var existing: int = 0
+	var whole: int = 0
+	for item in GS.catalog:
+		var id: String = str(item["id"])
+		var total: int = _row_total(id)
+		whole += total
+		if not apex.has(id):
+			existing += total
+	_assert(existing >= 1500000 and existing <= 4000000, "existing shop lands at millions before apex chapters")
+	_assert(whole > existing, "apex chapters push the ceiling into the millions")
+	_assert(whole >= 3000000, "full ladder including apex reaches millions")
+
+
+func _test_apex_chapters_exist_and_gate() -> void:
+	_reset()
+	var rows := [
+		{"id": "hands_craft", "cat": "Hands", "tier": 2},
+		{"id": "hands_swift", "cat": "Hands", "tier": 2},
+		{"id": "round_marathon", "cat": "Site", "tier": 3},
+		{"id": "prime_bed", "cat": "Site", "tier": 3},
+		{"id": "shovel_titan", "cat": "Shovel", "tier": 3},
+		{"id": "pick_titan", "cat": "Pickaxe", "tier": 3},
+		{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4},
+		{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4},
+		{"id": "blockbuster_hours", "cat": "Museum", "tier": 4},
+		{"id": "blockbuster_feature", "cat": "Museum", "tier": 4},
+	]
+	for raw in rows:
+		var spec: Dictionary = raw
+		var id: String = str(spec["id"])
+		var item: Dictionary = _item(id)
+		_assert(not item.is_empty(), "%s exists in the shop" % id)
+		if item.is_empty():
+			continue
+		_assert(str(item.get("cat", "")) == str(spec["cat"]), "%s sits on %s" % [id, spec["cat"]])
+		_assert(int(item.get("tier", 0)) == int(spec["tier"]), "%s is chapter %d" % [id, spec["tier"]])
+		_assert(not bool(GS.tier_unlocked(id)), "%s starts gated" % id)
+		_assert(not bool(GS.can_buy(id)), "%s cannot be bought at the start" % id)
+	_assert(int(_item("hands_craft").get("cost", 0)) >= 1400 and int(_item("hands_craft").get("cost", 0)) <= 1800, "Fieldcraft first buy is about $1.5k")
+	_assert(_row_last("hands_craft") >= 25000 and _row_last("hands_craft") <= 35000, "Fieldcraft last buy is about $30k")
+	_assert(int(_item("round_marathon").get("cost", 0)) >= 20000 and int(_item("round_marathon").get("cost", 0)) <= 30000, "Grand Claim first buy is about $25k")
+	_assert(_row_last("round_marathon") >= 200000 and _row_last("round_marathon") <= 400000, "Grand Claim last buy is $200–400k")
+	_assert(int(_item("shovel_titan").get("cost", 0)) >= 70000 and int(_item("shovel_titan").get("cost", 0)) <= 90000, "Titan Shovel first buy is about $80k")
+	_assert(_row_last("shovel_titan") >= 600000 and _row_last("shovel_titan") <= 1200000, "Titan Shovel last buy is $0.6–1.2M")
+	_assert(int(_item("pick_titan").get("cost", 0)) >= 70000 and int(_item("pick_titan").get("cost", 0)) <= 90000, "Titan Pick first buy is about $80k")
+	_assert(_row_last("pick_titan") >= 600000 and _row_last("pick_titan") <= 1200000, "Titan Pick last buy is $0.6–1.2M")
+	_assert(int(_item("blockbuster_ticket").get("cost", 0)) >= 100000 and int(_item("blockbuster_ticket").get("cost", 0)) <= 140000, "Blockbuster first buy is about $120k")
+	_assert(_row_last("blockbuster_ticket") >= 1000000 and _row_last("blockbuster_ticket") <= 3000000, "Blockbuster last buy is $1–3M")
+	_max_chapter("Hands", 1)
+	_assert(bool(GS.tier_unlocked("hands_craft")), "maxed Hands I unlocks Fieldcraft")
+	_max_chapter("Shovel", 1)
+	_max_chapter("Shovel", 2)
+	_assert(bool(GS.tier_unlocked("shovel_titan")), "maxed Shovel II unlocks Titan Shovel")
+	_max_chapter("Pickaxe", 1)
+	_max_chapter("Pickaxe", 2)
+	_assert(bool(GS.tier_unlocked("pick_titan")), "maxed Pickaxe II unlocks Titan Pick")
+	_max_chapter("Site", 1)
+	_max_chapter("Site", 2)
+	_assert(bool(GS.tier_unlocked("round_marathon")), "maxed Site II unlocks Grand Claim")
+	_max_chapter("Museum", 1)
+	_max_chapter("Museum", 2)
+	_max_chapter("Museum", 3)
+	_assert(bool(GS.tier_unlocked("blockbuster_ticket")), "maxed Museum III unlocks Blockbuster")
+	_assert(str(GS.lock_reason("blockbuster_ticket")).contains("III") or bool(GS.tier_unlocked("blockbuster_ticket")), "Museum IV lock copy can name III")
+
+
+func _max_chapter(cat: String, tier: int) -> void:
+	for item in GS.catalog:
+		if str(item.get("cat", "")) != cat or int(item.get("tier", 1)) != tier:
+			continue
+		GS.levels[str(item["id"])] = int(item["max"])
+	GS.apply_upgrades()
+
+
+func _test_apex_ranks_add_power() -> void:
+	_reset()
+	_max_chapter("Hands", 1)
+	var quality: float = float(TN.matrix_hands_quality)
+	var pay: float = float(TN.matrix_hands_pay)
+	var hold: float = float(TN.shovel_hold_tick_rate)
+	GS.levels["hands_craft"] = 1
+	GS.levels["hands_swift"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.matrix_hands_quality) > quality, "Fieldcraft raises Hands harvest quality")
+	_assert(float(TN.matrix_hands_pay) > pay, "Fieldcraft raises Hands harvest pay")
+	_assert(float(TN.shovel_hold_tick_rate) > hold, "Fieldcraft hold ranks dig faster")
+	_reset()
+	GS.levels["round_time"] = 4
+	GS.apply_upgrades()
+	var shift: float = float(TN.round_seconds)
+	_assert(shift >= 64.0, "max Longer Shift still reaches 64s")
+	var fossils: int = int(TN.extra_find_slots)
+	GS.levels["round_marathon"] = 1
+	GS.levels["prime_bed"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.round_seconds) > 64.0, "Marathon Shift runs past 64s")
+	_assert(float(TN.round_seconds) > shift, "Marathon Shift lengthens the clock")
+	_assert(int(TN.extra_find_slots) > fossils, "Prime Bed hides more fossils")
+	_reset()
+	_max_chapter("Shovel", 1)
+	_max_chapter("Shovel", 2)
+	var shovel_click: float = float(TN.shovel_click_mult)
+	var shovel_hold: float = float(TN.shovel_hold_tick_rate)
+	var shovel_reach: float = float(TN.shovel_radius)
+	GS.levels["shovel_titan"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.shovel_click_mult) > shovel_click, "Titan Shovel hits harder")
+	_assert(float(TN.shovel_hold_tick_rate) > shovel_hold, "Titan Shovel holds faster")
+	_assert(float(TN.shovel_radius) > shovel_reach, "Titan Shovel scoops wider")
+	_reset()
+	_max_chapter("Pickaxe", 1)
+	_max_chapter("Pickaxe", 2)
+	var pick_click: float = float(TN.pickaxe_click_mult)
+	var pick_hold: float = float(TN.pickaxe_hold_tick_rate)
+	var pick_reach: float = float(TN.pickaxe_radius)
+	GS.levels["pick_titan"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.pickaxe_click_mult) > pick_click, "Titan Pick hits harder")
+	_assert(float(TN.pickaxe_hold_tick_rate) > pick_hold, "Titan Pick holds faster")
+	_assert(float(TN.pickaxe_radius) > pick_reach, "Titan Pick scoops wider")
+	_reset()
+	_max_chapter("Museum", 1)
+	var donation: float = float(TN.donation_mult)
+	var visitors: int = int(TN.visitor_flat)
+	var unveil: float = float(TN.unveil_spike_seconds)
+	var featured: float = float(TN.spotlight_mult)
+	GS.levels["blockbuster_ticket"] = 1
+	GS.levels["blockbuster_crowd"] = 1
+	GS.levels["blockbuster_hours"] = 1
+	GS.levels["blockbuster_feature"] = 1
+	GS.apply_upgrades()
+	_assert(float(TN.donation_mult) > donation, "Blockbuster raises the ticket")
+	_assert(int(TN.visitor_flat) > visitors, "Blockbuster draws more visitors")
+	_assert(float(TN.unveil_spike_seconds) > unveil, "Blockbuster lengthens unveil")
+	_assert(float(TN.spotlight_mult) > featured, "Blockbuster raises featured")
+	GS.levels["blockbuster_feature"] = int(_item("blockbuster_feature").get("max", 2))
+	GS.apply_upgrades()
+	_assert(float(TN.spotlight_mult) >= 5.0, "max Blockbuster featured is at least 5x")
+
+
+func _test_first_tool_buys_stay_early_victories() -> void:
+	_reset()
+	_assert(int(_item("shovel_click").get("cost", 999)) >= 18 and int(_item("shovel_click").get("cost", 999)) <= 30, "first shovel stays an early-game victory")
+	_assert(int(_item("pick_click").get("cost", 999)) >= 130 and int(_item("pick_click").get("cost", 999)) <= 170, "first pick is still a shift, not $200")
+	_assert(int(_item("hands_click").get("cost", 999)) >= 8 and int(_item("hands_click").get("cost", 999)) <= 12, "first hands buy stays cheap")
+	_assert(int(_item("passive_miner").get("cost", 0)) < 8000, "Hired Hand stays a cheap stub")
+	_assert(int(_item("benches").get("max", 0)) == 5, "Benches stay five ranks")
+	_assert(int(_item("lighting").get("max", 0)) == 5, "Warm Lights stay five ranks")
+	_assert(_item("brush_titan").is_empty() and _item("brush_master_plus").is_empty(), "there is no Brush III")
 
 
 func _count_shovel_cells(center: Vector2i, radius: float) -> int:
@@ -383,6 +685,35 @@ func _test_wider_scoop_rank_2_hits_more_than_one_cell() -> void:
 	_assert(TN.shovel_hit_cells(Vector2i(2, 2), float(TN.shovel_radius)).size() > 1, "leftover Fine ranks do not pinch the shovel")
 	_assert(is_zero_approx(float(TN.precision_damage_bonus)), "leftover Fine ranks do not add a precision bonus")
 	GS.precision_on = false
+
+
+func _test_pick_wider_scoop_scales_like_shovel() -> void:
+	_reset()
+	var scoop: Dictionary = {}
+	var pick_scoop: Dictionary = {}
+	for item in GS.catalog:
+		if str(item.get("id", "")) == "shovel_radius":
+			scoop = item
+		elif str(item.get("id", "")) == "pick_radius":
+			pick_scoop = item
+	_assert(not pick_scoop.is_empty(), "pickaxe has a Wider Scoop row")
+	_assert(str(pick_scoop.get("cat", "")) == "Pickaxe", "pick scoop sits on Pickaxe")
+	_assert(int(pick_scoop.get("max", 0)) == int(scoop.get("max", 0)), "pick scoop uses the same rank count as the shovel")
+	_assert(int(pick_scoop.get("cost", 0)) > int(scoop.get("cost", 0)), "pick scoop costs more than the shovel scoop")
+	_assert(str(pick_scoop.get("requires", "")) == "pick_click", "pick scoop waits for the pickaxe")
+	GS.levels["pick_click"] = 1
+	GS.apply_upgrades()
+	var base_pick: float = float(TN.pickaxe_radius)
+	_assert(base_pick >= 0.99, "an unbought pick still has the free plus")
+	_assert(str(GS.shop_effect_line("pick_radius")).find("cell radius") >= 0, "pick scoop this-buy is a radius line")
+	var plus_hits: int = _count_shovel_cells(Vector2i(2, 2), base_pick)
+	GS.levels["pick_radius"] = 4
+	GS.levels["shovel_radius"] = 4
+	GS.apply_upgrades()
+	_assert(float(TN.pickaxe_radius) > base_pick, "maxed pick scoop grows past the free plus")
+	_assert(float(TN.pickaxe_radius) < float(TN.shovel_radius), "maxed pick scoop stays a bit narrower than the shovel")
+	var max_hits: int = _count_shovel_cells(Vector2i(4, 4), float(TN.pickaxe_radius))
+	_assert(max_hits > plus_hits, "maxed pick scoop hits more cells than the free plus")
 
 
 func _test_fullscreen_pixels_do_not_become_play_view() -> void:
@@ -625,7 +956,7 @@ func _test_find_chip_keeps_related_stats_together() -> void:
 		_assert(name_label != null and name_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "the name label does not trim with an ellipsis")
 		_assert(name_label != null and name_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the name is centered in the text column")
 		_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "grade stays on the condition line")
-		_assert(grade_label != null and (grade_label.text.find("★") >= 0 or grade_label.text.find("5") >= 0), "stars sit with the condition")
+		_assert(chip.get("_stars") != null and bool(chip.get("_stars").visible), "stars sit with the condition")
 		_assert(grade_label != null and grade_label.text.find("Dust") < 0, "dust is not jammed onto the star line")
 		_assert(grade_label != null and grade_label.text.find("$") < 0, "price is not jammed onto the star line")
 		_assert(grade_label != null and grade_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "condition stays centered under the name")
@@ -678,7 +1009,7 @@ func _test_fully_brushed_chip_stays_complete_and_priced() -> void:
 		_assert(grade_label != null and grade_label.text.find("found") < 0, "condition is not a found line")
 		_assert(grade_label != null and grade_label.text.find("Triceratops") < 0, "condition does not repeat the fossil name")
 		_assert(grade_label != null and grade_label.text.find("Well preserved") >= 0, "condition stays Well preserved")
-		_assert(grade_label != null and (grade_label.text.find("★") >= 0 or grade_label.text.find("5") >= 0), "stars stay with the condition")
+		_assert(chip.get("_stars") != null and bool(chip.get("_stars").visible), "stars stay with the condition")
 		_assert(status_label != null and status_label.text.find("Brushed 100%") >= 0, "meter can still say Brushed 100%")
 		_assert(price_label != null and price_label.visible and price_label.text == "$90", "the payout stays on the chip at 100%")
 		_assert(price_label != null and price_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "payout stays on the right")

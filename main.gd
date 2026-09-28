@@ -49,6 +49,16 @@ func _ready() -> void:
 	dig_site.lucky_struck.connect(_on_lucky_struck)
 	hud.tool_selected.connect(dig_site.set_tool)
 	hud.end_shift.connect(_end_round)
+	if Settings.has_signal("end_shift_pressed"):
+		Settings.end_shift_pressed.connect(_end_round)
+	if Settings.has_signal("back_pressed"):
+		Settings.back_pressed.connect(_on_nav_back)
+	if Settings.has_signal("dig_pressed"):
+		Settings.dig_pressed.connect(start_round)
+	if Settings.has_signal("museum_pressed"):
+		Settings.museum_pressed.connect(func() -> void: show_screen("museum"))
+	if Settings.has_signal("upgrades_pressed"):
+		Settings.upgrades_pressed.connect(func() -> void: show_screen("shop"))
 	summary.dig_again.connect(start_round)
 	summary.open_museum.connect(func() -> void: show_screen("museum"))
 	summary.open_shop.connect(func() -> void: show_screen("shop"))
@@ -180,6 +190,16 @@ func _open_shift_overlay(next: String) -> void:
 	_sync_shift_pause()
 
 
+func _on_nav_back() -> void:
+	if Settings.has_method("is_open") and Settings.is_open():
+		return
+	if screen == "shop" or screen == "museum":
+		_return_from_menu()
+		return
+	if screen != "title":
+		show_title()
+
+
 func _return_from_menu() -> void:
 	if round_active:
 		shop.visible = false
@@ -200,14 +220,41 @@ func _return_from_menu() -> void:
 
 
 func _sync_menu_chrome() -> void:
-	if Settings.has_method("set_menu_chrome_visible"):
-		# Menu lives on the dig header now. Do not resurrect the settings-layer
-		# fallback over shop, museum, shift-over, settings, or title.
-		Settings.set_menu_chrome_visible(false)
-		if Settings.has_method("_layout_menu_chrome"):
-			Settings.call("_layout_menu_chrome")
+	var settings_open: bool = Settings.has_method("is_open") and Settings.is_open()
+	var in_game: bool = screen != "title"
+	if Settings.has_method("set_nav_visible"):
+		Settings.set_nav_visible(in_game and not settings_open)
+	elif Settings.has_method("set_menu_chrome_visible"):
+		Settings.set_menu_chrome_visible(in_game and not settings_open)
+	if Settings.has_method("set_nav_context"):
+		Settings.set_nav_context(_nav_context())
+	if Settings.has_method("_layout_nav_chrome"):
+		Settings.call("_layout_nav_chrome")
+	elif Settings.has_method("_layout_menu_chrome"):
+		Settings.call("_layout_menu_chrome")
+	var live_dig: bool = in_game and screen == "dig" and round_active
+	if summary != null and bool(summary.visible):
+		live_dig = false
+	if Settings.has_method("set_end_shift_visible"):
+		Settings.set_end_shift_visible(live_dig and not settings_open)
+	if Settings.has_method("set_wallet_visible"):
+		Settings.set_wallet_visible(in_game)
+		if Settings.has_method("_layout_wallet"):
+			Settings.call("_layout_wallet")
 	if hud != null and hud.has_method("set_header_actions_visible"):
-		hud.set_header_actions_visible(not _dig_header_should_hide())
+		hud.set_header_actions_visible(false)
+
+
+func _nav_context() -> String:
+	if screen == "title":
+		return "title"
+	if screen == "shop":
+		return "shop"
+	if screen == "museum":
+		return "museum"
+	if summary != null and bool(summary.visible):
+		return "summary"
+	return "dig"
 
 
 func _dig_header_should_hide() -> bool:
@@ -350,6 +397,8 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 		return
 	for i in juice.size():
 		var find: Dictionary = juice[i]
+		if GameState.has_method("try_mount_matrix_find"):
+			GameState.try_mount_matrix_find(find)
 		var origin: Vector2 = _find_origin(find, world_pos)
 		var offset := Vector2((float(i) - float(juice.size() - 1) * 0.5) * 18.0, float(i) * -10.0)
 		var color := Color("E4B75A")
@@ -417,8 +466,8 @@ func _extract_fate_for(piece_id: String, note: String) -> String:
 		return "extra sold"
 	var progress: String = GameState.piece_progress_label(piece_id)
 	if not progress.is_empty():
-		return "%s on display" % progress
-	return "needs this"
+		return "New · %s" % progress
+	return "New · 1/1"
 
 
 func _on_pickaxe() -> void:

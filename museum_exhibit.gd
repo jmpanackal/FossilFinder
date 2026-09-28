@@ -9,28 +9,57 @@ const FLOOR_DARK := Color("2E2218")
 const FLOOR_PLANK := Color("443224")
 const WALL := Color("2A1C14")
 const WALL_TRIM := Color("4A3426")
-const RUNNER := Color("5A2A22")
-const RUNNER_EDGE := Color("3A1A16")
+const RUNNER := Color("6A3C20")
+const RUNNER_EDGE := Color("A88848")
+const RUNNER_STRIPE := Color("9A7040")
+const RUNNER_BAND := Rect2(972, 218, 56, 0)
 const PLATFORM := Color("3A2C20")
 const PLATFORM_LIP := Color("2A1E16")
 const EMPTY_FILL := Color(0.38, 0.30, 0.24, 0.20)
 const EMPTY_LINE := Color(0.58, 0.46, 0.36, 0.62)
 const MIN_LABEL_SCREEN_PX := 11.0
 const PLAQUE_CLEARANCE := 8.0
+const RUNNER_X := 1000.0
+const PAD_GAP := 18.0
+const VIEW_PAD := 22.0
+const VIEW_GAP := 36.0
+const WALK_SPEED := 180.0
+const NORTH_CROSS_Y := 500.0
+const SIDE_HALL_Y := 598.0
 const STAND_LAYOUT := {
 	"t_rex": {"title": "T. rex", "x": 760.0, "y": 236.0, "w": 480.0, "h": 250.0},
 	"small_finds": {"title": "Small Finds", "x": 70.0, "y": 236.0, "w": 400.0, "h": 230.0},
-	"triceratops": {"title": "Triceratops", "x": 70.0, "y": 500.0, "w": 460.0, "h": 260.0},
-	"brachiosaurus": {"title": "Brachiosaurus", "x": 1470.0, "y": 480.0, "w": 460.0, "h": 280.0},
+	"plant_fossils": {"title": "Plant Fossils", "x": 1530.0, "y": 236.0, "w": 400.0, "h": 230.0},
+	"triceratops": {"title": "Triceratops", "x": 70.0, "y": 598.0, "w": 460.0, "h": 260.0},
+	"brachiosaurus": {"title": "Brachiosaurus", "x": 1470.0, "y": 598.0, "w": 460.0, "h": 280.0},
 	"velociraptor": {"title": "Velociraptor", "x": 70.0, "y": 1100.0, "w": 400.0, "h": 230.0},
 	"stegosaurus": {"title": "Stegosaurus", "x": 1470.0, "y": 1100.0, "w": 460.0, "h": 230.0},
 }
-
-var _case_ids: PackedStringArray = PackedStringArray()
+const HALL_BENCH_SIZE := Vector2(100, 28)
+const HALL_BENCH_SOUTH_GAP := 30.0
+const HALL_AISLE := Rect2(920.0, 218.0, 160.0, 1262.0)
+const HALL_LAMP_WEST_X := 28.0
+const HALL_LAMP_EAST_X := 1972.0
+const HALL_LAMP_NORTH_Y := 158.0
+const HALL_LAMP_RADII := [11.0, 11.0, 8.0, 8.0, 7.0]
+const HALL_LAMP_FIXTURE := Vector2(16, 10)
+const HALL_ROPE_SIZE := Vector2(64, 18)
+const HALL_ROPE_AISLE_GAP := 8.0
+const HALL_FRAME_RECTS := [
+	Rect2(220, 86, 200, 96),
+	Rect2(1630, 86, 200, 96),
+]
+const HALL_GIFT_RECT := Rect2(1280, 388, 96, 48)
+const HALL_GIFT_SOUTH_RECT := Rect2(1120, 1420, 140, 40)
+const HALL_CART_RECT := Rect2(16, 478, 72, 36)
+const HALL_CART_SOUTH_RECT := Rect2(80, 1420, 72, 36)
+const HALL_BUNTING_RECT := Rect2(810, 4, 380, 28)
 
 var flash_stand_id: String = ""
 var flash_t: float = 0.0
 var pop_t: float = 0.0
+var _crowd_t: float = 0.0
+var _guests: Array = []
 
 
 func play_unveil_flash(stand_id: String) -> void:
@@ -52,8 +81,21 @@ func tick(delta: float) -> void:
 	if pop_t > 0.0:
 		pop_t = maxf(0.0, pop_t - delta / 0.35)
 		dirty = true
+	if visitor_sprite_count() > 0:
+		_crowd_t += delta
+		_step_guests(delta)
+		dirty = true
+	elif not _guests.is_empty():
+		_guests.clear()
+		dirty = true
 	if dirty:
 		queue_redraw()
+
+
+func visitor_sprite_count() -> int:
+	if GameState.has_method("visitor_sprite_count"):
+		return int(GameState.call("visitor_sprite_count"))
+	return 0
 
 
 func stand_rect(stand_id: String) -> Rect2:
@@ -61,6 +103,16 @@ func stand_rect(stand_id: String) -> Rect2:
 		return Rect2()
 	var info: Dictionary = STAND_LAYOUT[stand_id]
 	return Rect2(float(info["x"]), float(info["y"]), float(info["w"]), float(info["h"]))
+
+
+func stand_mount_rect(stand_id: String) -> Rect2:
+	return stand_mount_rect_for(stand_rect(stand_id))
+
+
+func stand_mount_rect_for(stand: Rect2) -> Rect2:
+	if stand.size == Vector2.ZERO:
+		return Rect2()
+	return Rect2(stand.position + Vector2(22.0, 16.0), stand.size - Vector2(44.0, 54.0))
 
 
 func stand_id_at(hall_pos: Vector2) -> String:
@@ -72,6 +124,10 @@ func stand_id_at(hall_pos: Vector2) -> String:
 
 func display_slots(piece_id: String) -> int:
 	return int(GameState.piece_need(piece_id))
+
+
+func case_owned(piece_id: String) -> bool:
+	return piece_id != "" and GameState.has_piece(piece_id)
 
 
 func slot_on(piece_id: String, slot: int) -> bool:
@@ -86,10 +142,12 @@ func _draw() -> void:
 	_draw_hall()
 	_draw_t_rex_bay()
 	_draw_small_finds_bay()
+	_draw_plant_fossils_bay()
 	_draw_triceratops_bay()
 	_draw_sauropod_bay()
 	_draw_raptor_bay()
 	_draw_stego_bay()
+	_draw_visitors()
 
 
 func _draw_hall() -> void:
@@ -104,37 +162,40 @@ func _draw_hall() -> void:
 		draw_rect(Rect2(0, y, HALL.x, 3), shade)
 		y += 30.0
 		plank += 1
-	draw_rect(Rect2(920, 218, 160, HALL.y - 218), RUNNER)
-	draw_rect(Rect2(920, 218, 10, HALL.y - 218), RUNNER_EDGE)
-	draw_rect(Rect2(1070, 218, 10, HALL.y - 218), RUNNER_EDGE)
-	var stripe_y: float = 260.0
-	while stripe_y < HALL.y:
-		draw_rect(Rect2(928, stripe_y, 144, 3), Color(0.25, 0.10, 0.08, 0.35))
-		stripe_y += 64.0
-	_draw_wall_frame(Vector2(220, 86), Vector2(150, 70))
-	_draw_wall_frame(Vector2(1630, 86), Vector2(150, 70))
+	if hall_runner_visible():
+		var runner: Rect2 = hall_runner_rect()
+		draw_rect(runner, RUNNER)
+		draw_rect(Rect2(runner.position.x + 20.0, runner.position.y, 16.0, runner.size.y), RUNNER_STRIPE)
+		draw_rect(Rect2(runner.position.x, runner.position.y, 3.0, runner.size.y), RUNNER_EDGE)
+		draw_rect(Rect2(runner.end.x - 3.0, runner.position.y, 3.0, runner.size.y), RUNNER_EDGE)
+	var lamps: PackedVector2Array = hall_lamp_centers()
+	for frame in hall_frame_rects():
+		_draw_wall_frame(frame.position, frame.size)
 	_draw_pillar(Vector2(896, 186))
 	_draw_pillar(Vector2(1076, 186))
-	_draw_bench(Vector2(250, 850))
-	_draw_bench(Vector2(1650, 850))
-	_draw_bench(Vector2(250, 1380))
-	_draw_bench(Vector2(1650, 1380))
-	_draw_warm_light(Vector2(1000, 118), 140.0)
-	_draw_warm_light(Vector2(320, 430), 110.0)
-	_draw_warm_light(Vector2(1680, 430), 110.0)
-	_draw_warm_light(Vector2(320, 860), 100.0)
-	_draw_warm_light(Vector2(1680, 860), 100.0)
-	_draw_warm_light(Vector2(1000, 1080), 90.0)
-	_draw_warm_light(Vector2(320, 1280), 80.0)
-	_draw_warm_light(Vector2(1680, 1280), 80.0)
-	_draw_banner(Vector2(1000, 118), "FOSSIL HALL")
+	for bench in hall_bench_rects():
+		_draw_bench(bench.position)
+	_draw_gift_counter()
+	_draw_cleanup_cart()
+	_draw_crowd_ropes()
+	for i in lamps.size():
+		_draw_warm_light(lamps[i], float(HALL_LAMP_RADII[i]))
+	_draw_hall_board()
+	_draw_opening_bunting()
 
 
 func _draw_wall_frame(pos: Vector2, size: Vector2) -> void:
+	var rank: int = _museum_rank("labels")
 	var rect := Rect2(pos, size)
-	draw_rect(rect, Color("241810"))
-	draw_rect(rect, Ui.GOLD, false, 1.5)
-	draw_rect(Rect2(pos + Vector2(10, 10), size - Vector2(20, 20)), Color("1C1410"))
+	var hook_w: float = 4.0 if rank <= 1 else 6.0
+	draw_rect(Rect2(pos.x + size.x * 0.5 - hook_w * 0.5, pos.y - 8.0, hook_w, 10.0), Color("7A5A38"))
+	draw_rect(rect.grow(2.0 if rank <= 1 else 3.0), Color("5A3C18"))
+	draw_rect(rect, Color("C9A056") if rank <= 1 else Color("E4B75A"), false, 2.0 if rank <= 1 else 3.0)
+	draw_rect(rect.grow(-5.0), Color("3A2818"))
+	var picture := Rect2(pos + Vector2(12, 12), size - Vector2(24, 24))
+	draw_rect(picture, Color("5A3C24"))
+	draw_rect(Rect2(picture.position.x + 10.0, picture.position.y + 16.0, picture.size.x - 20.0, picture.size.y - 28.0), Color("B8A070") if rank <= 1 else Color("C8B080"))
+	draw_rect(picture, Color("C9A056") if rank <= 1 else Color("E4B75A"), false, 1.2)
 
 
 func _draw_pillar(top: Vector2) -> void:
@@ -146,22 +207,690 @@ func _draw_pillar(top: Vector2) -> void:
 
 
 func _draw_bench(pos: Vector2) -> void:
-	draw_rect(Rect2(pos.x, pos.y, 100, 12), Color("4A3426"))
-	draw_rect(Rect2(pos.x + 8, pos.y + 12, 12, 16), Color("3A281C"))
-	draw_rect(Rect2(pos.x + 80, pos.y + 12, 12, 16), Color("3A281C"))
+	draw_rect(Rect2(pos.x, pos.y + 2.0, 100, 14), Color("5A3C28"))
+	draw_rect(Rect2(pos.x, pos.y, 100, 10), Color("8A5A32"))
+	draw_rect(Rect2(pos.x, pos.y, 100, 10), Color("E4B75A"), false, 1.5)
+	draw_rect(Rect2(pos.x + 8, pos.y + 14, 12, 14), Color("3A281C"))
+	draw_rect(Rect2(pos.x + 80, pos.y + 14, 12, 14), Color("3A281C"))
 
 
 func _draw_warm_light(center: Vector2, radius: float) -> void:
-	draw_circle(center, radius, Color(0.89, 0.72, 0.35, 0.07))
-	draw_circle(center, radius * 0.55, Color(0.96, 0.84, 0.50, 0.08))
+	var a: float = 0.14 + 0.018 * float(mini(_museum_rank("lighting"), 5))
+	draw_circle(center, radius, Color(1.0, 0.84, 0.42, a))
+	draw_circle(center, radius * 0.52, Color(1.0, 0.90, 0.55, a * 0.85))
+	var shade: Rect2 = hall_lamp_fixture_rect_at(center)
+	draw_rect(shade, Color("4A3420"))
+	draw_rect(shade, Color("C9A056"), false, 1.0)
+	draw_circle(center + Vector2(0.0, 1.0), 3.0, Color("E8C878"))
+	draw_rect(Rect2(center.x - 1.0, center.y - 10.0, 2.0, 6.0), Color("A88848"))
 
 
-func _draw_banner(center: Vector2, text: String) -> void:
-	var size := Vector2(280, 36)
-	var rect := Rect2(center - size * 0.5, size)
-	draw_rect(rect, Color("3A2818"))
-	draw_rect(rect, Ui.GOLD, false, 2.0)
-	_draw_label(center + Vector2(0, 6), text, 18, Ui.GOLD)
+func _draw_gift_counter() -> void:
+	_draw_gift_prop(hall_gift_rect(), true)
+	_draw_gift_prop(hall_gift_south_rect(), false)
+
+
+func _draw_gift_prop(counter: Rect2, dress: bool) -> void:
+	if counter.size == Vector2.ZERO:
+		return
+	var rank: int = _museum_rank("gift_shop")
+	draw_rect(counter, Color("5A3C28"))
+	draw_rect(Rect2(counter.position.x, counter.position.y, counter.size.x, 8.0 if rank <= 1 else 10.0), Color("7A4E2C") if rank <= 1 else Color("8A5A32"))
+	draw_rect(counter, Color("C9A056") if rank <= 1 else Color("E4B75A"), false, 1.0 if rank <= 1 else 1.6)
+	if dress:
+		_draw_label(Vector2(counter.get_center().x, counter.position.y + 28.0), "Gifts", 12, Color("C9A056") if rank <= 1 else Color("FFE08A"))
+	if dress and hall_gift_has_rack():
+		var rack := Rect2(counter.position.x + 8.0, counter.position.y - 32.0, 40.0, 32.0)
+		draw_rect(rack, Color("3A2A1C"))
+		draw_rect(rack, Color("FFE08A"), false, 1.5)
+		for i in 3:
+			draw_rect(Rect2(rack.position.x + 4.0 + float(i) * 11.0, rack.position.y + 4.0, 8.0, 22.0), Color("C8B080"))
+	if dress and hall_gift_has_stack():
+		var stack := Rect2(counter.end.x - 40.0, counter.position.y - 18.0, 28.0, 18.0)
+		draw_rect(stack, Color("6A3A2A"))
+		draw_rect(Rect2(stack.position.x + 4.0, stack.position.y - 8.0, 20.0, 8.0), Color("8A4A32"))
+
+
+func _draw_cleanup_cart() -> void:
+	_draw_cart_prop(hall_cart_rect(), true)
+	_draw_cart_prop(hall_cart_south_rect(), false)
+
+
+func _draw_cart_prop(cart: Rect2, dress: bool) -> void:
+	if cart.size == Vector2.ZERO:
+		return
+	var rank: int = _museum_rank("restoration")
+	draw_rect(cart, Color("4A4030"))
+	draw_rect(Rect2(cart.position.x, cart.position.y, cart.size.x, 8.0 if rank <= 1 else 10.0), Color("5A4A36") if rank <= 1 else Color("6A5A40"))
+	draw_rect(cart, Color("C9A056") if rank <= 1 else Color("E4B75A"), false, 1.0 if rank <= 1 else 1.6)
+	draw_circle(Vector2(cart.position.x + 12.0, cart.end.y), 6.0, Color("2A2418"))
+	draw_circle(Vector2(cart.end.x - 12.0, cart.end.y), 6.0, Color("2A2418"))
+	if dress and hall_cart_has_bucket():
+		var bucket := Rect2(cart.end.x + 8.0, cart.position.y + 6.0, 18.0, 22.0)
+		draw_rect(bucket, Color("4A5A6A"))
+		draw_rect(Rect2(bucket.position.x - 2.0, bucket.position.y, bucket.size.x + 4.0, 4.0), Color("3A4A5A"))
+
+
+func _draw_crowd_ropes() -> void:
+	var rank: int = _museum_rank("crowds")
+	var post_r: float = 4.0 if rank <= 1 else 6.0
+	var velvet_w: float = 2.0 if rank <= 1 else 3.0
+	var post_gold: Color = Color("C9A056") if rank <= 1 else Color("E4B75A")
+	for rope in hall_crowd_rope_rects():
+		var left := Vector2(rope.position.x + 6.0, rope.end.y)
+		var right := Vector2(rope.end.x - 6.0, rope.end.y)
+		draw_circle(left, post_r, Color("3A2818"))
+		draw_circle(right, post_r, Color("3A2818"))
+		draw_rect(Rect2(left.x - 2.0, rope.position.y, 4.0, rope.size.y), post_gold)
+		draw_rect(Rect2(right.x - 2.0, rope.position.y, 4.0, rope.size.y), post_gold)
+		draw_line(left + Vector2(0.0, -10.0), right + Vector2(0.0, -10.0), Color("6A1C28"), velvet_w)
+
+
+func _draw_opening_bunting() -> void:
+	var band: Rect2 = hall_opening_bunting_rect()
+	if band.size == Vector2.ZERO:
+		return
+	var rank: int = _museum_rank("unveil_crowd")
+	draw_rect(Rect2(band.position.x, band.position.y + 4.0, band.size.x, 3.0 if rank <= 1 else 4.0), Color("7A5A24") if rank <= 1 else Color("8A6A28"))
+	var flags: int = hall_opening_bunting_flags()
+	var step: float = band.size.x / float(maxi(flags, 1))
+	var spread: float = 0.28 if rank <= 1 else 0.38
+	for i in flags:
+		var x: float = band.position.x + step * (float(i) + 0.5)
+		var gold: Color = Color("C9A056").lerp(Color("E4B75A"), clampf(float(rank) / 4.0, 0.0, 1.0))
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x - step * spread, band.position.y + 6.0),
+			Vector2(x + step * spread, band.position.y + 6.0),
+			Vector2(x, band.end.y),
+		]), gold if i % 2 == 0 else Color("5A1820"))
+
+
+func _museum_rank(id: String) -> int:
+	return int(GameState.levels.get(id, 0))
+
+
+func hall_amenity_stand_ids() -> PackedStringArray:
+	var ids := PackedStringArray()
+	for stand_id in STAND_LAYOUT:
+		var id := str(stand_id)
+		if id == "small_finds" or id == "plant_fossils":
+			continue
+		ids.append(id)
+	return ids
+
+
+func hall_bench_rects() -> Array:
+	var rects: Array = []
+	var ids: PackedStringArray = hall_amenity_stand_ids()
+	var rank: int = mini(_museum_rank("benches"), ids.size())
+	for i in rank:
+		rects.append(_bench_rect_for_stand(ids[i]))
+	return rects
+
+
+func _bench_rect_for_stand(stand_id: String) -> Rect2:
+	var stand: Rect2 = stand_rect(stand_id)
+	var size := HALL_BENCH_SIZE
+	var x: float = stand.get_center().x - size.x * 0.5
+	var y: float = stand.end.y + HALL_BENCH_SOUTH_GAP
+	var bench := Rect2(Vector2(x, y), size)
+	if HALL_AISLE.intersects(bench) or _runner_path().intersects(bench):
+		x = mini(HALL_AISLE.position.x - size.x, stand.end.x - size.x)
+		x = maxf(x, stand.position.x)
+		bench = Rect2(Vector2(x, y), size)
+		if HALL_AISLE.intersects(bench) or _runner_path().intersects(bench):
+			x = maxf(HALL_AISLE.end.x, stand.position.x)
+			x = mini(x, stand.end.x - size.x)
+			bench = Rect2(Vector2(x, y), size)
+	return bench
+
+
+func _runner_path() -> Rect2:
+	return Rect2(RUNNER_BAND.position.x, 218.0, RUNNER_BAND.size.x, HALL.y - 218.0)
+
+
+func hall_lamp_centers() -> PackedVector2Array:
+	var lamps := PackedVector2Array()
+	var ids: PackedStringArray = hall_amenity_stand_ids()
+	var rank: int = mini(_museum_rank("lighting"), ids.size())
+	for i in rank:
+		lamps.append(_lamp_center_for_stand(ids[i]))
+	return lamps
+
+
+func _lamp_center_for_stand(stand_id: String) -> Vector2:
+	var stand: Rect2 = stand_rect(stand_id)
+	var cx: float = stand.get_center().x
+	if cx < RUNNER_X:
+		return Vector2(HALL_LAMP_WEST_X, stand.get_center().y)
+	if cx > RUNNER_X:
+		return Vector2(HALL_LAMP_EAST_X, stand.get_center().y)
+	return Vector2(stand.position.x, HALL_LAMP_NORTH_Y)
+
+
+func hall_lamp_count() -> int:
+	return hall_lamp_centers().size()
+
+
+func hall_lamp_discs() -> Array:
+	var discs: Array = []
+	var lamps: PackedVector2Array = hall_lamp_centers()
+	for i in lamps.size():
+		var radius: float = float(HALL_LAMP_RADII[i])
+		discs.append(Rect2(lamps[i] - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0)))
+	return discs
+
+
+func hall_lamp_fixture_rect_at(center: Vector2) -> Rect2:
+	return Rect2(center - HALL_LAMP_FIXTURE * 0.5, HALL_LAMP_FIXTURE)
+
+
+func hall_lamp_fixture_rects() -> Array:
+	var rects: Array = []
+	for lamp in hall_lamp_centers():
+		rects.append(hall_lamp_fixture_rect_at(lamp))
+	return rects
+
+
+func hall_lamp_pools() -> Array:
+	return hall_lamp_discs()
+
+
+func hall_runner_visible() -> bool:
+	return _museum_rank("lighting") > 0
+
+
+func hall_runner_rect() -> Rect2:
+	if not hall_runner_visible():
+		return Rect2()
+	return Rect2(RUNNER_BAND.position, Vector2(RUNNER_BAND.size.x, HALL.y - RUNNER_BAND.position.y))
+
+
+func hall_frame_rects() -> Array:
+	if _museum_rank("labels") <= 0:
+		return []
+	return HALL_FRAME_RECTS.duplicate()
+
+
+func hall_gift_rect() -> Rect2:
+	if _museum_rank("gift_shop") <= 0:
+		return Rect2()
+	return HALL_GIFT_RECT
+
+
+func hall_gift_south_rect() -> Rect2:
+	if _museum_rank("gift_shop") < 4:
+		return Rect2()
+	return HALL_GIFT_SOUTH_RECT
+
+
+func hall_gift_has_rack() -> bool:
+	return _museum_rank("gift_shop") >= 2
+
+
+func hall_gift_has_stack() -> bool:
+	return _museum_rank("gift_shop") >= 3
+
+
+func hall_cart_rect() -> Rect2:
+	if _museum_rank("restoration") <= 0:
+		return Rect2()
+	return HALL_CART_RECT
+
+
+func hall_cart_south_rect() -> Rect2:
+	if _museum_rank("restoration") < 4:
+		return Rect2()
+	return HALL_CART_SOUTH_RECT
+
+
+func hall_cart_has_bucket() -> bool:
+	return _museum_rank("restoration") >= 2
+
+
+func hall_hours_rect() -> Rect2:
+	return Rect2()
+
+
+func hall_hours_marks() -> int:
+	return 0
+
+
+func hall_crowd_rope_rects() -> Array:
+	var rank: int = _museum_rank("crowds")
+	if rank <= 0:
+		return []
+	var slots: Array = _crowd_rope_slots()
+	var ropes: Array = []
+	for i in mini(rank, slots.size()):
+		ropes.append(slots[i])
+	return ropes
+
+
+func _crowd_rope_slots() -> Array:
+	var slots: Array = []
+	var last_south: float = -1000.0
+	var size := HALL_ROPE_SIZE
+	var gap: float = HALL_ROPE_AISLE_GAP
+	for stand_id in hall_amenity_stand_ids():
+		var south: float = stand_rect(stand_id).end.y
+		if south - last_south <= 80.0:
+			continue
+		last_south = south
+		slots.append(Rect2(Vector2(HALL_AISLE.position.x - gap - size.x, south), size))
+		slots.append(Rect2(Vector2(HALL_AISLE.end.x + gap, south), size))
+	return slots
+
+
+func hall_opening_bunting_rect() -> Rect2:
+	if _museum_rank("unveil_crowd") <= 0:
+		return Rect2()
+	return HALL_BUNTING_RECT
+
+
+func hall_opening_bunting_flags() -> int:
+	var rank: int = _museum_rank("unveil_crowd")
+	if rank <= 0:
+		return 0
+	return 4 + rank
+
+
+func hall_case_glass_alpha(stand_id: String) -> float:
+	if stand_id != "small_finds" and stand_id != "plant_fossils":
+		return 0.0
+	var rank: int = _museum_rank("glass_case")
+	if rank <= 0:
+		return 0.0
+	return 0.22 + 0.04 * float(rank)
+
+
+func hall_case_titles_visible() -> bool:
+	return _museum_rank("labels") >= 3
+
+
+func hall_plaque_gold() -> Color:
+	var t: float = clampf(float(_museum_rank("labels")) / 6.0, 0.0, 1.0)
+	return Ui.GOLD.lerp(Color("FFE08A"), t)
+
+
+func hall_board() -> Dictionary:
+	var featured: String = ""
+	if GameState.featured_stand_id != "":
+		featured = GameState.stand_title(GameState.featured_stand_id)
+	return {
+		"title": "FOSSIL HALL",
+		"featured_label": "Featured" if featured != "" else "",
+		"featured": featured,
+		"status": _hall_board_status(featured != ""),
+	}
+
+
+func hall_board_rect() -> Rect2:
+	return Rect2(810.0, 20.0, 380.0, 164.0)
+
+
+func hall_board_featured_rect() -> Rect2:
+	var board: Rect2 = hall_board_rect()
+	var top: float = board.position.y + 40.0
+	return Rect2(board.position.x + 16.0, top, board.size.x - 32.0, board.end.y - top - 10.0)
+
+
+func _hall_board_status(has_featured: bool) -> String:
+	if has_featured:
+		return ""
+	if GameState.pieces.is_empty():
+		return "The hall is waiting."
+	var dusty: bool = false
+	var mounted: bool = false
+	for piece_id in GameState.pieces:
+		var id: String = str(piece_id)
+		if GameState.stand_for_piece(id) == "":
+			continue
+		mounted = true
+		var piece: Dictionary = GameState.pieces[id]
+		if not bool(piece.get("clean", false)):
+			dusty = true
+	if not mounted:
+		return "The hall is waiting."
+	if dusty:
+		return "A dusty find is on display."
+	return "A clean find is on display."
+
+
+func _draw_hall_board() -> void:
+	var card: Dictionary = hall_board()
+	var board: Rect2 = hall_board_rect()
+	draw_rect(board, Color("3A2818"))
+	draw_rect(board.grow(-3.0), Color("2C1E14"))
+	draw_rect(board, Ui.GOLD, false, 2.0)
+	_draw_label(Vector2(board.get_center().x, board.position.y + 26.0), str(card.get("title", "")), 16, Ui.GOLD)
+	var feat: Rect2 = hall_board_featured_rect()
+	var featured: String = str(card.get("featured", ""))
+	if featured != "":
+		_draw_label(Vector2(feat.get_center().x, feat.position.y + feat.size.y * 0.32), str(card.get("featured_label", "")), 16, Color("C8B080"))
+		_draw_label(Vector2(feat.get_center().x, feat.position.y + feat.size.y * 0.64), featured, 26, Color("FFE08A"))
+	else:
+		_draw_label(Vector2(feat.get_center().x, feat.get_center().y), str(card.get("status", "")), 14, Color("C8B080"))
+
+
+func south_door() -> Vector2:
+	return Vector2(RUNNER_X, HALL.y - 8.0)
+
+
+func gather_pad(stand_id: String, slot: int = 0) -> Vector2:
+	var slots: PackedVector2Array = gather_slots(stand_id)
+	if slots.is_empty():
+		return south_door()
+	return slots[posmod(slot, slots.size())]
+
+
+func gather_slots(stand_id: String) -> PackedVector2Array:
+	var stand: Rect2 = stand_rect(stand_id)
+	var slots := PackedVector2Array()
+	if stand.size == Vector2.ZERO:
+		return slots
+	var left: float = stand.position.x + 28.0
+	var right: float = stand.end.x - 28.0
+	var south_y: float = stand.end.y + VIEW_PAD
+	var x: float = left
+	while x <= right + 0.5:
+		slots.append(Vector2(x, south_y))
+		x += VIEW_GAP
+	var top: float = stand.position.y + 28.0
+	var bot: float = stand.end.y - 20.0
+	if stand.end.x < RUNNER_X - 16.0:
+		var east_x: float = stand.end.x + VIEW_PAD
+		var y: float = top
+		while y <= bot + 0.5:
+			slots.append(Vector2(east_x, y))
+			y += VIEW_GAP
+	elif stand.position.x > RUNNER_X + 16.0:
+		var west_x: float = stand.position.x - VIEW_PAD
+		var y: float = top
+		while y <= bot + 0.5:
+			slots.append(Vector2(west_x, y))
+			y += VIEW_GAP
+	return slots
+
+
+func stand_completeness(stand_id: String) -> float:
+	var ids: PackedStringArray = GameState.stand_piece_ids(stand_id)
+	if ids.is_empty():
+		return 0.0
+	var have: int = 0
+	var need: int = 0
+	for piece_id in ids:
+		var quota: int = GameState.piece_need(str(piece_id))
+		need += quota
+		have += mini(GameState.piece_count(str(piece_id)), quota)
+	return float(have) / float(maxi(1, need))
+
+
+func dwell_seconds(stand_id: String) -> float:
+	var seconds: float = 2.0 + 6.0 * stand_completeness(stand_id)
+	if GameState.stand_has_pending_unveil(stand_id):
+		seconds += 0.8
+	if GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id):
+		seconds += 1.0
+	return seconds
+
+
+func stand_rate_line(stand_id: String) -> String:
+	return "$%.2f / sec" % GameState.stand_income(stand_id)
+
+
+func stand_rate_rect(stand_id: String) -> Rect2:
+	var stand: Rect2 = stand_rect(stand_id)
+	if stand.size == Vector2.ZERO:
+		return Rect2()
+	var font: Font = Ui.display_font()
+	var font_size: int = label_font_size(11)
+	var text_w: float = font.get_string_size(stand_rate_line(stand_id), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var size := Vector2(text_w + 16.0, float(font_size) + 10.0)
+	return Rect2(stand.end.x - 8.0 - size.x, stand.position.y + 8.0, size.x, size.y)
+
+
+func visitor_positions() -> PackedVector2Array:
+	_sync_guests()
+	var spots := PackedVector2Array()
+	for guest in _guests:
+		spots.append(guest["pos"])
+	return spots
+
+
+func _draw_visitors() -> void:
+	_sync_guests()
+	for i in _guests.size():
+		_draw_visitor(_guests[i]["pos"], i)
+
+
+func _sync_guests() -> void:
+	var n: int = visitor_sprite_count()
+	while _guests.size() < n:
+		var lane: float = float(_guests.size() % 5 - 2) * 14.0
+		var guest: Dictionary = {
+			"id": _guests.size(),
+			"pos": south_door() + Vector2(lane, 8.0),
+			"lane": lane,
+			"waypoints": [],
+			"stops": PackedStringArray(),
+			"stop_i": 0,
+			"state": "travel",
+			"dwell_left": 0.0,
+			"view_stand": "",
+			"view_slot": -1,
+		}
+		_plan_guest(guest)
+		_guests.append(guest)
+	while _guests.size() > n:
+		_guests.pop_back()
+
+
+func _step_guests(delta: float) -> void:
+	_sync_guests()
+	for guest in _guests:
+		_step_guest(guest, delta)
+
+
+func _plan_guest(guest: Dictionary) -> void:
+	guest["stops"] = _pick_stops()
+	guest["stop_i"] = 0
+	guest["dwell_left"] = 0.0
+	var stops: PackedStringArray = guest["stops"]
+	if stops.is_empty():
+		guest["state"] = "leave"
+		guest["view_stand"] = ""
+		guest["view_slot"] = -1
+		guest["waypoints"] = _aisle_waypoints(guest["pos"], south_door() + Vector2(guest["lane"], 0.0), float(guest["lane"]))
+		return
+	guest["state"] = "travel"
+	guest["waypoints"] = _aisle_waypoints(guest["pos"], _claim_view_spot(stops[0], guest), float(guest["lane"]))
+
+
+func _pick_stops() -> PackedStringArray:
+	var filled: Array = []
+	for stand_id in STAND_LAYOUT:
+		if GameState.stand_is_filled(str(stand_id)):
+			filled.append(str(stand_id))
+	if filled.is_empty():
+		return PackedStringArray()
+	var picks := PackedStringArray()
+	var pool: Array = filled.duplicate()
+	var n: int = 1 + randi() % mini(3, pool.size())
+	for _i in n:
+		if pool.is_empty():
+			break
+		var total: float = 0.0
+		for stand_id in pool:
+			total += _stand_weight(str(stand_id))
+		var roll: float = randf() * total
+		var chosen: String = str(pool[0])
+		for stand_id in pool:
+			roll -= _stand_weight(str(stand_id))
+			if roll <= 0.0:
+				chosen = str(stand_id)
+				break
+		picks.append(chosen)
+		pool.erase(chosen)
+	return picks
+
+
+func _stand_weight(stand_id: String) -> float:
+	var weight: float = 1.0 + 3.0 * stand_completeness(stand_id)
+	if GameState.stand_has_pending_unveil(stand_id):
+		weight += 2.0
+	if GameState.featured_stand_id == stand_id:
+		weight += 2.5
+	return weight
+
+
+func _step_guest(guest: Dictionary, delta: float) -> void:
+	if str(guest.get("state", "")) == "dwell":
+		guest["dwell_left"] = float(guest["dwell_left"]) - delta
+		if float(guest["dwell_left"]) > 0.0:
+			return
+		_advance_guest(guest)
+		return
+	var waypoints: Array = guest["waypoints"]
+	if waypoints.is_empty():
+		_advance_guest(guest)
+		return
+	if _move_toward(guest, waypoints[0], delta):
+		waypoints.remove_at(0)
+		guest["waypoints"] = waypoints
+		if waypoints.is_empty():
+			_advance_guest(guest)
+
+
+func _advance_guest(guest: Dictionary) -> void:
+	var state: String = str(guest.get("state", ""))
+	var stops: PackedStringArray = guest["stops"]
+	var stop_i: int = int(guest.get("stop_i", 0))
+	if state == "travel" and stop_i < stops.size():
+		guest["state"] = "dwell"
+		guest["dwell_left"] = dwell_seconds(stops[stop_i])
+		return
+	if state == "dwell":
+		guest["stop_i"] = stop_i + 1
+		stop_i += 1
+		if stop_i < stops.size():
+			guest["state"] = "travel"
+			guest["waypoints"] = _aisle_waypoints(guest["pos"], _claim_view_spot(stops[stop_i], guest), float(guest["lane"]))
+			return
+	if state != "leave":
+		guest["state"] = "leave"
+		guest["view_stand"] = ""
+		guest["view_slot"] = -1
+		guest["waypoints"] = _aisle_waypoints(guest["pos"], south_door() + Vector2(guest["lane"], 0.0), float(guest["lane"]))
+		return
+	_plan_guest(guest)
+
+
+func _claim_view_spot(stand_id: String, guest: Dictionary) -> Vector2:
+	var slots: PackedVector2Array = gather_slots(stand_id)
+	if slots.is_empty():
+		guest["view_stand"] = stand_id
+		guest["view_slot"] = 0
+		return gather_pad(stand_id)
+	var used: Dictionary = {}
+	var self_id: int = int(guest.get("id", -1))
+	for other in _guests:
+		if int(other.get("id", -2)) == self_id:
+			continue
+		if str(other.get("view_stand", "")) != stand_id:
+			continue
+		used[int(other.get("view_slot", -1))] = true
+	var seed: int = abs(self_id * 5 + int(guest.get("lane", 0.0)))
+	for step in slots.size():
+		var idx: int = posmod(seed + step, slots.size())
+		if used.has(idx):
+			continue
+		guest["view_stand"] = stand_id
+		guest["view_slot"] = idx
+		return slots[idx]
+	var overflow: int = 0
+	for key in used:
+		if int(key) >= 0:
+			overflow += 1
+	var idx: int = posmod(seed, slots.size())
+	guest["view_stand"] = stand_id
+	guest["view_slot"] = idx
+	var extra := Vector2(float(overflow % 3 - 1) * 14.0, float(int(overflow / 3) % 2) * 12.0)
+	return slots[idx] + extra
+
+
+func _move_toward(guest: Dictionary, dest: Vector2, delta: float) -> bool:
+	var offset: Vector2 = dest - guest["pos"]
+	var dist: float = offset.length()
+	var step: float = WALK_SPEED * delta
+	if dist <= step:
+		guest["pos"] = dest
+		return true
+	guest["pos"] = guest["pos"] + offset / dist * step
+	return false
+
+
+func _aisle_waypoints(from: Vector2, dest: Vector2, lane: float) -> Array:
+	var rx: float = RUNNER_X + lane
+	var from_safe: float = _cross_y_for(from)
+	var dest_safe: float = _cross_y_for(dest)
+	var pts: Array = []
+	if abs(from.x - rx) > 8.0:
+		if abs(from.y - from_safe) > 8.0:
+			pts.append(Vector2(from.x, from_safe))
+		pts.append(Vector2(rx, from_safe))
+	elif abs(from.y - from_safe) > 8.0:
+		pts.append(Vector2(rx, from_safe))
+	if pts.is_empty() or abs((pts[pts.size() - 1] as Vector2).y - dest_safe) > 8.0 or abs((pts[pts.size() - 1] as Vector2).x - rx) > 8.0:
+		pts.append(Vector2(rx, dest_safe))
+	if abs(dest.x - rx) > 8.0:
+		pts.append(Vector2(dest.x, dest_safe))
+	pts.append(dest)
+	return _dedupe_path(from, pts)
+
+
+func _cross_y_for(point: Vector2) -> float:
+	if point.y < SIDE_HALL_Y:
+		return NORTH_CROSS_Y
+	return _runner_safe_y(point.y)
+
+
+func _runner_safe_y(y: float) -> float:
+	var safe: float = y
+	for stand_id in STAND_LAYOUT:
+		var stand: Rect2 = stand_rect(str(stand_id))
+		if stand.end.x < 920.0 or stand.position.x > 1080.0:
+			continue
+		if safe >= stand.position.y and safe <= stand.end.y:
+			safe = stand.end.y + PAD_GAP
+	return safe
+
+
+func _dedupe_path(from: Vector2, pts: Array) -> Array:
+	var out: Array = []
+	var prev: Vector2 = from
+	for pt in pts:
+		var next: Vector2 = pt
+		if next.distance_to(prev) < 6.0:
+			continue
+		out.append(next)
+		prev = next
+	return out
+
+
+func _draw_visitor(pos: Vector2, index: int) -> void:
+	var coats: PackedColorArray = PackedColorArray([
+		Color("6A4A32"),
+		Color("3A4A62"),
+		Color("5A3A3A"),
+		Color("3A5A42"),
+		Color("4A3A52"),
+	])
+	var coat: Color = coats[index % coats.size()]
+	draw_circle(pos + Vector2(0, -10), 4.5, Color("E8D4B0"))
+	draw_rect(Rect2(pos.x - 4.0, pos.y - 6.0, 8.0, 11.0), coat)
+	draw_rect(Rect2(pos.x - 3.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
+	draw_rect(Rect2(pos.x + 0.5, pos.y + 5.0, 3.0, 7.0), Color("2A2218"))
 
 
 func _draw_mount_art(stand_id: String, mount: Rect2) -> bool:
@@ -212,12 +941,23 @@ func _draw_t_rex_bay() -> void:
 func _draw_small_finds_bay() -> void:
 	var stand: Rect2 = stand_rect("small_finds")
 	var mount: Rect2 = _draw_stand(stand, "Small Finds", "small_finds")
-	if _draw_mount_art("small_finds", mount):
-		_draw_stand_finish("small_finds", stand)
-		return
-	draw_rect(mount, Color(0.42, 0.58, 0.62, 0.12))
-	draw_rect(mount, Color(0.72, 0.86, 0.90, 0.22), false, 1.5)
-	var ids: PackedStringArray = _case_piece_ids()
+	if not _draw_mount_art("small_finds", mount):
+		_draw_case_cells(mount, "small_finds")
+	_draw_case_glass(mount, "small_finds")
+	_draw_stand_finish("small_finds", stand)
+
+
+func _draw_plant_fossils_bay() -> void:
+	var stand: Rect2 = stand_rect("plant_fossils")
+	var mount: Rect2 = _draw_stand(stand, "Plant Fossils", "plant_fossils")
+	if not _draw_mount_art("plant_fossils", mount):
+		_draw_case_cells(mount, "plant_fossils")
+	_draw_case_glass(mount, "plant_fossils")
+	_draw_stand_finish("plant_fossils", stand)
+
+
+func _draw_case_cells(mount: Rect2, stand_id: String) -> void:
+	var ids: PackedStringArray = _case_piece_ids(stand_id)
 	var count: int = maxi(ids.size(), 2)
 	var gap: float = 10.0
 	var cell_w: float = (mount.size.x - gap * float(count + 1)) / float(count)
@@ -230,25 +970,48 @@ func _draw_small_finds_bay() -> void:
 			mount.size.y - 12.0
 		)
 		_draw_case_cell(cell, piece_id)
-	_draw_stand_finish("small_finds", stand)
 
 
-func _case_piece_ids() -> PackedStringArray:
-	if _case_ids.is_empty():
-		for path in Tuning.extra_fossil_paths:
-			var data: Resource = load(str(path))
-			if data == null:
-				continue
-			var piece_id: String = str(data.get("piece_id"))
-			if piece_id.is_empty() or _case_ids.has(piece_id):
-				continue
-			_case_ids.append(piece_id)
-		if _case_ids.is_empty():
-			_case_ids = PackedStringArray(["trilobite", "amber_insect"])
-	var ids: PackedStringArray = _case_ids.duplicate()
+func _draw_case_glass(mount: Rect2, stand_id: String) -> void:
+	var alpha: float = hall_case_glass_alpha(stand_id)
+	if alpha <= 0.0:
+		return
+	var rank: int = _museum_rank("glass_case")
+	var width: float = 1.6 + 0.4 * float(rank)
+	var fill_a: float = alpha * (0.38 if rank <= 1 else 0.52)
+	if stand_id == "small_finds":
+		draw_rect(mount, Color(0.78, 0.90, 0.94, fill_a))
+		draw_rect(mount, Color(0.92, 0.98, 1.0, alpha * 0.85), false, width)
+	else:
+		draw_rect(mount, Color(0.76, 0.90, 0.62, fill_a))
+		draw_rect(mount, Color(0.88, 0.96, 0.74, alpha * 0.85), false, width)
+	var lid := Rect2(mount.position.x - 3.0, mount.position.y - 6.0, mount.size.x + 6.0, 7.0 + float(rank) * 0.6)
+	draw_rect(lid, Color(0.88, 0.94, 0.96, minf(0.42, alpha + 0.08)))
+	draw_rect(lid, Color(1.0, 1.0, 1.0, alpha * 0.70), false, 1.2)
+	var sheen := Rect2(mount.position.x + 8.0, mount.position.y + 6.0, mount.size.x * (0.34 if rank <= 1 else 0.42), 8.0 + float(rank))
+	draw_rect(sheen, Color(1.0, 1.0, 1.0, minf(0.34, alpha * 0.50)))
+
+
+func _case_piece_ids(stand_id: String) -> PackedStringArray:
+	var ids: PackedStringArray = PackedStringArray()
+	for path in Tuning.extra_fossil_paths:
+		var data: Resource = load(str(path))
+		if data == null:
+			continue
+		var piece_id: String = str(data.get("piece_id"))
+		if piece_id.is_empty() or ids.has(piece_id):
+			continue
+		if GameState.stand_for_piece(piece_id) != stand_id:
+			continue
+		ids.append(piece_id)
+	if ids.is_empty():
+		if stand_id == "small_finds":
+			ids = PackedStringArray(["trilobite", "amber_insect"])
+		elif stand_id == "plant_fossils":
+			ids = PackedStringArray(["cycad", "fossil_flower"])
 	for piece_id in GameState.pieces:
 		var id: String = str(piece_id)
-		if GameState.stand_for_piece(id) != "small_finds":
+		if GameState.stand_for_piece(id) != stand_id:
 			continue
 		if ids.has(id):
 			continue
@@ -274,11 +1037,16 @@ func _draw_case_cell(cell: Rect2, piece_id: String) -> void:
 			_draw_trilobite_mount(fossil_rect, owned, clean)
 		"amber_insect":
 			_draw_amber_mount(fossil_rect, owned, clean)
+		"cycad":
+			_draw_cycad_mount(fossil_rect, owned, clean)
+		"fossil_flower":
+			_draw_flower_mount(fossil_rect, owned, clean)
 		_:
 			_draw_generic_scrap(fossil_rect, owned, clean)
-	var title: String = _case_cell_title(piece_id)
-	var color: Color = Ui.GOLD if owned else Color(0.58, 0.46, 0.36, 0.72)
-	_draw_label(Vector2(cell.get_center().x, cell.end.y - 10.0), title, 12, color)
+	if hall_case_titles_visible():
+		var title: String = _case_cell_title(piece_id)
+		var color: Color = hall_plaque_gold() if owned else Color(0.58, 0.46, 0.36, 0.72)
+		_draw_label(Vector2(cell.get_center().x, cell.end.y - 10.0), title, 12, color)
 
 
 func _case_cell_title(piece_id: String) -> String:
@@ -291,6 +1059,10 @@ func _case_cell_title(piece_id: String) -> String:
 			return "Trilobite"
 		"amber_insect":
 			return "Amber"
+		"cycad":
+			return "Cycad"
+		"fossil_flower":
+			return "Flower"
 		"":
 			return "Empty"
 		_:
@@ -335,6 +1107,37 @@ func _draw_amber_mount(cell: Rect2, owned: bool, clean: bool) -> void:
 		Vector2(-6, -38), Vector2(12, -32), Vector2(10, -12), Vector2(-12, -16)
 	]), owned, clean)
 	_rect(xf, -4, -28, 8, 10, owned, clean)
+
+
+func _draw_cycad_mount(cell: Rect2, owned: bool, clean: bool) -> void:
+	var xf := _fit(cell, Vector2(-22, -44), Vector2(22, -8))
+	_rect(xf, -5, -26, 10, 18, owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(0, -42), Vector2(8, -28), Vector2(-8, -28)
+	]), owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(-18, -36), Vector2(-4, -28), Vector2(-10, -22)
+	]), owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(18, -36), Vector2(4, -28), Vector2(10, -22)
+	]), owned, clean)
+
+
+func _draw_flower_mount(cell: Rect2, owned: bool, clean: bool) -> void:
+	var xf := _fit(cell, Vector2(-20, -42), Vector2(20, -8))
+	_poly(xf, PackedVector2Array([
+		Vector2(0, -40), Vector2(6, -28), Vector2(-6, -28)
+	]), owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(16, -30), Vector2(4, -26), Vector2(8, -16)
+	]), owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(-16, -30), Vector2(-4, -26), Vector2(-8, -16)
+	]), owned, clean)
+	_poly(xf, PackedVector2Array([
+		Vector2(10, -12), Vector2(0, -20), Vector2(-10, -12)
+	]), owned, clean)
+	_rect(xf, -5, -26, 10, 10, owned, clean)
 
 
 func _draw_triceratops_bay() -> void:
@@ -493,25 +1296,33 @@ func _draw_stego_bay() -> void:
 
 func _draw_stand(stand: Rect2, _title: String, stand_id: String) -> Rect2:
 	var featured: bool = GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id)
-	if featured:
-		_draw_spotlight(stand)
 	_draw_platform(stand, featured)
 	_draw_plaque(Vector2(stand.get_center().x, stand.end.y - 12.0), plaque_title_for(stand_id), featured)
-	return Rect2(
-		stand.position.x + 22.0,
-		stand.position.y + 16.0,
-		stand.size.x - 44.0,
-		stand.size.y - 54.0
-	)
+	return stand_mount_rect(stand_id)
 
 
 func _draw_stand_finish(stand_id: String, stand: Rect2) -> void:
+	if GameState.featured_stand_id == stand_id and GameState.stand_is_filled(stand_id):
+		_draw_spotlight(stand)
 	if GameState.stand_has_pending_unveil(stand_id):
 		_draw_ribbon(stand, stand_id)
 		_redraw_plaque(stand_id)
 	if flash_t > 0.0 and flash_stand_id == stand_id:
 		draw_rect(stand, Color(1.0, 0.86, 0.40, 0.55 * flash_t))
 		draw_rect(stand.grow(10.0), Color(1.0, 0.92, 0.55, 0.28 * flash_t), false, 6.0)
+	_draw_stand_rate(stand_id)
+
+
+func _draw_stand_rate(stand_id: String) -> void:
+	var rect: Rect2 = stand_rate_rect(stand_id)
+	if rect.size == Vector2.ZERO:
+		return
+	var line: String = stand_rate_line(stand_id)
+	draw_rect(rect, Color("2C2118"))
+	draw_rect(rect, Ui.GOLD, false, 1.2)
+	var font: Font = Ui.display_font()
+	var font_size: int = label_font_size(11)
+	draw_string(font, Vector2(rect.position.x + 8.0, rect.position.y + float(font_size) + 2.0), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Ui.GOLD)
 
 
 func spotlight_beam_scale() -> float:
@@ -529,15 +1340,70 @@ func plaque_title_for(stand_id: String) -> String:
 	return title
 
 
-func _draw_spotlight(stand: Rect2) -> void:
+func spotlight_cone_points(stand: Rect2) -> PackedVector2Array:
+	if stand.size == Vector2.ZERO:
+		return PackedVector2Array()
+	var center: Vector2 = stand_mount_rect_for(stand).get_center()
 	var power: float = spotlight_beam_scale()
-	var apex: Vector2 = Vector2(stand.get_center().x, stand.position.y - 90.0 * power)
-	var inset: float = 8.0 / maxf(power, 0.35)
-	var left: Vector2 = Vector2(stand.position.x + inset, stand.end.y - 8.0)
-	var right: Vector2 = Vector2(stand.end.x - inset, stand.end.y - 8.0)
-	draw_colored_polygon(PackedVector2Array([apex, left, right]), Color(1.0, 0.86, 0.45, 0.10 + 0.08 * power))
-	draw_circle(Vector2(stand.get_center().x, stand.position.y + 18.0), 78.0 * power, Color(1.0, 0.90, 0.55, 0.07 + 0.05 * power))
-	draw_circle(stand.get_center(), minf(stand.size.x, stand.size.y) * 0.42 * power, Color(1.0, 0.84, 0.40, 0.06 + 0.04 * power))
+	var apex_y: float = maxf(stand.position.y - 90.0 * power, hall_board_rect().end.y + 8.0)
+	var radius: float = spotlight_disc_radius(stand)
+	var spread: float = radius * 0.85
+	return PackedVector2Array([
+		Vector2(center.x, apex_y),
+		Vector2(center.x - spread, center.y + radius * 0.25),
+		Vector2(center.x + spread, center.y + radius * 0.25),
+	])
+
+
+func spotlight_disc_radius(stand: Rect2) -> float:
+	var mount: Rect2 = stand_mount_rect_for(stand)
+	if mount.size == Vector2.ZERO:
+		return 0.0
+	return minf(mount.size.x, mount.size.y) * (0.30 + 0.04 * spotlight_beam_scale())
+
+
+func spotlight_disc_rect(stand: Rect2) -> Rect2:
+	var radius: float = spotlight_disc_radius(stand)
+	if radius <= 0.0:
+		return Rect2()
+	var center: Vector2 = stand_mount_rect_for(stand).get_center()
+	return Rect2(center - Vector2(radius, radius), Vector2(radius * 2.0, radius * 2.0))
+
+
+func hall_spotlight_cones() -> Array:
+	var stand_id: String = str(GameState.featured_stand_id)
+	if stand_id == "" or not GameState.stand_is_filled(stand_id):
+		return []
+	return [spotlight_cone_points(stand_rect(stand_id))]
+
+
+func hall_spotlight_discs() -> Array:
+	var stand_id: String = str(GameState.featured_stand_id)
+	if stand_id == "" or not GameState.stand_is_filled(stand_id):
+		return []
+	var disc: Rect2 = spotlight_disc_rect(stand_rect(stand_id))
+	if disc.size == Vector2.ZERO:
+		return []
+	return [disc]
+
+
+func hall_platform_glow_discs() -> Array:
+	return []
+
+
+func _draw_spotlight(stand: Rect2) -> void:
+	var cone: PackedVector2Array = spotlight_cone_points(stand)
+	if cone.size() < 3:
+		return
+	var power: float = spotlight_beam_scale()
+	draw_colored_polygon(cone, Color(1.0, 0.86, 0.45, 0.16 + 0.10 * power))
+	var disc: Rect2 = spotlight_disc_rect(stand)
+	var radius: float = disc.size.x * 0.5
+	if radius <= 0.0:
+		return
+	var center: Vector2 = disc.get_center()
+	draw_circle(center, radius, Color(1.0, 0.88, 0.50, 0.14 + 0.10 * power))
+	draw_circle(center, radius * 0.55, Color(1.0, 0.92, 0.58, 0.10 + 0.08 * power))
 
 
 func ribbon_prompt(stand_id: String) -> String:
@@ -677,8 +1543,6 @@ func _draw_platform(rect: Rect2, featured: bool = false) -> void:
 	draw_rect(Rect2(rect.position.x, rect.end.y - 16, rect.size.x, 16), PLATFORM_LIP)
 	var border: Color = Color("F0D070") if featured else Ui.LINE
 	draw_rect(rect, border, false, 3.0 if featured else 2.0)
-	var glow: float = 0.12 if featured else 0.06
-	draw_circle(rect.get_center() + Vector2(0, -18), minf(rect.size.x, rect.size.y) * 0.36, Color(0.89, 0.72, 0.35, glow))
 
 
 func _plaque_rect_at(center: Vector2, title: String, featured: bool = false) -> Rect2:
@@ -700,7 +1564,7 @@ func _draw_plaque(center: Vector2, title: String, featured: bool = false) -> voi
 	_draw_plaque_plate(rect, featured)
 	_draw_plaque_bevel(rect, featured)
 	_draw_plaque_screws(rect)
-	_draw_label(center + Vector2(0, 5), title, 16 if featured else 14, Color("FFE08A") if featured else Ui.GOLD)
+	_draw_label(center + Vector2(0, 5), title, 16 if featured else 14, Color("FFE08A") if featured else hall_plaque_gold())
 
 
 func _draw_plaque_lip(rect: Rect2) -> void:
@@ -716,8 +1580,9 @@ func _draw_plaque_plate(rect: Rect2, featured: bool) -> void:
 
 
 func _draw_plaque_bevel(rect: Rect2, featured: bool) -> void:
-	var outer: Color = Color("8A6A28") if featured else Color("6A523C")
-	var hi: Color = Color("FFE8A0") if featured else Color("E8C878")
+	var gold: Color = hall_plaque_gold()
+	var outer: Color = Color("8A6A28") if featured else gold.darkened(0.35)
+	var hi: Color = Color("FFE8A0") if featured else gold
 	var lo: Color = Color("4A3010")
 	draw_rect(rect, outer, false, 2.0)
 	var inner := rect.grow(-2.0)

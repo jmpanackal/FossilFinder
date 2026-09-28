@@ -117,78 +117,7 @@ func _ready() -> void:
 	Ui.apply_caption(_clock_caption)
 	root.add_child(_clock_caption)
 
-	_wallet = PanelContainer.new()
-	_wallet.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_wallet.add_theme_stylebox_override("panel", Ui.wallet_box())
-	root.add_child(_wallet)
-
-	var wallet_row := HBoxContainer.new()
-	wallet_row.add_theme_constant_override("separation", 8)
-	wallet_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_wallet.add_child(wallet_row)
-
-	_pouch = Control.new()
-	_pouch.custom_minimum_size = Vector2(32, 38)
-	_pouch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pouch.pivot_offset = Vector2(16, 19)
-	_pouch.draw.connect(_draw_pouch)
-	wallet_row.add_child(_pouch)
-
-	var wallet_stack := VBoxContainer.new()
-	wallet_stack.add_theme_constant_override("separation", 0)
-	wallet_stack.alignment = BoxContainer.ALIGNMENT_CENTER
-	wallet_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wallet_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wallet_row.add_child(wallet_stack)
-
-	_money = Label.new()
-	_money.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_money.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_wallet(_money)
-	wallet_stack.add_child(_money)
-
-	_income_row = HBoxContainer.new()
-	_income_row.add_theme_constant_override("separation", int(Ui.ICON_GAP))
-	_income_row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	_income_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_income_row.visible = false
-	wallet_stack.add_child(_income_row)
-
-	_income_mark = Control.new()
-	_income_mark.name = "MuseumRateMark"
-	_income_mark.set_script(ShopIcon)
-	ShopIcon.apply_action(_income_mark)
-	_income_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if _income_mark.has_method("setup"):
-		_income_mark.setup(ShopIcon.glyph_for_action("Museum"), Ui.GOLD)
-	_income_row.add_child(_income_mark)
-
-	_income = Label.new()
-	_income.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_income.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_income.visible = false
-	Ui.apply_caption(_income)
-	_income_row.add_child(_income)
-
-	_header_bar = HBoxContainer.new()
-	_header_bar.name = "HeaderActions"
-	_header_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_header_bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	_header_bar.add_theme_constant_override("separation", 8)
-	root.add_child(_header_bar)
-
-	_menu_btn = _make_header_button("Menu", func() -> void:
-		if Settings != null and Settings.has_method("toggle_menu"):
-			Settings.toggle_menu()
-	)
-	_header_bar.add_child(_menu_btn)
-
-	_end_btn = _make_header_button("End shift", func() -> void:
-		Sfx.play("ui")
-		end_shift.emit()
-	)
-	root.add_child(_end_btn)
+	_bind_shared_wallet()
 
 	_tools_frame = _make_section_frame("ToolsFrame")
 	root.add_child(_tools_frame)
@@ -208,16 +137,13 @@ func _ready() -> void:
 	_find_box.visible = false
 	root.add_child(_find_box)
 
-	GameState.money_changed.connect(_on_money_changed)
-	_reserve_wallet_width()
 	_set_money_text(false)
 	_highlight_tool(Tuning.TOOL_HANDS)
 	_layout_chrome()
 
 
-func set_header_actions_visible(on: bool) -> void:
-	if _header_bar != null:
-		_header_bar.visible = on
+func set_header_actions_visible(_on: bool) -> void:
+	pass
 
 
 func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_find: bool = false, _stars: int = 0, _grade: String = "", _clean: float = 0.0, _value: int = 0) -> void:
@@ -355,73 +281,33 @@ func _process(delta: float) -> void:
 		_clock.modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - _clock_flash * pulse)
 	elif _clock.modulate != Color.WHITE:
 		_clock.modulate = Color.WHITE
-	if _pouch_pop > 0.0:
-		_pouch_pop = maxf(0.0, _pouch_pop - delta * 5.5)
-		if _pouch != null:
-			var squash: float = 1.0 + _pouch_pop * 0.22
-			_pouch.scale = Vector2(squash, 1.0 + _pouch_pop * 0.1)
-			_pouch.queue_redraw()
-	elif _pouch != null and _pouch.scale != Vector2.ONE:
-		_pouch.scale = Vector2.ONE
-	if _money_flash <= 0.0:
-		return
-	_money_flash = maxf(0.0, _money_flash - delta * 4.0)
-	_money.modulate = Color("FFF4D2").lerp(Color.WHITE, 1.0 - _money_flash)
 
 
 func money_catch_pos() -> Vector2:
-	if _pouch != null:
-		return _pouch.global_position + _pouch.size * 0.5
-	if _money != null:
-		return _money.global_position + Vector2(18, 16)
+	if Settings != null and Settings.has_method("money_catch_pos"):
+		return Settings.money_catch_pos()
 	return Vector2(40, 40)
 
 
 func catch_loot() -> void:
-	_money_flash = 1.0
-	_pouch_pop = 1.0
-	if _money != null:
-		_money.modulate = Color("FFF6D8")
-	if _pouch != null:
-		_pouch.queue_redraw()
+	if Settings != null and Settings.has_method("catch_loot"):
+		Settings.catch_loot()
 
 
-func _draw_pouch() -> void:
-	if _pouch == null:
+func _bind_shared_wallet() -> void:
+	if Settings == null:
 		return
-	var glow: float = _pouch_pop
-	var body := Color("C47A3A").lerp(Color("FFE08A"), glow * 0.35)
-	var mouth := Color("6B4423")
-	var cord := Color("E4B75A")
-	var center := Vector2(16, 22)
-	_pouch.draw_circle(center + Vector2(0, 2), 11.0, mouth)
-	_pouch.draw_circle(center + Vector2(0, 3), 9.0, body)
-	_pouch.draw_arc(center + Vector2(0, -3), 6.5, PI + 0.15, TAU - 0.15, 12, cord, 2.0)
-	_pouch.draw_circle(center + Vector2(0, -8), 2.2, cord)
-
-
-func _on_money_changed() -> void:
-	_set_money_text(true)
+	_wallet = Settings.get("_wallet") as PanelContainer
+	_money = Settings.get("_money") as Label
+	_income = Settings.get("_income") as Label
+	_income_row = Settings.get("_income_row") as HBoxContainer
+	_income_mark = Settings.get("_income_mark") as Control
+	_pouch = Settings.get("_pouch") as Control
 
 
 func _set_money_text(flash: bool) -> void:
-	if _money == null:
-		return
-	var next := GameState.money
-	_money.text = "$%d" % next
-	if flash and next != _shown_money:
-		_money_flash = 1.0
-		_money.modulate = Color("FFF6D8")
-	_shown_money = next
-	if _income != null:
-		var rate_line: String = GameState.museum_rate_line()
-		var show_rate: bool = not rate_line.is_empty()
-		_income.visible = show_rate
-		_income.text = rate_line
-		if _income_row != null:
-			_income_row.visible = show_rate
-		if _income_mark != null:
-			_income_mark.visible = show_rate
+	if Settings != null and Settings.has_method("refresh_wallet"):
+		Settings.refresh_wallet(flash)
 
 
 func _section_frame_width() -> float:
@@ -776,16 +662,9 @@ func _apply_tool_flashes() -> void:
 
 func _layout_chrome() -> void:
 	var pit_top: float = Tuning.hud_h + 8.0
-	_wallet.anchor_left = 0.0
-	_wallet.anchor_top = 0.0
-	_wallet.anchor_right = 0.0
-	_wallet.anchor_bottom = 0.0
-	_wallet.position = Vector2(12, 6)
-	_reserve_wallet_width()
-	_wallet.reset_size()
-	var wallet_min: Vector2 = _wallet.get_combined_minimum_size()
-	var wallet_w: float = maxf(_wallet_reserved_width(), wallet_min.x)
-	_wallet.size = Vector2(wallet_w, maxf(_wallet.size.y, wallet_min.y))
+	if Settings != null and Settings.has_method("_layout_wallet"):
+		Settings.call("_layout_wallet")
+	_bind_shared_wallet()
 	var pit := Tuning.pit_grid_rect()
 	pit_top = pit.position.y
 	if _clock != null:
@@ -808,9 +687,6 @@ func _layout_chrome() -> void:
 	if _clock_caption != null:
 		text_w = maxf(text_w, _clock_caption.size.x)
 		text_h += 4.0 + _clock_caption.size.y
-	if _end_btn != null:
-		_end_btn.custom_minimum_size = Vector2(maxf(_end_btn.custom_minimum_size.x, 96.0), HEADER_BTN_H)
-		_end_btn.size = Vector2(maxf(_end_btn.get_combined_minimum_size().x, _end_btn.custom_minimum_size.x), HEADER_BTN_H)
 	var cluster_w: float = CLOCK_SIZE + CLOCK_GAP + text_w
 	var cluster_h: float = maxf(CLOCK_SIZE, text_h)
 	var header_limit: float = minf(pit_top, Tuning.hud_h) - 4.0
@@ -821,18 +697,19 @@ func _layout_chrome() -> void:
 	var wallet_right: float = _wallet.position.x + _wallet.size.x + 12.0 if _wallet != null else 12.0
 	if cluster_x < wallet_right:
 		cluster_x = wallet_right
+	var nav_left: float = Tuning.view_w - 8.0
+	if Settings != null and Settings.has_method("nav_rect"):
+		var nav: Rect2 = Settings.nav_rect()
+		if nav.size.x > 1.0:
+			nav_left = nav.position.x - 12.0
+	if cluster_x + cluster_w > nav_left:
+		cluster_x = maxf(wallet_right, nav_left - cluster_w)
 	if _clock != null:
 		_clock.position = Vector2(cluster_x, cluster_y + (cluster_h - CLOCK_SIZE) * 0.5)
 	if _clock_time != null:
 		_clock_time.position = Vector2(cluster_x + CLOCK_SIZE + CLOCK_GAP, cluster_y + (cluster_h - text_h) * 0.5)
 	if _clock_caption != null:
 		_clock_caption.position = Vector2(cluster_x + CLOCK_SIZE + CLOCK_GAP, _clock_time.position.y + _clock_time.size.y + 4.0)
-	if _end_btn != null:
-		_end_btn.anchor_left = 0.0
-		_end_btn.anchor_top = 0.0
-		_end_btn.anchor_right = 0.0
-		_end_btn.anchor_bottom = 0.0
-		_end_btn.position = Vector2(Tuning.view_w - RAIL_PAD - _end_btn.size.x, Tuning.view_h - RAIL_PAD - _end_btn.size.y)
 	if _header_bar != null:
 		var header_w: float = _header_cluster_width()
 		var header_y: float = 6.0
@@ -843,7 +720,6 @@ func _layout_chrome() -> void:
 		_header_bar.position = Vector2(Tuning.view_w - RAIL_PAD - header_w, header_y)
 		_header_bar.size = Vector2(maxf(header_w, 1.0), HEADER_BTN_H)
 		_header_bar.notification(Container.NOTIFICATION_SORT_CHILDREN)
-	_place_header_marks()
 	var frame_w: float = _section_frame_width()
 	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y))
 	_place_section_frame(_tools_frame, tools_frame)

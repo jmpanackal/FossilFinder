@@ -17,9 +17,9 @@ func set_rating(count: int, out_of: int = 5) -> void:
 
 
 func _draw() -> void:
-	var star_size := 16.0
-	var gap := 6.0
-	var row := float(total) * star_size + float(total - 1) * gap
+	var star_size: float = clampf(minf(16.0, size.y - 1.0), 5.0, 16.0)
+	var gap: float = maxf(1.5, star_size * 0.22)
+	var row: float = float(total) * star_size + float(maxi(0, total - 1)) * gap
 	var start := Vector2((size.x - row) * 0.5 + star_size * 0.5, size.y * 0.5)
 	for i in total:
 		var center := start + Vector2(float(i) * (star_size + gap), 0.0)
@@ -36,4 +36,5 @@ func _draw_star(center: Vector2, radius: float, on: bool) -> void:
 		draw_colored_polygon(points, Color("E4B75A"))
 	var outline := PackedVector2Array(points)
 	outline.append(points[0])
-	draw_polyline(outline, Color("E4B75A") if on else Color("8A7358"), 1.6, true)
+	var stroke: float = 1.6 if radius >= 6.0 else 0.9
+	draw_polyline(outline, Color("E4B75A") if on else Color("8A7358"), stroke, true)

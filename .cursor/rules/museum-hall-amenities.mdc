@@ -1,0 +1,26 @@
+---
+description: Multi-rank Museum upgrades use fixed STAND_LAYOUT slots, never scatter
+globs: museum_exhibit.gd,museum.gd,tests/test_hall_*.gd,tests/test_museum_*.gd
+alwaysApply: true
+---
+
+# Hall amenities follow the stands
+
+Multi-rank Museum upgrades place the Nth copy in a fixed slot tied to `STAND_LAYOUT`. Rank N draws the first N slots. Same relative offset for every stand so the hall looks designed. Do not invent scatter coords (gap leftovers, west-of-case, south-wall extras).
+
+Unique upgrades place **one** object: gift shop, cleanup cart, Opening Crowd bunting. Opening Hours has no hall object — it only lengthens the unveil rush. Do not put a Hours chip, bar, or plate on the FOSSIL HALL board. Glass Case stays the two cases; Labels stays the two wall frames. Featured spotlight stays one cone+circle on the featured dino only.
+
+Amenity sequence is the dinosaur mounts in `STAND_LAYOUT` order (skip Small Finds / Plant Fossils): t_rex, triceratops, brachiosaurus, velociraptor, stegosaurus.
+
+```
+# BAD — leftover coords in the T. rex gaps
+HALL_BENCH_ORIGINS := [Vector2(548, 420), Vector2(20, 520), Vector2(1400, 420), ...]
+
+# GOOD — same south gap, centered on exhibit N (dodge the runner if needed)
+bench.center.x ≈ stand.center.x
+bench.position.y = stand.end.y + gap
+```
+
+Benches sit south of the plaque, off the mount, gather slots, and center runner. Warm Lights are one wall fixture (sconce + halo on the same center) on that exhibit’s bay wall — not a floor disc, not over Featured board text. Weekend Crowds ropes pair to the aisle at exhibit rows.
+
+After a change, run `test_hall_amenities`, `test_hall_spotlight`, and `test_museum_visitors`.

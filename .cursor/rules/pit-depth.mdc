@@ -1,0 +1,16 @@
+---
+description: Restore original stepped cell tops; never add decorative side-wall artifacts
+globs: dig_site.gd,tuning.gd,hud.gd,tests/test_field_site.gd,tests/test_hud_layout.gd
+alwaysApply: true
+---
+
+# Pit depth is the original stepped tops
+
+Copy the repo look, do not invent a wall system.
+
+- `_top_rect` Y is `grid_origin.y + y * cell_h + depth * wall_per_layer`. Deeper cell tops sit lower so a dug region reads as a hole.
+- The only extra constraint is Finds: cap that Y sink so the deepest last-row cell bottom stays above the hole (`pit_face_bottom + chunk_front - gap`). Do not flatten every cell to “fix” overlap.
+- Sides are the original `_draw_cell_sides` drop-between-rows: paint the Y gap to the next row, skip the last row. No south_section / east_section / unit-lip / balk-lip / strat-band columns on cell edges.
+- West/east/north pad faces on the hole cutout are the chunk chrome. They are not per-cell chocolate side slabs. Never grow them to fake isometric depth.
+
+After a pit or HUD change, run `test_field_site` and `test_hud_layout`. A change is not done if a dug hole looks flat, if last-row dirt hangs into Finds, or if decorative side-wall artifacts are back.

@@ -22,7 +22,8 @@ func _run() -> void:
 	_test_pit_cutout_matches_chunk()
 	_test_site_matches_the_pit_camera()
 	_test_chunk_hole_matches_the_cutout()
-	_test_cell_tops_stay_flat()
+	_test_deeper_cells_sit_lower()
+	_test_drawn_step_wall_is_a_visible_stair()
 	_test_section_walls_only_on_real_steps()
 	_test_front_rim_has_no_chocolate_slab()
 	_test_pit_rim_is_a_thin_inset()
@@ -118,7 +119,7 @@ func _test_chunk_hole_matches_the_cutout() -> void:
 	_assert(hole.size.y < cut.size.y + 8.0, "hole does not add a fake front face under the pit")
 
 
-func _test_cell_tops_stay_flat() -> void:
+func _test_deeper_cells_sit_lower() -> void:
 	_layout()
 	var script: Script = load("res://dig_site.gd") as Script
 	_assert(script != null, "dig site still loads")
@@ -132,19 +133,29 @@ func _test_cell_tops_stay_flat() -> void:
 	if not site.has_method("_top_rect"):
 		site.free()
 		return
+	var grid: Array = site.get("_top_layer")
+	_assert(grid.size() > 2 and grid[1].size() > 1 and grid[2].size() > 1, "pit has a mid-row pair")
+	if grid.size() <= 2 or grid[1].size() <= 1:
+		site.free()
+		return
+	grid[1][1] = 0
+	grid[2][1] = 6
 	var shallow: Rect2 = site.call("_top_rect", 1, 1)
-	if site.get("_top_layer") != null:
-		var grid: Array = site.get("_top_layer")
-		if grid.size() > 1 and grid[1].size() > 1:
-			grid[1][1] = 6
-	var deep: Rect2 = site.call("_top_rect", 1, 1)
-	_assert(is_equal_approx(shallow.position.y, deep.position.y), "deeper dirt keeps the same plan-top Y")
-	var neighbor: Rect2 = site.call("_top_rect", 1, 2)
-	_assert(is_equal_approx(deep.position.y + float(TN.cell_h), neighbor.position.y), "next row sits on the same plan grid, not a stair")
+	var deep: Rect2 = site.call("_top_rect", 2, 1)
+	var plan_deep: float = float(TN.grid_origin.y) + 1.0 * float(TN.cell_h)
+	var sink: float = deep.position.y - plan_deep
+	var min_step: float = maxf(8.0, 6.0 * float(TN.wall_per_layer) * 0.8)
+	_assert(deep.position.y - shallow.position.y >= min_step, "a mid-pit layer-6 top sits visibly lower than layer 0")
+	_assert(sink >= min_step, "layer 6 is offset below its plan row, not a flat stamp")
+	_assert(not is_equal_approx(shallow.position.y, deep.position.y), "same-row cells at different depth are not coplanar")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	var top_fn: String = _func_body(src, "_top_rect")
+	_assert(top_fn.find("wall_per_layer") >= 0 or top_fn.find("_depth_offset") >= 0, "_top_rect still applies a depth sink")
+	_assert(top_fn.find("Plan-top only") < 0, "_top_rect is not the flattened plan-only helper")
 	site.free()
 
 
-func _test_section_walls_only_on_real_steps() -> void:
+func _test_drawn_step_wall_is_a_visible_stair() -> void:
 	_layout()
 	var script: Script = load("res://dig_site.gd") as Script
 	_assert(script != null, "dig site still loads")
@@ -154,26 +165,43 @@ func _test_section_walls_only_on_real_steps() -> void:
 	root.add_child(site)
 	if site.has_method("start_round"):
 		site.call("start_round")
-	_assert(site.has_method("south_section_h"), "pit exposes south section height")
-	if not site.has_method("south_section_h"):
+	_assert(site.has_method("_top_rect"), "dig site still exposes cell tops")
+	if not site.has_method("_top_rect"):
 		site.free()
 		return
 	var grid: Array = site.get("_top_layer")
-	if grid.size() > 1 and grid[1].size() > 2:
-		grid[1][1] = 0
-		grid[1][2] = 4
-	_assert(float(site.call("south_section_h", 1, 1)) > 1.0, "a real step down gets a south section wall")
-	_assert(float(site.call("south_section_h", 1, 2)) <= 0.0, "no fake south column on the deeper cell")
-	if grid.size() > 1 and grid[1].size() > 2:
-		grid[1][1] = 0
-		grid[1][2] = int(TN.layer_count)
-	_assert(float(site.call("south_section_h", 1, 1)) > 1.0, "an empty neighbor still gets an interior south wall")
-	if site.has_method("east_section_h") and grid.size() > 2:
-		grid[1][1] = 0
-		grid[2][1] = 3
-		_assert(float(site.call("east_section_h", 1, 1)) > 1.0, "a real step east gets an east section wall")
-		_assert(float(site.call("east_section_h", 2, 1)) <= 0.0, "no fake east column on the deeper cell")
+	_assert(grid.size() > 1 and grid[1].size() > 2, "pit has a mid-pit south neighbor")
+	if grid.size() <= 1 or grid[1].size() <= 2:
+		site.free()
+		return
+	grid[1][1] = 0
+	grid[1][2] = 6
+	var shallow: Rect2 = site.call("_top_rect", 1, 1)
+	var deep: Rect2 = site.call("_top_rect", 1, 2)
+	var drop: float = deep.position.y - shallow.end.y
+	var min_wall: float = maxf(8.0, 6.0 * float(TN.wall_per_layer) * 0.8)
+	_assert(drop >= min_wall, "the drawn gap between tops is the stair, not the 3px cell gap")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	var sides: String = _func_body(src, "_draw_cell_sides")
+	_assert(not sides.is_empty(), "pit still paints drop-between-rows cell sides")
+	_assert(sides.find("below") >= 0 and sides.find("drop") >= 0, "_draw_cell_sides fills the Y gap to the next row")
+	_assert(sides.find("_draw_east_section") < 0, "_draw_cell_sides does not paint an east section column")
+	_assert(sides.find("_draw_south_section") < 0, "_draw_cell_sides is the original row-drop, not a section-wall helper")
 	site.free()
+
+
+func _test_section_walls_only_on_real_steps() -> void:
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	_assert(not src.is_empty(), "dig_site.gd loads")
+	_assert(src.find("func east_section_h") < 0, "pit has no east_section_h side-slab API")
+	_assert(src.find("func _draw_east_section") < 0, "pit does not paint per-cell east section walls")
+	_assert(src.find("func _draw_south_section") < 0, "pit does not paint a south-section wall system")
+	_assert(src.find("func _draw_unit_lips") < 0, "pit does not paint balk lips on every cell edge")
+	_assert(src.find("func south_section_h") < 0, "pit does not expose a south-section height API")
+	var sides: String = _func_body(src, "_draw_cell_sides")
+	_assert(not sides.is_empty(), "original _draw_cell_sides is still the side painter")
+	_assert(sides.find("if y + 1 >= Tuning.grid_h") >= 0, "last row has no extra south lip")
+	_assert(sides.find("Rect2(top.end.x") < 0, "_draw_cell_sides does not grow a horizontal side column")
 
 
 func _test_front_rim_has_no_chocolate_slab() -> void:
@@ -186,26 +214,28 @@ func _test_front_rim_has_no_chocolate_slab() -> void:
 	root.add_child(site)
 	if site.has_method("start_round"):
 		site.call("start_round")
-	_assert(site.has_method("south_section_h") and site.has_method("_top_rect"), "pit can measure the front face")
-	if not site.has_method("south_section_h") or not site.has_method("_top_rect"):
+	_assert(site.has_method("_top_rect"), "pit can measure the last-row top")
+	if not site.has_method("_top_rect"):
 		site.free()
 		return
 	var last_y: int = int(TN.grid_h) - 1
 	var grid: Array = site.get("_top_layer")
 	if grid.size() > 1 and grid[1].size() > last_y:
 		grid[1][last_y] = 8
-	var front_h: float = float(site.call("south_section_h", 1, last_y))
-	var rim: float = float(Site.rim_width()) if Site != null and Site.has_method("rim_width") else 4.0
-	_assert(front_h <= rim + 0.5, "last-row south face is a short cut or skip, not a chocolate lip")
 	var top: Rect2 = site.call("_top_rect", 1, last_y)
-	var cut: Rect2 = Site.pit_cutout()
-	_assert(top.end.y + front_h <= cut.end.y + 0.5, "front wall does not hang past the pit rect")
-	_assert(top.end.y + front_h <= TN.grid_origin.y + float(TN.grid_h) * TN.cell_h + float(TN.chunk_pad) + 0.5, "no extra slab below the grid")
+	var hole_bottom: float = float(TN.pit_face_bottom()) + float(TN.chunk_front)
+	_assert(top.end.y <= hole_bottom - 2.0, "last-row cell stays in the hole, above Finds")
+	_assert(top.end.y <= float(TN.footer_find_top()) - 2.0, "last-row depth does not paint over Finds")
 	if grid.size() > 1 and last_y >= 1:
 		grid[1][last_y - 1] = 0
 		grid[1][last_y] = 6
-		var interior: float = float(site.call("south_section_h", 1, last_y - 1))
-		_assert(interior > 1.0, "a hole just inside the last row still shows a south wall")
+		var shallow: Rect2 = site.call("_top_rect", 1, last_y - 1)
+		var deep: Rect2 = site.call("_top_rect", 1, last_y)
+		_assert(deep.position.y - shallow.end.y > 1.0, "a hole just inside the last row still shows a south drop")
+		_assert(deep.end.y <= hole_bottom - 2.0, "that interior stair still stays off Finds")
+	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
+	var sides: String = _func_body(src, "_draw_cell_sides")
+	_assert(sides.find("if y + 1 >= Tuning.grid_h") >= 0, "last row skips a south lip instead of a chocolate slab")
 	site.free()
 
 
@@ -236,7 +266,8 @@ func _test_pit_rim_is_a_thin_inset() -> void:
 	var back: String = FileAccess.get_file_as_string("res://site_backdrop.gd")
 	_assert(back.find("const LIP :=") < 0, "no raised chocolate lip swatch")
 	var pit: String = FileAccess.get_file_as_string("res://dig_site.gd")
-	_assert(pit.find("func _draw_rim") >= 0 or pit.find("SiteBackdrop.rim_width") >= 0, "the pit paints the inset rim")
+	_assert(pit.find("func _draw_east_section") < 0, "the pit does not paint per-cell east side slabs")
+	_assert(pit.find("func _draw_unit_lips") < 0, "the pit does not paint decorative balk lips")
 
 
 func _test_north_edge_recedes_into_the_ground() -> void:
@@ -444,8 +475,9 @@ func _test_chunk_is_not_a_floating_sticker() -> void:
 	var src: String = FileAccess.get_file_as_string("res://dig_site.gd")
 	_assert(not src.is_empty(), "dig_site.gd loads")
 	_assert(src.find("Tuning.chunk_front") < 0 or src.find("_draw_chunk") < 0 or src.find("draw_rect(front") < 0, "pit no longer paints a separate front slab")
-	_assert(src.find("south_section") >= 0 or src.find("_draw_south_section") >= 0, "pit draws south section walls on real steps")
-	_assert(src.find("_draw_unit_lips") >= 0 and src.find("_draw_strat_bands") >= 0, "pit draws layered balk lips on the cut")
+	_assert(src.find("func _draw_cell_sides") >= 0, "pit still paints the original row-drop cell sides")
+	_assert(src.find("func _draw_unit_lips") < 0, "pit does not draw layered balk lips on the cut")
+	_assert(src.find("func _draw_east_section") < 0, "pit does not draw east section side artifacts")
 	var back: String = FileAccess.get_file_as_string("res://site_backdrop.gd")
 	_assert(back.find("chunk_front") < 0, "field hole does not reserve a separate chunk front")
 

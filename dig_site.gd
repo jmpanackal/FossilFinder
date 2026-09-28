@@ -425,9 +425,10 @@ func _place_fossils() -> void:
 		if extra.occupied_cells() == 1 and randf() < Tuning.extra_complete_set_chance:
 			pool.append(extra)
 	for _j in extras:
-		if pool.is_empty():
+		var extra: FossilDataScript = _pick_extra(pool)
+		if extra == null:
 			break
-		_try_place_find(pool[randi() % pool.size()])
+		_try_place_find(extra)
 
 
 func _choose_main_find() -> FossilDataScript:
@@ -468,6 +469,30 @@ func _can_spawn(data: FossilDataScript) -> bool:
 	if box.x >= Tuning.grid_w and box.y >= Tuning.grid_h:
 		return false
 	return true
+
+
+func _pick_extra(pool: Array) -> FossilDataScript:
+	var choices: Array = []
+	for extra in pool:
+		var data: FossilDataScript = extra as FossilDataScript
+		if data == null:
+			continue
+		var extra_id: String = data.piece_id if data.piece_id != "" else data.name.to_snake_case()
+		if _unique_piece_already_in_pit(extra_id):
+			continue
+		choices.append(data)
+	if choices.is_empty():
+		return null
+	return choices[randi() % choices.size()] as FossilDataScript
+
+
+func _unique_piece_already_in_pit(piece_id: String) -> bool:
+	if piece_id.is_empty() or GameState.piece_need(piece_id) > 1:
+		return false
+	for find in finds:
+		if str(find.get("piece_id", "")) == piece_id:
+			return true
+	return false
 
 
 func _is_scrap(data: FossilDataScript) -> bool:
@@ -656,14 +681,34 @@ func _in_bounds(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.y >= 0 and cell.x < _top_layer.size() and cell.y < _top_layer[0].size()
 
 
+func _max_depth_offset() -> float:
+	var plan_last_end: float = Tuning.pit_face_bottom() - Tuning.cell_gap
+	var ceiling: float = Tuning.pit_face_bottom() + Tuning.chunk_front - 4.0
+	return maxf(0.0, ceiling - plan_last_end)
+
+
+func _depth_offset(x: int, y: int) -> float:
+	if _top_layer.is_empty():
+		return 0.0
+	var raw: float = float(_layer_at(x, y)) * Tuning.wall_per_layer
+	return minf(raw, _max_depth_offset())
+
+
 func _top_rect(x: int, y: int) -> Rect2:
-	var depth: int = _top_layer[x][y]
 	return Rect2(
 		Tuning.grid_origin.x + float(x) * Tuning.cell_w,
-		Tuning.grid_origin.y + float(y) * Tuning.cell_h + float(depth) * Tuning.wall_per_layer,
+		Tuning.grid_origin.y + float(y) * Tuning.cell_h + _depth_offset(x, y),
 		Tuning.cell_w - Tuning.cell_gap,
 		Tuning.cell_h - Tuning.cell_gap
 	)
+
+
+func _layer_at(x: int, y: int) -> int:
+	if _top_layer.is_empty() or x < 0 or x >= _top_layer.size():
+		return Tuning.layer_count
+	if y < 0 or y >= _top_layer[x].size():
+		return Tuning.layer_count
+	return int(_top_layer[x][y])
 
 
 func cell_center(cell: Vector2i) -> Vector2:
@@ -795,30 +840,20 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 	if not _in_bounds(center):
 		return
 	var heard := false
-	var offsets: Array[Vector2i] = [
-		Vector2i(0, 0),
-		Vector2i(0, -1),
-		Vector2i(0, 1),
-		Vector2i(-1, 0),
-		Vector2i(1, 0),
-	]
-	var pick_cells: Array[Vector2i] = []
-	for offset in offsets:
-		pick_cells.append(center + offset)
+	var pick_cells: Array[Vector2i] = Tuning.shovel_hit_cells(center, Tuning.pickaxe_radius)
 	_collect_lucky(pick_cells)
 	var juice_layer: int = _top_layer[center.x][center.y]
 	var struck: int = 0
 	var payout: int = 0
 	var punch_hits: Array[Vector3i] = []
-	for offset in offsets:
-		var cell: Vector2i = center + offset
+	for cell in pick_cells:
 		if not _in_bounds(cell):
 			continue
 		if _is_exposed_fossil(cell):
 			if is_click and cell == center and _can_harm_fossil():
 				_hit_fossil(cell)
 			continue
-		var splash := offset != Vector2i.ZERO
+		var splash := cell != center
 		var layer: int = _top_layer[cell.x][cell.y]
 		var damage := Tuning.pickaxe_cell_damage(layer, splash, style_mult)
 		var gained: int = _damage_cell(cell, Tuning.TOOL_PICKAXE, damage)
@@ -1686,9 +1721,15 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 					c.draw_arc(pos, ring + wobble, 0.0, TAU, 28, Color("FFF4D2", 0.5), 2.0)
 		Tuning.TOOL_PICKAXE:
 			color = Color("E24B4B") if warn else (Color("FF7A5C") if boosted else Color("D94A3D"))
-			var reach: float = 14.0 if boosted else 10.0
-			c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
-			c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
+			if Tuning.pickaxe_radius <= 1.0:
+				var reach: float = 14.0 if boosted else 10.0
+				c.draw_line(pos + Vector2(-reach, 0), pos + Vector2(reach, 0), color, 4.0 if boosted else 3.0)
+				c.draw_line(pos + Vector2(0, -reach), pos + Vector2(0, reach), color, 4.0 if boosted else 3.0)
+			else:
+				var ring: float = Tuning.pickaxe_radius * Tuning.cell_w * 0.45
+				c.draw_arc(pos, ring, 0.0, TAU, 24, color, 3.2 if boosted else 2.0)
+				c.draw_line(pos + Vector2(-8, 0), pos + Vector2(8, 0), color, 3.0)
+				c.draw_line(pos + Vector2(0, -8), pos + Vector2(0, 8), color, 3.0)
 		Tuning.TOOL_BRUSH:
 			color = Color("A6E4F5") if boosted else Color("7EC8E3")
 			var puff: float = 11.0 if boosted else 7.0

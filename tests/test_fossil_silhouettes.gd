@@ -39,6 +39,8 @@ const KINDS := {
 	"stegosaurus_torso": "torso",
 	"trilobite": "trilobite",
 	"amber_insect": "amber",
+	"cycad": "cycad",
+	"fossil_flower": "flower",
 }
 
 const CELLS := {
@@ -74,6 +76,8 @@ const CELLS := {
 	"stegosaurus_torso": 5,
 	"trilobite": 1,
 	"amber_insect": 1,
+	"cycad": 1,
+	"fossil_flower": 1,
 }
 
 const QUOTAS := {
@@ -247,6 +251,8 @@ func _test_doodles_use_the_right_geometry() -> void:
 	_assert(_polys("triceratops_vertebra", box).size() >= 2, "vertebra doodle has a centrum and wings")
 	_assert(_first_poly("trilobite", box).size() >= 6, "trilobite doodle is a bug, not a tooth")
 	_assert(_polys("amber_insect", box).size() >= 2, "amber doodle is a gem with a bug inside")
+	_assert(_polys("cycad", box).size() >= 3, "cycad doodle is a trunk with a crown")
+	_assert(_polys("fossil_flower", box).size() >= 4, "fossil flower doodle is petals, not a bone")
 
 
 func _test_pit_draws_the_part_doodle() -> void:

@@ -12,12 +12,17 @@ const CLICK_SLOP := 10.0
 const ZOOM_STEP := 0.12
 const CLOSE_STAND := Vector2(480, 250)
 
-var _income: Label
+var _visitors: Label
+var _visitors_cap: Label
+var _each: Label
+var _each_cap: Label
+var _rate: Label
+var _rate_cap: Label
 var _rush: Label
-var _note: Label
-var _money: Label
-var _back: Button
 var _banner: Label
+var _empty_lead: Label
+var _empty_mid: Label
+var _empty_tail: Label
 var _canvas: Node2D
 var _pad: Control
 var _pan: Vector2 = Vector2.ZERO
@@ -58,44 +63,14 @@ func _ready() -> void:
 	Ui.apply_header_bar(bar)
 	add_child(bar)
 
-	_back = Button.new()
-	_back.text = "Back"
-	Ui.apply_nav(_back)
-	_back.pressed.connect(func() -> void:
-		Sfx.play("ui")
-		closed.emit()
-	)
-	add_child(_back)
-
-	_money = Label.new()
-	_money.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_wallet(_money)
-	add_child(_money)
-
-	_income = Label.new()
-	_income.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_income.clip_text = false
-	_income.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	Ui.apply_label(_income, Ui.BODY_SIZE, Ui.GOLD)
-	add_child(_income)
-
-	_rush = Label.new()
-	_rush.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_rush.clip_text = false
-	_rush.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	Ui.apply_label(_rush, 15, Ui.GOLD)
-	add_child(_rush)
-
-	_note = Label.new()
-	_note.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_note.clip_text = true
-	_note.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_note.max_lines_visible = 2
-	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_caption(_note)
-	add_child(_note)
+	_visitors = _make_stat_label()
+	_visitors_cap = _make_stat_label()
+	_each = _make_stat_label()
+	_each_cap = _make_stat_label()
+	_rate = _make_stat_label()
+	_rate_cap = _make_stat_label()
+	_rush = _make_stat_label()
+	_rush.visible = false
 
 	_banner = Label.new()
 	_banner.size = Vector2(920, 36)
@@ -104,6 +79,9 @@ func _ready() -> void:
 	_banner.visible = false
 	Ui.apply_section(_banner)
 	add_child(_banner)
+	_empty_lead = _make_stat_label()
+	_empty_mid = _make_stat_label()
+	_empty_tail = _make_stat_label()
 	_layout_header()
 
 	_zoom = _zoom_min()
@@ -128,62 +106,113 @@ func _process(delta: float) -> void:
 		_banner_life -= delta
 		if _banner_life <= 0.0:
 			_banner.visible = false
-	_money.text = "$%d" % GameState.money
-	_income.text = _exhibit_income_line()
-	var rush_on: bool = _rush.visible
-	_rush.text = GameState.unveil_rush_line()
-	_rush.visible = not _rush.text.is_empty()
-	if _rush.visible != rush_on:
-		_layout_header()
+	if _canvas.has_method("queue_redraw"):
+		_canvas.queue_redraw()
 
 
-func _exhibit_income_line() -> String:
-	return "$%.2f / sec from the exhibit" % GameState.museum_income()
+func _make_stat_label() -> Label:
+	var label := Label.new()
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(label)
+	return label
+
+
+func header_stats() -> Dictionary:
+	var rush := ""
+	if GameState.has_method("unveil_rush_line"):
+		rush = str(GameState.unveil_rush_line())
+	return {
+		"visitors": str(GameState.museum_visitors()),
+		"visitors_label": "visitors",
+		"each_value": "$%.2f" % GameState.museum_donation(),
+		"each_label": "each",
+		"rate": "$%.2f" % GameState.museum_income(),
+		"rate_label": "/ sec",
+		"rush": rush,
+	}
+
+
+func header_cluster_rect() -> Rect2:
+	var rect := Rect2()
+	var started := false
+	for label in [_visitors, _visitors_cap, _each, _each_cap, _rate, _rate_cap, _rush]:
+		if label == null or not label.visible:
+			continue
+		var next := Rect2(label.position, label.size)
+		if not started:
+			rect = next
+			started = true
+		else:
+			rect = rect.merge(next)
+	return rect
 
 
 func _layout_header() -> void:
 	var view: Vector2 = _view()
 	var pad: float = Ui.HEADER_PAD
-	var back_size: Vector2 = Ui.NAV_SIZE
-	if _back != null:
-		_back.position = Vector2(pad, (HEADER_H - back_size.y) * 0.5)
-		_back.size = back_size
-	var gap: float = 20.0
-	var left: float = pad + back_size.x + 12.0
-	var right: float = view.x - pad
+	var left: float = pad
+	if Settings != null and Settings.has_method("overlay_content_left"):
+		left = Settings.overlay_content_left()
+	var right: float = view.x - pad - 128.0
+	if Settings != null and Settings.has_method("overlay_content_right"):
+		right = Settings.overlay_content_right()
 	var avail: float = maxf(160.0, right - left)
-	var rush_on: bool = _rush != null and not str(_rush.text).is_empty()
-	var money_s: Vector2 = _fit_header_label(_money, 40.0)
-	var income_s: Vector2 = _fit_header_label(_income, 28.0)
-	var rush_s: Vector2 = _fit_header_label(_rush, 28.0) if rush_on else Vector2.ZERO
-	var mid_w: float = maxf(income_s.x, rush_s.x)
-	var note_s: Vector2 = _fit_header_label(_note, HEADER_H - 16.0)
-	var cluster_w: float = money_s.x + gap + mid_w + gap + note_s.x
-	if cluster_w > avail and _note != null:
-		var note_max: float = maxf(80.0, avail - money_s.x - mid_w - gap * 2.0)
-		_note.size = Vector2(note_max, note_s.y)
-		_note.clip_text = true
-		note_s.x = note_max
-		cluster_w = money_s.x + gap + mid_w + gap + note_s.x
-	var cluster_x: float = left + maxf(0.0, (avail - cluster_w) * 0.5)
-	if _money != null:
-		_money.position = Vector2(cluster_x, (HEADER_H - money_s.y) * 0.5)
-		_money.size = money_s
-	var mid_x: float = cluster_x + money_s.x + gap
-	if _income != null:
-		_income.position = Vector2(mid_x, 12.0 if rush_on else (HEADER_H - income_s.y) * 0.5)
-		_income.size = Vector2(mid_w, income_s.y)
+	var rush_on: bool = _rush != null and _rush.visible and not str(_rush.text).is_empty()
+	var gap: float = 18.0
+	var visitors_w: float = _stat_col_width(_visitors, _visitors_cap)
+	var each_w: float = _stat_col_width(_each, _each_cap)
+	var rate_w: float = _stat_col_width(_rate, _rate_cap)
+	var rush_s: Vector2 = _fit_header_label(_rush, 18.0) if rush_on else Vector2.ZERO
+	var cols_w: float = visitors_w + gap + each_w + gap + rate_w
+	var cluster_w: float = maxf(cols_w, rush_s.x)
+	if cluster_w > avail:
+		var scale: float = avail / maxf(cluster_w, 1.0)
+		visitors_w *= scale
+		each_w *= scale
+		rate_w *= scale
+		cols_w = visitors_w + gap + each_w + gap + rate_w
+		cluster_w = avail
+		if rush_on:
+			rush_s.x = avail
+	var cluster_x: float = clampf(view.x * 0.5 - cluster_w * 0.5, left, right - cluster_w)
+	var value_h: float = 28.0
+	var cap_h: float = 16.0
+	var value_y: float = 10.0 if rush_on else 16.0
+	var cap_y: float = value_y + value_h
+	var col_x: float = cluster_x + maxf(0.0, (cluster_w - cols_w) * 0.5)
+	_place_stat_col(_visitors, _visitors_cap, col_x, visitors_w, value_y, cap_y, value_h, cap_h)
+	col_x += visitors_w + gap
+	_place_stat_col(_each, _each_cap, col_x, each_w, value_y, cap_y, value_h, cap_h)
+	col_x += each_w + gap
+	_place_stat_col(_rate, _rate_cap, col_x, rate_w, value_y, cap_y, value_h, cap_h)
 	if _rush != null:
-		_rush.position = Vector2(mid_x, 44.0)
-		_rush.size = Vector2(mid_w, rush_s.y if rush_on else 28.0)
 		_rush.visible = rush_on
-	if _note != null:
-		_note.position = Vector2(mid_x + mid_w + gap, (HEADER_H - note_s.y) * 0.5)
-		_note.size = note_s
+		if rush_on:
+			_rush.position = Vector2(cluster_x, cap_y + cap_h + 2.0)
+			_rush.size = Vector2(cluster_w, minf(18.0, HEADER_H - (cap_y + cap_h + 4.0)))
 	if _banner != null:
 		_banner.position = Vector2(180.0, HEADER_H + 10.0)
 	if _pad != null:
 		_pad.offset_top = HEADER_H
+	_layout_empty_display()
+
+
+func _stat_col_width(value: Label, caption: Label) -> float:
+	var value_s: Vector2 = _fit_header_label(value, 28.0)
+	var cap_s: Vector2 = _fit_header_label(caption, 16.0)
+	return maxf(36.0, maxf(value_s.x, cap_s.x))
+
+
+func _place_stat_col(value: Label, caption: Label, x: float, width: float, value_y: float, cap_y: float, value_h: float, cap_h: float) -> void:
+	if value != null:
+		value.position = Vector2(x, value_y)
+		value.size = Vector2(width, value_h)
+		value.visible = true
+	if caption != null:
+		caption.position = Vector2(x, cap_y)
+		caption.size = Vector2(width, cap_h)
+		caption.visible = true
 
 
 func _fit_header_label(label: Label, height: float) -> Vector2:
@@ -296,19 +325,23 @@ func _click_hall(pad_pos: Vector2) -> void:
 		Sfx.play("ui")
 		_refresh()
 		return
-	_toast("Nothing on display yet")
 
 
 func _unveil_stand(stand_id: String) -> void:
 	var title: String = GameState.unveil_title(stand_id)
+	var before_surge: int = 0
+	if GameState.has_method("surge_visitors"):
+		before_surge = int(GameState.call("surge_visitors"))
 	var paid: int = GameState.unveil_stand(stand_id)
 	if _canvas.has_method("play_unveil_flash"):
 		_canvas.play_unveil_flash(stand_id)
 	Sfx.play("unveil")
-	var rate: float = GameState.unveil_rush_rate()
-	if rate > 0.0:
-		_spawn_float("+$%.2f/sec" % rate, stand_id)
-		_toast(title, "+$%.2f/sec from unveiling rush" % rate)
+	var extra: int = 0
+	if GameState.has_method("surge_visitors"):
+		extra = maxi(0, int(GameState.call("surge_visitors")) - before_surge)
+	if extra > 0:
+		_spawn_float("+%d visitors" % extra, stand_id)
+		_toast(title, "+%d visitors" % extra)
 	elif paid > 0:
 		_toast(title)
 	_refresh()
@@ -385,22 +418,100 @@ func _clamp_pan(p: Vector2) -> Vector2:
 
 
 func _refresh() -> void:
-	_money.text = "$%d" % GameState.money
-	_income.text = _exhibit_income_line()
-	_rush.text = GameState.unveil_rush_line()
-	var bits: PackedStringArray = []
-	if GameState.has_any_pending_unveil():
-		var waiting: String = GameState.pending_unveil_waiting_line()
-		bits.append(waiting if not waiting.is_empty() else "A new find is waiting to be unveiled.")
-	if GameState.featured_stand_id != "":
-		bits.append("%s featured" % GameState.stand_title(GameState.featured_stand_id))
-	if bits.is_empty():
-		_note.text = _hall_status_line()
-	else:
-		_note.text = "\n".join(bits)
+	var stats: Dictionary = header_stats()
+	_apply_stat(_visitors, str(stats.get("visitors", "")), 22, Ui.GOLD)
+	_apply_stat(_visitors_cap, str(stats.get("visitors_label", "")), 11, Ui.MUTED)
+	_apply_stat(_each, str(stats.get("each_value", "")), 22, Ui.GOLD)
+	_apply_stat(_each_cap, str(stats.get("each_label", "")), 11, Ui.MUTED)
+	_apply_stat(_rate, str(stats.get("rate", "")), 22, Ui.GOLD)
+	_apply_stat(_rate_cap, str(stats.get("rate_label", "")), 11, Ui.MUTED)
+	var rush: String = str(stats.get("rush", ""))
+	if _rush != null:
+		if rush.is_empty():
+			_rush.text = ""
+			_rush.visible = false
+		else:
+			Ui.apply_copy(_rush, rush, 11, Color("FFE08A"))
+			_rush.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_rush.visible = true
 	_layout_header()
+	_layout_empty_display()
 	if _canvas.has_method("queue_redraw"):
 		_canvas.queue_redraw()
+
+
+func _apply_stat(label: Label, text: String, size: int, color: Color) -> void:
+	if label == null:
+		return
+	Ui.apply_copy(label, text, size, color)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.visible = not text.is_empty()
+
+
+func empty_display_line() -> String:
+	return "Nothing on display yet"
+
+
+func empty_display_visible() -> bool:
+	var stand_id: String = str(GameState.featured_stand_id)
+	if stand_id != "" and GameState.stand_is_filled(stand_id):
+		return false
+	return true
+
+
+func empty_display_rect() -> Rect2:
+	if not empty_display_visible():
+		return Rect2()
+	var rect := Rect2()
+	var started := false
+	for label in [_empty_lead, _empty_mid, _empty_tail]:
+		if label == null or not label.visible:
+			continue
+		var next := Rect2(label.position, label.size)
+		if not started:
+			rect = next
+			started = true
+		else:
+			rect = rect.merge(next)
+	return rect
+
+
+func _layout_empty_display() -> void:
+	var labels: Array = [_empty_lead, _empty_mid, _empty_tail]
+	var words := ["Nothing", "on display", "yet"]
+	if not empty_display_visible():
+		for label in labels:
+			if label != null:
+				label.visible = false
+		return
+	var view: Vector2 = _view()
+	var gap: float = 10.0
+	var height: float = 22.0
+	var pad: float = 18.0
+	var widths: Array[float] = []
+	var total: float = 0.0
+	for i in labels.size():
+		var label: Label = labels[i]
+		if label == null:
+			widths.append(0.0)
+			continue
+		Ui.apply_copy(label, str(words[i]), 16, Color("C8B080"))
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var sized: Vector2 = _fit_header_label(label, height)
+		var width: float = maxf(36.0, sized.x)
+		widths.append(width)
+		total += width
+	total += gap * float(maxi(words.size() - 1, 0))
+	var x: float = view.x * 0.5 - total * 0.5
+	var y: float = view.y - pad - height
+	for i in labels.size():
+		var label: Label = labels[i]
+		if label == null:
+			continue
+		label.position = Vector2(x, y)
+		label.size = Vector2(widths[i], height)
+		label.visible = true
+		x += widths[i] + gap
 
 
 func _hall_status_line() -> String:

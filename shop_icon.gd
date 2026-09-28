@@ -27,6 +27,10 @@ static func glyph_for(id: String) -> String:
 			return "click"
 		"hands_hold":
 			return "hold"
+		"hands_craft":
+			return "fossil"
+		"hands_swift":
+			return "hold"
 		"shovel_click":
 			return "shovel"
 		"shovel_hold":
@@ -35,13 +39,19 @@ static func glyph_for(id: String) -> String:
 			return "scoop"
 		"shovel_super":
 			return "super_shovel"
+		"shovel_titan":
+			return "super_shovel"
 		"shovel_soft":
 			return "soft"
 		"pick_click":
 			return "pick"
 		"pick_hold":
 			return "hold"
+		"pick_radius":
+			return "scoop"
 		"pick_super":
+			return "super_pick"
+		"pick_titan":
 			return "super_pick"
 		"pick_soft":
 			return "soft"
@@ -51,6 +61,10 @@ static func glyph_for(id: String) -> String:
 			return "super_brush"
 		"round_time":
 			return "shift"
+		"round_marathon":
+			return "shift"
+		"prime_bed":
+			return "rich"
 		"dirt_pay":
 			return "soil"
 		"site_size":
@@ -89,6 +103,14 @@ static func glyph_for(id: String) -> String:
 			return "crowds"
 		"spotlight":
 			return "spotlight"
+		"blockbuster_ticket":
+			return "gift"
+		"blockbuster_crowd":
+			return "crowds"
+		"blockbuster_hours":
+			return "shift"
+		"blockbuster_feature":
+			return "spotlight"
 		_:
 			return "click"
 
@@ -105,7 +127,7 @@ static func glyph_for_cat(cat: String) -> String:
 			return "brush"
 		"Site":
 			return "site"
-		"Exhibit":
+		"Museum":
 			return "exhibit"
 		_:
 			return "hands"
@@ -121,6 +143,8 @@ static func glyph_for_action(label: String) -> String:
 			return "wrench"
 		"End shift":
 			return "shift"
+		"Dig":
+			return "shovel"
 		_:
 			return ""
 

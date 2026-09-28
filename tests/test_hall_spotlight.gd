@@ -21,6 +21,13 @@ func _run() -> void:
 	_test_scraps_mount_in_small_finds()
 	_test_museum_click_unveils_then_spotlights()
 	_test_museum_click_unveils_small_finds()
+	_test_hall_title_is_a_wall_board()
+	_test_header_shows_visitors_each_rate_as_separate_fields()
+	_test_wall_board_is_title_and_featured()
+	_test_empty_display_sits_at_screen_bottom()
+	_test_featured_mount_hides_empty_display()
+	_test_board_does_not_own_visitor_rate_numbers()
+	_test_header_cluster_stays_in_bar_and_clear_of_nav()
 	_test_header_shows_featured_name_and_income()
 	_test_header_names_a_mounted_tooth()
 	_test_featured_small_finds_income_is_readable()
@@ -36,10 +43,14 @@ func _run() -> void:
 	_test_spotlight_rank_one_is_2x()
 	_test_spotlight_rank_two_is_3x()
 	_test_spotlight_rank_three_is_4x()
+	_test_blockbuster_featured_reaches_five_or_six()
 	_test_click_still_features_without_ranks()
 	_test_plaque_hides_mult_until_bought()
 	_test_plaque_shows_owned_mult()
 	_test_spotlight_beam_scales_with_rank()
+	_test_spotlight_is_one_cone_on_the_featured_stand()
+	_test_featured_spotlight_circle_centers_on_the_dino()
+	_test_non_featured_stand_has_no_glow_disc()
 	_test_unveil_pays_and_clears_pending()
 	_test_unveil_starts_income_spike()
 	_test_header_leads_with_rush_rate_not_cash()
@@ -85,14 +96,17 @@ func _test_empty_aisle_layout() -> void:
 	exhibit.set_script(load("res://museum_exhibit.gd"))
 	root.add_child(exhibit)
 	var layout: Dictionary = exhibit.STAND_LAYOUT
-	_assert(layout.size() == 6, "hall has six stands")
+	_assert(layout.size() == 7, "hall has seven stands")
 	_assert(layout.has("small_finds"), "Small Finds case exists")
 	_assert(str(layout["small_finds"]["title"]) == "Small Finds", "case plaque says Small Finds")
+	_assert(layout.has("plant_fossils"), "Plant Fossils case exists")
+	_assert(str(layout["plant_fossils"]["title"]) == "Plant Fossils", "plant plaque says Plant Fossils")
 	_assert(layout.has("t_rex") and layout.has("triceratops") and layout.has("velociraptor"), "far and left stands exist")
 	_assert(layout.has("brachiosaurus") and layout.has("stegosaurus"), "right stands exist")
 	_assert(str(layout["brachiosaurus"]["title"]) == "Brachiosaurus", "sauropod plaque says Brachiosaurus")
 	var t_rex: Rect2 = exhibit.stand_rect("t_rex")
 	var case_stand: Rect2 = exhibit.stand_rect("small_finds")
+	var plants: Rect2 = exhibit.stand_rect("plant_fossils")
 	var left_a: Rect2 = exhibit.stand_rect("triceratops")
 	var left_b: Rect2 = exhibit.stand_rect("velociraptor")
 	var right_a: Rect2 = exhibit.stand_rect("brachiosaurus")
@@ -102,12 +116,21 @@ func _test_empty_aisle_layout() -> void:
 	_assert(right_a.position.x > 1400.0 and right_b.position.x > 1400.0, "Brachiosaurus and Stegosaurus stay right")
 	_assert(case_stand.position.x < 400.0, "Small Finds sits on a side or end wall")
 	_assert(case_stand.position.y < 480.0, "Small Finds is an end bay, not down the aisle")
+	_assert(plants.position.x > 1400.0, "Plant Fossils sits on the opposite end wall")
+	_assert(plants.position.y < 480.0, "Plant Fossils is an end bay, not down the aisle")
+	_assert(is_equal_approx(plants.position.y, case_stand.position.y), "both end cases share the north wall")
+	_assert(left_a.position.y >= case_stand.end.y + 100.0, "Small Finds has aisle space above Triceratops")
+	_assert(right_a.position.y >= plants.end.y + 100.0, "Plant Fossils has aisle space above Brachiosaurus")
 	_assert(not case_stand.intersects(t_rex), "Small Finds does not cover T. rex")
+	_assert(not plants.intersects(t_rex), "Plant Fossils does not cover T. rex")
+	_assert(not plants.intersects(right_a), "Plant Fossils does not sit on Brachiosaurus")
 	var aisle: Rect2 = Rect2(920.0, 500.0, 160.0, 900.0)
 	_assert(not aisle.intersects(case_stand), "Small Finds leaves the aisle open")
+	_assert(not aisle.intersects(plants), "Plant Fossils leaves the aisle open")
 	_assert(not aisle.intersects(left_a) and not aisle.intersects(left_b), "left stands leave the aisle open")
 	_assert(not aisle.intersects(right_a) and not aisle.intersects(right_b), "right stands leave the aisle open")
 	_assert(exhibit.stand_id_at(case_stand.get_center()) == "small_finds", "clicking the case hits Small Finds")
+	_assert(exhibit.stand_id_at(plants.get_center()) == "plant_fossils", "clicking the plant case hits Plant Fossils")
 	exhibit.free()
 
 
@@ -119,7 +142,7 @@ func _test_museum_click_unveils_then_spotlights() -> void:
 	var pad_pos: Vector2 = _pad_pos_for_stand(mus, "triceratops")
 	mus._click_hall(pad_pos)
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "click unveils the ribboned bay")
-	_assert(int(GS.money) == int(TN.unveil_burst_clean), "click pays the cash burst")
+	_assert(int(GS.money) == 0, "click starts a crowd surge, not a cash burst")
 	_assert(float(GS.unveil_spike_left) > 0.0, "click starts the income spike")
 	mus._click_hall(pad_pos)
 	_assert(str(GS.featured_stand_id) == "triceratops", "second click spotlights the filled stand")
@@ -134,21 +157,44 @@ func _test_museum_click_unveils_small_finds() -> void:
 	var pad_pos: Vector2 = _pad_pos_for_stand(mus, "small_finds")
 	mus._click_hall(pad_pos)
 	_assert(not GS.stand_has_pending_unveil("small_finds"), "click unveils the ribboned case")
-	_assert(int(GS.money) == int(TN.unveil_burst_clean), "click pays the cash burst")
+	_assert(int(GS.money) == 0, "click starts a crowd surge, not a cash burst")
 	mus._click_hall(pad_pos)
 	_assert(str(GS.featured_stand_id) == "small_finds", "second click spotlights the case")
 	mus.free()
 
 
+func _hall_board(mus: Node) -> Dictionary:
+	if mus == null:
+		return {}
+	var exhibit: Node = mus.get("_canvas") as Node
+	if exhibit != null and exhibit.has_method("hall_board"):
+		return exhibit.call("hall_board")
+	return {}
+
+
+func _header_stats(mus: Node) -> Dictionary:
+	if mus != null and mus.has_method("header_stats"):
+		return mus.call("header_stats")
+	return {}
+
+
+func _header_cluster_rect(mus: Node) -> Rect2:
+	if mus != null and mus.has_method("header_cluster_rect"):
+		return mus.call("header_cluster_rect")
+	return Rect2()
+
+
+func _header_label(mus: Node, name: String) -> Label:
+	if mus == null:
+		return null
+	return mus.get(name) as Label
+
+
 func _header_rate(line: String) -> float:
-	var start: int = line.find("$")
-	if start < 0:
+	var amount: String = _header_amount(line)
+	if amount.is_empty():
 		return -1.0
-	var rest: String = line.substr(start + 1)
-	var end: int = rest.find(" ")
-	if end < 0:
-		return float(rest)
-	return float(rest.substr(0, end))
+	return float(amount)
 
 
 func _header_amount(line: String) -> String:
@@ -156,10 +202,10 @@ func _header_amount(line: String) -> String:
 	if start < 0:
 		return ""
 	var rest: String = line.substr(start + 1)
-	var end: int = rest.find(" ")
-	if end < 0:
-		return rest
-	return rest.substr(0, end)
+	var cut: int = rest.find(" ")
+	if cut >= 0:
+		rest = rest.substr(0, cut)
+	return rest.strip_edges()
 
 
 func _test_featured_small_finds_income_is_readable() -> void:
@@ -183,11 +229,11 @@ func _test_featured_small_finds_income_is_readable() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var line: String = str(mus._income.text)
-	_assert(line.find("$0.0 /") < 0, "header does not show $0.0 while the case earns")
-	_assert(_header_rate(line) >= 0.10, "header prints the featured case rate")
+	var line: String = str(_header_stats(mus).get("rate", ""))
+	_assert(line.find("$0.0") < 0 or line.find("$0.00") < 0, "header does not show $0.0 while the case earns")
+	_assert(_header_rate(line) >= 0.10, "the header prints the featured case rate")
 	var cents: PackedStringArray = _header_amount(line).split(".")
-	_assert(cents.size() == 2 and cents[1].length() == 2, "header shows hundredths so a live tick cannot hide")
+	_assert(cents.size() == 2 and cents[1].length() == 2, "the header shows hundredths so a live tick cannot hide")
 	mus.free()
 
 
@@ -203,9 +249,253 @@ func _test_dusty_featured_case_header_is_not_zero() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var line: String = str(mus._income.text)
-	_assert(line.find("$0.0 /") < 0, "dusty featured header is not $0.0")
+	var line: String = str(_header_stats(mus).get("rate", ""))
+	_assert(line.find("$0.00") < 0, "dusty featured header is not $0.00")
 	_assert(_header_rate(line) >= 0.05, "dusty featured header still reads as a tick")
+	mus.free()
+
+
+func _test_hall_title_is_a_wall_board() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	var exhibit: Node2D = mus._canvas
+	_assert(exhibit.has_method("hall_board"), "the hall exposes a title board")
+	_assert(exhibit.has_method("hall_board_rect"), "the title board has a wall rect")
+	if not exhibit.has_method("hall_board") or not exhibit.has_method("hall_board_rect"):
+		mus.free()
+		return
+	var card: Dictionary = exhibit.call("hall_board")
+	_assert(str(card.get("title", "")) == "FOSSIL HALL", "the board still says FOSSIL HALL")
+	_assert(str(card.get("featured_label", "")) == "Featured", "Featured is a caption")
+	_assert(str(card.get("featured", "")) == "Triceratops", "featured name is only the stand")
+	_assert(str(card.get("featured", "")).find("featured") < 0, "name is not Small Finds featured")
+	_assert(str(card.get("visitors", "")).is_empty(), "visitor count left the wall board")
+	_assert(str(card.get("rate", "")).is_empty(), "hall rate left the wall board")
+	var board: Rect2 = exhibit.call("hall_board_rect")
+	_assert(board.end.y <= 220.0, "the board stays on the north wall")
+	_assert(not board.intersects(exhibit.stand_rect("t_rex")), "the board does not cover T. rex")
+	_assert(not board.intersects(exhibit.stand_rect("small_finds")), "the board does not cover Small Finds")
+	_assert(not board.intersects(exhibit.stand_rect("plant_fossils")), "the board does not cover Plant Fossils")
+	_assert(exhibit.has_method("hall_board_featured_rect"), "the board has a featured box")
+	if exhibit.has_method("hall_board_featured_rect"):
+		var feat: Rect2 = exhibit.call("hall_board_featured_rect")
+		_assert(feat.size.y >= board.size.y * 0.5, "featured grows to fill the board")
+		_assert(feat.size.x >= board.size.x - 40.0, "featured spans the board")
+		_assert(feat.position.y <= board.position.y + 50.0, "featured starts under the title")
+	var stats: Dictionary = _header_stats(mus)
+	_assert(str(stats.get("visitors", "")).is_valid_int(), "header visitor count is a bare number")
+	_assert(str(stats.get("visitors_label", "")) == "visitors", "header visitors sits under the count")
+	_assert(str(stats.get("each_value", "")).begins_with("$"), "header donation is its own $ amount")
+	_assert(str(stats.get("each_label", "")) == "each", "header each is a caption, not glued to the $")
+	_assert(str(stats.get("rate", "")).begins_with("$"), "header hall rate is its own $ amount")
+	_assert(str(stats.get("rate_label", "")) == "/ sec", "header / sec sits under the rate")
+	mus.free()
+
+
+func _test_header_shows_visitors_each_rate_as_separate_fields() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	_assert(mus.has_method("header_stats"), "museum exposes header stats")
+	var stats: Dictionary = _header_stats(mus)
+	_assert(str(stats.get("visitors", "")).is_valid_int(), "visitor count is its own field")
+	_assert(str(stats.get("visitors_label", "")) == "visitors", "visitors is a caption, not jammed onto the count")
+	_assert(str(stats.get("each_value", "")).begins_with("$"), "donation is its own $ field")
+	_assert(str(stats.get("each_label", "")) == "each", "each is its own caption")
+	_assert(str(stats.get("rate", "")).begins_with("$"), "hall rate is its own $ field")
+	_assert(str(stats.get("rate_label", "")) == "/ sec", "/ sec is its own caption")
+	_assert(str(stats.get("rate", "")).find("visitors") < 0, "rate is not a jammed crowd sentence")
+	_assert(str(stats.get("rate", "")).find("each") < 0, "rate does not swallow each")
+	var visitors: Label = _header_label(mus, "_visitors")
+	var visitors_cap: Label = _header_label(mus, "_visitors_cap")
+	var each: Label = _header_label(mus, "_each")
+	var each_cap: Label = _header_label(mus, "_each_cap")
+	var rate: Label = _header_label(mus, "_rate")
+	var rate_cap: Label = _header_label(mus, "_rate_cap")
+	_assert(visitors != null and visitors.visible, "visitor count is its own header label")
+	_assert(visitors_cap != null and visitors_cap.visible, "visitors caption is its own header label")
+	_assert(each != null and each.visible, "donation is its own header label")
+	_assert(each_cap != null and each_cap.visible, "each caption is its own header label")
+	_assert(rate != null and rate.visible, "hall rate is its own header label")
+	_assert(rate_cap != null and rate_cap.visible, "/ sec caption is its own header label")
+	if visitors != null:
+		_assert(str(visitors.text).find("visitors") < 0, "count label is not jammed with visitors")
+		_assert(str(visitors.text).find("each") < 0, "count label is not a run-on gold sentence")
+	if rate != null:
+		_assert(str(rate.text).find("/ sec") < 0, "rate $ is not jammed with / sec")
+		_assert(str(rate.text).find("visitors") < 0, "rate label is not 166visitors")
+	mus.free()
+
+
+func _test_wall_board_is_title_and_featured() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	var exhibit: Node2D = mus._canvas
+	var card: Dictionary = _hall_board(mus)
+	_assert(str(card.get("title", "")) == "FOSSIL HALL", "the wall board keeps the hall title")
+	_assert(str(card.get("featured_label", "")) == "Featured", "the wall board keeps a Featured caption")
+	_assert(str(card.get("featured", "")) == "Triceratops", "the wall board names the featured stand")
+	_assert(exhibit.has_method("hall_board_featured_rect"), "featured has a wall box")
+	if exhibit.has_method("hall_board_featured_rect"):
+		var board: Rect2 = exhibit.call("hall_board_rect")
+		var feat: Rect2 = exhibit.call("hall_board_featured_rect")
+		_assert(feat.size.y >= board.size.y * 0.5, "featured grows to fill the wall box")
+		_assert(feat.size.x >= board.size.x - 40.0, "featured fills the board width")
+		_assert(feat.position.y >= board.position.y + 20.0, "featured sits under the title")
+		_assert(feat.end.y <= board.end.y + 0.5, "featured stays inside the board")
+	mus.free()
+
+
+func _hall_to_screen(mus: Node, hall: Rect2) -> Rect2:
+	var exhibit: Node2D = mus.get("_canvas") as Node2D
+	if exhibit == null:
+		return Rect2()
+	return Rect2(exhibit.position + hall.position * exhibit.scale, hall.size * exhibit.scale)
+
+
+func _test_empty_display_sits_at_screen_bottom() -> void:
+	_reset()
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	_assert(mus.has_method("empty_display_rect"), "museum exposes the empty-display rect")
+	if not mus.has_method("empty_display_rect"):
+		mus.free()
+		return
+	var status: Rect2 = mus.call("empty_display_rect")
+	var view: Vector2 = mus._view()
+	var exhibit: Node2D = mus._canvas
+	var board: Rect2 = exhibit.call("hall_board_rect")
+	_assert(status.size.x > 1.0 and status.size.y > 1.0, "empty display has size")
+	_assert(status.position.y >= view.y * 0.75, "empty display sits in the lower quarter of the museum view")
+	_assert(status.end.y <= view.y + 0.5, "empty display stays on the museum view")
+	_assert(status.position.y > float(mus.HEADER_H), "empty display stays under the header")
+	_assert(absf(status.get_center().x - view.x * 0.5) <= 24.0, "empty display is centered on the view")
+	_assert(not status.intersects(board), "empty display is not painted on the FOSSIL HALL board")
+	_assert(not status.intersects(_hall_to_screen(mus, board)), "empty display does not cover Featured")
+	_assert(not status.intersects(_hall_to_screen(mus, exhibit.stand_rect("t_rex"))), "empty display does not cover T. rex")
+	for bench in exhibit.call("hall_bench_rects"):
+		_assert(not status.intersects(_hall_to_screen(mus, bench)), "empty display does not cover a bench")
+	_assert(mus.has_method("empty_display_line"), "museum exposes the empty-display line")
+	var line: String = str(mus.call("empty_display_line")) if mus.has_method("empty_display_line") else ""
+	_assert(line.find("Nothing") >= 0 and line.find("on display") >= 0 and line.find("yet") >= 0, "empty display says Nothing on display yet")
+	_assert(str(_hall_board(mus).get("status", "")).find("Nothing on display") < 0, "the wall board does not own the bottom line")
+	var words: PackedStringArray = PackedStringArray()
+	for name in ["_empty_lead", "_empty_mid", "_empty_tail"]:
+		var label: Label = mus.get(name) as Label
+		if label != null and label.visible and not str(label.text).is_empty():
+			words.append(str(label.text))
+	_assert(words.size() >= 2, "empty display keeps words on separate labels")
+	if words.size() >= 2:
+		_assert(" ".join(words).find("Nothing") >= 0, "split labels still say Nothing")
+		_assert(" ".join(words).find("yet") >= 0, "split labels still say yet")
+	mus.free()
+
+
+func _test_featured_mount_hides_empty_display() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	_assert(mus.has_method("empty_display_rect"), "museum still exposes the empty-display rect")
+	var status: Rect2 = mus.call("empty_display_rect") if mus.has_method("empty_display_rect") else Rect2()
+	_assert(status.size == Vector2.ZERO, "featured mount hides Nothing on display yet")
+	var card: Dictionary = _hall_board(mus)
+	_assert(str(card.get("featured_label", "")) == "Featured", "board keeps Featured")
+	_assert(str(card.get("featured", "")) == "Triceratops", "board names Triceratops")
+	_assert(str(card.get("status", "")).find("Nothing") < 0, "board does not also say Nothing on display yet")
+	var exhibit: Node2D = mus._canvas
+	_assert(exhibit.call("hall_hours_rect").size == Vector2.ZERO, "Hours stays off the board")
+	mus._click_hall(_pad_pos_for_stand(mus, "velociraptor"))
+	var after: Rect2 = mus.call("empty_display_rect") if mus.has_method("empty_display_rect") else Rect2()
+	_assert(after.size == Vector2.ZERO, "empty-stand click does not summon the line over Featured")
+	var banner: Label = mus.get("_banner") as Label
+	if banner != null and banner.visible:
+		_assert(str(banner.text).find("Nothing on display") < 0, "toast does not reprint Nothing on display yet over Featured")
+	mus.free()
+
+
+func _test_board_does_not_own_visitor_rate_numbers() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	mus._refresh()
+	var card: Dictionary = _hall_board(mus)
+	_assert(str(card.get("visitors", "")).is_empty(), "the wall board does not own the visitor count")
+	_assert(str(card.get("visitors_label", "")).is_empty(), "the wall board does not own the visitors caption")
+	_assert(str(card.get("each_value", "")).is_empty(), "the wall board does not own $ each")
+	_assert(str(card.get("each_label", "")).is_empty(), "the wall board does not own the each caption")
+	_assert(str(card.get("rate", "")).is_empty(), "the wall board does not own hall $/sec")
+	_assert(str(card.get("rate_label", "")).is_empty(), "the wall board does not own / sec")
+	_assert(str(card.get("rush", "")).is_empty(), "crowd surge left the wall board")
+	var stats: Dictionary = _header_stats(mus)
+	_assert(str(stats.get("visitors", "")).is_valid_int(), "the header owns the visitor count")
+	_assert(str(stats.get("rate", "")).begins_with("$"), "the header owns hall $/sec")
+	mus.free()
+
+
+func _test_header_cluster_stays_in_bar_and_clear_of_nav() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_stand("triceratops")
+	GS.set_featured_stand("triceratops")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	var settings: Node = root.get_node_or_null("Settings")
+	if settings != null:
+		if settings.has_method("set_nav_visible"):
+			settings.call("set_nav_visible", true)
+		if settings.has_method("set_nav_context"):
+			settings.call("set_nav_context", "museum")
+		if settings.has_method("_layout_nav_chrome"):
+			settings.call("_layout_nav_chrome")
+	mus._refresh()
+	_assert(mus.has_method("header_cluster_rect"), "museum exposes the header cluster")
+	var cluster: Rect2 = _header_cluster_rect(mus)
+	_assert(cluster.size.x > 1.0 and cluster.size.y > 1.0, "header cluster has size")
+	_assert(cluster.position.y >= 0.0, "header cluster starts in the bar")
+	_assert(cluster.end.y <= float(mus.HEADER_H) + 0.5, "header cluster stays in HEADER_H")
+	_assert(is_equal_approx(float(mus.HEADER_H), 86.0), "museum header stays 86px")
+	if settings != null:
+		if settings.has_method("overlay_content_left"):
+			_assert(cluster.position.x >= float(settings.call("overlay_content_left")) - 0.5, "cluster stays right of the wallet")
+		if settings.has_method("overlay_content_right"):
+			_assert(cluster.end.x <= float(settings.call("overlay_content_right")) + 0.5, "cluster stays left of Dig/Upgrades/Menu")
+		var nav: Control = settings.get("_nav_bar") as Control
+		_assert(nav != null, "hall nav lives in the shared header")
+		if nav != null:
+			var nav_r: Rect2 = Rect2(nav.global_position, nav.size)
+			_assert(cluster.end.x <= nav_r.position.x - 4.0, "header cluster stays clear of Dig/Upgrades/Menu")
+			_assert(not cluster.intersects(nav_r), "header cluster does not cover the overlay nav")
+		var back: Control = settings.get("_back_btn") as Control
+		_assert(back == null or not back.visible, "hall overlay drops Back")
 	mus.free()
 
 
@@ -217,8 +507,9 @@ func _test_header_names_a_mounted_tooth() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	_assert(str(mus._note.text).find("waiting") < 0, "a mounted tooth is not an empty hall")
-	_assert(str(mus._note.text).find("dusty") >= 0, "header admits the tooth is dusty")
+	var card: Dictionary = _hall_board(mus)
+	_assert(str(card.get("status", "")).find("waiting") < 0, "a mounted tooth is not an empty hall")
+	_assert(str(card.get("status", "")).find("dusty") >= 0, "the title board admits the tooth is dusty")
 	mus.free()
 
 
@@ -231,8 +522,10 @@ func _test_header_shows_featured_name_and_income() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	_assert(str(mus._note.text).find("Triceratops") >= 0, "header names the featured stand")
-	_assert(str(mus._income.text).find("$") >= 0, "header shows exhibit income")
+	var card: Dictionary = _hall_board(mus)
+	var stats: Dictionary = _header_stats(mus)
+	_assert(str(card.get("featured", "")).find("Triceratops") >= 0, "the title board names the featured stand")
+	_assert(str(stats.get("rate", "")).find("$") >= 0, "the header shows exhibit income")
 	mus.free()
 
 
@@ -414,8 +707,8 @@ func _test_empty_stands_never_pending() -> void:
 func _test_duplicate_does_not_reflag_after_unveil() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
-	var burst: int = int(GS.unveil_stand("triceratops"))
-	_assert(burst > 0, "first unveil pays")
+	GS.unveil_stand("triceratops")
+	_assert(int(GS.call("surge_visitors")) > 0, "first unveil packs a crowd")
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "ribbon is gone after unveil")
 	var money_after: int = int(GS.money)
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
@@ -501,6 +794,20 @@ func _test_spotlight_rank_three_is_4x() -> void:
 	_assert(is_equal_approx(float(GS.stand_income("triceratops")), skull * 4.0), "rank 3 featured stand reads as 4x")
 
 
+func _test_blockbuster_featured_reaches_five_or_six() -> void:
+	_reset()
+	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	GS.unveil_spike_left = 0.0
+	var skull: float = float(GS.piece_income("triceratops_skull"))
+	_set_spotlight_rank(3)
+	GS.levels["blockbuster_feature"] = 2
+	GS.apply_upgrades()
+	GS.set_featured_stand("triceratops")
+	_assert(float(TN.spotlight_mult) >= 5.0, "Blockbuster featured ranks reach at least 5x")
+	_assert(float(TN.spotlight_mult) <= 6.0, "Blockbuster featured ranks stay at or under 6x")
+	_assert(float(GS.stand_income("triceratops")) >= skull * 5.0 - 0.0001, "featured stand pays at least 5x after Blockbuster")
+
+
 func _test_click_still_features_without_ranks() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
@@ -565,6 +872,190 @@ func _test_spotlight_beam_scales_with_rank() -> void:
 	exhibit.free()
 
 
+func _test_spotlight_is_one_cone_on_the_featured_stand() -> void:
+	_reset()
+	GS.install_find("brachiosaurus_skull", "Brachiosaurus Skull", 1.0, true)
+	GS.unveil_stand("brachiosaurus")
+	GS.set_featured_stand("brachiosaurus")
+	_set_spotlight_rank(3)
+	GS.levels["lighting"] = 5
+	GS.apply_upgrades()
+	var exhibit: Node2D = Node2D.new()
+	exhibit.set_script(load("res://museum_exhibit.gd"))
+	root.add_child(exhibit)
+	_assert(exhibit.has_method("hall_spotlight_cones"), "exhibit exposes spotlight cones")
+	_assert(exhibit.has_method("hall_spotlight_discs"), "exhibit exposes spotlight discs")
+	if not exhibit.has_method("hall_spotlight_cones") or not exhibit.has_method("hall_spotlight_discs"):
+		exhibit.free()
+		return
+	var cones: Array = exhibit.call("hall_spotlight_cones")
+	var discs: Array = exhibit.call("hall_spotlight_discs")
+	_assert(cones.size() == 1, "featured stand gets one spotlight cone")
+	_assert(discs.size() == 1, "featured stand gets one spotlight disc")
+	var board: Rect2 = exhibit.call("hall_board_rect")
+	var feat: Rect2 = exhibit.call("hall_board_featured_rect")
+	var stand: Rect2 = exhibit.stand_rect("brachiosaurus")
+	var cone: PackedVector2Array = cones[0]
+	_assert(cone.size() == 3, "the spotlight cone is a single triangle")
+	var cone_box: Rect2 = _poly_bbox(cone)
+	_assert(cone_box.intersects(stand), "the spotlight cone hits the featured stand")
+	_assert(not cone_box.intersects(board), "the spotlight cone stays off the FOSSIL HALL board")
+	_assert(not cone_box.intersects(feat), "the spotlight cone stays off the Featured name")
+	if exhibit.has_method("hall_lamp_discs"):
+		for glow in exhibit.call("hall_lamp_discs"):
+			_assert(not feat.intersects(glow), "lamp glow stays off the Featured name while a stand is lit")
+			_assert(not board.encloses(glow), "no lamp blob sits on the FOSSIL HALL board")
+	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true)
+	GS.unveil_stand("t_rex")
+	GS.set_featured_stand("t_rex")
+	var rex_cones: Array = exhibit.call("hall_spotlight_cones")
+	_assert(rex_cones.size() == 1, "T. rex still gets one spotlight cone")
+	var rex_box: Rect2 = _poly_bbox(rex_cones[0])
+	_assert(rex_box.intersects(exhibit.stand_rect("t_rex")), "T. rex cone still hits its stand")
+	_assert(not rex_box.intersects(board), "T. rex cone does not wash the hall board")
+	exhibit.free()
+
+
+func _test_featured_spotlight_circle_centers_on_the_dino() -> void:
+	_reset()
+	GS.install_find("stegosaurus_skull", "Stegosaurus Skull", 1.0, true)
+	GS.unveil_stand("stegosaurus")
+	GS.set_featured_stand("stegosaurus")
+	_set_spotlight_rank(3)
+	GS.levels["lighting"] = 5
+	GS.apply_upgrades()
+	var exhibit: Node2D = Node2D.new()
+	exhibit.set_script(load("res://museum_exhibit.gd"))
+	root.add_child(exhibit)
+	_assert(exhibit.has_method("hall_spotlight_discs"), "exhibit exposes spotlight discs")
+	_assert(exhibit.has_method("hall_spotlight_cones"), "exhibit exposes spotlight cones")
+	if not exhibit.has_method("hall_spotlight_discs") or not exhibit.has_method("hall_spotlight_cones"):
+		exhibit.free()
+		return
+	var discs: Array = exhibit.call("hall_spotlight_discs")
+	var cones: Array = exhibit.call("hall_spotlight_cones")
+	_assert(discs.size() == 1, "fully upgraded featured stand gets exactly one spotlight disc")
+	_assert(cones.size() == 1, "fully upgraded featured stand still gets one cone")
+	if discs.is_empty() or cones.is_empty():
+		exhibit.free()
+		return
+	var mount: Rect2 = _stand_mount_rect(exhibit, "stegosaurus")
+	var content: Vector2 = mount.get_center()
+	var disc: Rect2 = discs[0]
+	_assert(disc.get_center().distance_to(content) <= 16.0, "spotlight disc is centered on the dinosaur")
+	_assert(mount.has_point(disc.get_center()), "spotlight disc sits on the silhouette, not the plaque or top frame")
+	_assert(not exhibit.call("plaque_rect", "stegosaurus").has_point(disc.get_center()), "spotlight disc is not parked on the plaque")
+	var board: Rect2 = exhibit.call("hall_board_rect")
+	var feat: Rect2 = exhibit.call("hall_board_featured_rect")
+	_assert(not disc.intersects(board), "spotlight disc stays off the FOSSIL HALL board")
+	_assert(not feat.intersects(disc), "spotlight disc stays off the Featured name")
+	var cone: PackedVector2Array = cones[0]
+	_assert(cone.size() == 3, "the spotlight cone is a single triangle")
+	_assert(absf(cone[0].x - content.x) <= 8.0, "cone apex is aimed at the dinosaur")
+	_assert(cone[0].y < mount.position.y, "cone apex sits above the stand")
+	_assert(_point_in_triangle(content, cone), "cone covers the dinosaur center")
+	_assert(cone[1].distance_to(content) <= 100.0, "cone left base aims at the dinosaur, not the stand rim")
+	_assert(cone[2].distance_to(content) <= 100.0, "cone right base aims at the dinosaur, not the stand rim")
+	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true)
+	GS.unveil_stand("t_rex")
+	_assert(exhibit.call("hall_spotlight_discs").size() == 1, "4x does not spawn extra discs on other stands")
+	_assert_no_glow_disc_on_stand(exhibit, "t_rex")
+	GS.set_featured_stand("t_rex")
+	var rex_discs: Array = exhibit.call("hall_spotlight_discs")
+	_assert(rex_discs.size() == 1, "featuring T. rex still yields one disc")
+	if not rex_discs.is_empty():
+		var rex_content: Vector2 = _stand_mount_rect(exhibit, "t_rex").get_center()
+		_assert((rex_discs[0] as Rect2).get_center().distance_to(rex_content) <= 16.0, "T. rex disc is centered on its silhouette")
+	_assert_no_glow_disc_on_stand(exhibit, "stegosaurus")
+	exhibit.free()
+
+
+func _stand_mount_rect(exhibit: Node2D, stand_id: String) -> Rect2:
+	if exhibit.has_method("stand_mount_rect"):
+		return exhibit.call("stand_mount_rect", stand_id)
+	var stand: Rect2 = exhibit.stand_rect(stand_id)
+	return Rect2(stand.position + Vector2(22.0, 16.0), stand.size - Vector2(44.0, 54.0))
+
+
+func _point_in_triangle(pt: Vector2, tri: PackedVector2Array) -> bool:
+	if tri.size() < 3:
+		return false
+	var v0: Vector2 = tri[2] - tri[0]
+	var v1: Vector2 = tri[1] - tri[0]
+	var v2: Vector2 = pt - tri[0]
+	var dot00: float = v0.dot(v0)
+	var dot01: float = v0.dot(v1)
+	var dot02: float = v0.dot(v2)
+	var dot11: float = v1.dot(v1)
+	var dot12: float = v1.dot(v2)
+	var inv: float = 1.0 / (dot00 * dot11 - dot01 * dot01)
+	var u: float = (dot11 * dot02 - dot01 * dot12) * inv
+	var v: float = (dot00 * dot12 - dot01 * dot02) * inv
+	return u >= -0.02 and v >= -0.02 and (u + v) <= 1.02
+
+
+func _test_non_featured_stand_has_no_glow_disc() -> void:
+	_reset()
+	GS.install_find("brachiosaurus_skull", "Brachiosaurus Skull", 1.0, true)
+	GS.unveil_stand("brachiosaurus")
+	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true)
+	GS.unveil_stand("t_rex")
+	GS.set_featured_stand("t_rex")
+	_set_spotlight_rank(3)
+	GS.levels["lighting"] = 5
+	GS.apply_upgrades()
+	var exhibit: Node2D = Node2D.new()
+	exhibit.set_script(load("res://museum_exhibit.gd"))
+	root.add_child(exhibit)
+	_assert(str(exhibit.call("plaque_title_for", "brachiosaurus")) == "Brachiosaurus", "non-featured plaque is Brachiosaurus with no multiplier")
+	_assert(exhibit.has_method("hall_platform_glow_discs"), "exhibit exposes platform glow discs")
+	if not exhibit.has_method("hall_platform_glow_discs"):
+		exhibit.free()
+		return
+	var cones: Array = exhibit.call("hall_spotlight_cones")
+	_assert(cones.size() == 1, "featured T. rex still gets exactly one spotlight cone")
+	var rex_box: Rect2 = _poly_bbox(cones[0])
+	_assert(rex_box.intersects(exhibit.stand_rect("t_rex")), "featured cone still hits T. rex")
+	_assert_no_glow_disc_on_stand(exhibit, "brachiosaurus")
+	GS.featured_stand_id = ""
+	_assert(exhibit.call("hall_spotlight_cones").is_empty(), "empty featured list draws no cone")
+	_assert_no_glow_disc_on_stand(exhibit, "brachiosaurus")
+	_assert_no_glow_disc_on_stand(exhibit, "t_rex")
+	exhibit.free()
+
+
+func _assert_no_glow_disc_on_stand(exhibit: Node2D, stand_id: String) -> void:
+	var interior: Rect2 = exhibit.stand_rect(stand_id).grow(-24.0)
+	_assert(interior.size.x > 40.0 and interior.size.y > 40.0, "%s stand interior is large enough to test" % stand_id)
+	var hits: int = 0
+	for disc in _stand_glow_discs(exhibit):
+		if interior.intersects(disc):
+			hits += 1
+	_assert(hits == 0, "non-featured %s has no spotlight/glow disc on the mount" % stand_id)
+
+
+func _stand_glow_discs(exhibit: Node2D) -> Array:
+	var discs: Array = []
+	if exhibit.has_method("hall_spotlight_discs"):
+		discs.append_array(exhibit.call("hall_spotlight_discs"))
+	if exhibit.has_method("hall_platform_glow_discs"):
+		discs.append_array(exhibit.call("hall_platform_glow_discs"))
+	if exhibit.has_method("hall_lamp_discs"):
+		discs.append_array(exhibit.call("hall_lamp_discs"))
+	if exhibit.has_method("hall_lamp_pools"):
+		discs.append_array(exhibit.call("hall_lamp_pools"))
+	return discs
+
+
+func _poly_bbox(pts: PackedVector2Array) -> Rect2:
+	if pts.is_empty():
+		return Rect2()
+	var box := Rect2(pts[0], Vector2.ZERO)
+	for pt in pts:
+		box = box.expand(pt)
+	return box
+
+
 func _set_spotlight_rank(rank: int) -> void:
 	if GS._item("spotlight").is_empty():
 		return
@@ -576,8 +1067,8 @@ func _test_unveil_pays_and_clears_pending() -> void:
 	_reset()
 	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
 	var paid: int = int(GS.unveil_stand("triceratops"))
-	_assert(paid == int(TN.unveil_burst_clean), "clean unveil pays the clean burst")
-	_assert(int(GS.money) == paid, "burst comes from the same money bank")
+	_assert(paid == 0, "unveil does not drop a cash burst")
+	_assert(int(GS.money) == 0, "the bank stays on the visitor tick")
 	_assert(not GS.stand_has_pending_unveil("triceratops"), "pending flag is cleared")
 	_assert(int(GS.unveil_stand("triceratops")) == 0, "second unveil pays nothing")
 
@@ -609,7 +1100,7 @@ func _test_header_leads_with_rush_rate_not_cash() -> void:
 	mus.visible = true
 	mus._refresh()
 	var line: String = _header_rush_text(mus)
-	_assert(line.find("+$") >= 0 and line.find("/sec") >= 0, "header leads with the rush $/sec")
+	_assert(line.find("visitor") >= 0, "header leads with the extra visitors")
 	_assert(line.find("×2") >= 0 or line.find("x2") >= 0, "header shows stacked rush")
 	_assert(line.find("s") >= 0, "header shows the rush timer")
 	_assert(line.find("+$40") < 0, "header does not lead with the cash burst")
@@ -617,9 +1108,7 @@ func _test_header_leads_with_rush_rate_not_cash() -> void:
 
 
 func _header_rush_text(mus: Node) -> String:
-	if mus.get("_rush") != null:
-		return str(mus._rush.text)
-	return str(mus._income.text)
+	return str(_header_stats(mus).get("rush", ""))
 
 
 func _test_header_splits_rush_waiting_and_featured() -> void:
@@ -632,32 +1121,21 @@ func _test_header_splits_rush_waiting_and_featured() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var income: String = str(mus._income.text)
-	var rush: String = _header_rush_text(mus)
-	var note: String = str(mus._note.text)
-	_assert(income.find("/ sec from the exhibit") >= 0, "income line still names the exhibit rate")
-	_assert(income.find("Unveil") < 0, "income line does not swallow the rush")
-	_assert(income.find("waiting") < 0, "income line does not swallow the waiting hint")
-	_assert(income.find("featured") < 0, "income line does not swallow the featured name")
-	_assert(rush.find("Unveil rush") >= 0, "rush sits on its own line")
-	_assert(rush.find("+$") >= 0 and rush.find("s") >= 0, "rush line keeps the bonus and timer")
-	_assert(note.find("1 unveil waiting") >= 0, "waiting hint is a short count")
-	_assert(note.find("Tail") < 0, "header does not name the waiting bone")
-	_assert(note.find("Unveil") < 0, "header is not a stand CTA")
-	_assert(note.find("T waiting") < 0, "waiting hint is not clipped to T waiting")
-	_assert(note.find("Velociraptor") >= 0 and note.find("featured") >= 0, "featured name stays in the header")
-	_assert(note.find("\n") >= 0, "waiting and featured are stacked, not one smashed line")
-	_assert(bool(mus._note.clip_text), "header note clips overflow")
-	_assert(int(mus._note.text_overrun_behavior) == TextServer.OVERRUN_TRIM_ELLIPSIS, "header note ellipsizes overflow")
-	_assert(int(mus._note.max_lines_visible) == 2, "header note stays two lines")
-	_assert(income.find(note.strip_edges()) < 0, "note copy is not jammed onto the income line")
-	var money_r: Rect2 = Rect2(mus._money.position, mus._money.size)
-	var income_r: Rect2 = Rect2(mus._income.position, mus._income.size)
-	var note_r: Rect2 = Rect2(mus._note.position, mus._note.size)
-	_assert(money_r.size.x > 1.0 and income_r.size.x > 1.0 and note_r.size.x > 1.0, "header clusters have laid-out sizes")
-	_assert(not money_r.intersects(income_r), "exhibit rate does not overlap $")
-	_assert(not income_r.intersects(note_r), "exhibit rate does not overlap the right-side stack")
-	_assert(income_r.position.y + income_r.size.y <= note_r.position.y + note_r.size.y + 1.0, "header rows stay inside the bar")
+	var card: Dictionary = _hall_board(mus)
+	var stats: Dictionary = _header_stats(mus)
+	var exhibit: Node2D = mus._canvas
+	_assert(str(stats.get("visitors_label", "")) == "visitors", "the header names visitors")
+	_assert(str(stats.get("rate_label", "")) == "/ sec", "the header names / sec")
+	_assert(str(stats.get("rate", "")).find("Unveil") < 0, "the rate does not swallow the rush")
+	_assert(str(stats.get("rate", "")).find("waiting") < 0, "the rate does not swallow the waiting hint")
+	_assert(str(stats.get("rate", "")).find("featured") < 0, "the rate does not swallow the featured name")
+	_assert(str(stats.get("rush", "")).find("Crowd surge") >= 0, "rush sits in the header cluster")
+	_assert(str(stats.get("rush", "")).find("visitor") >= 0 and str(stats.get("rush", "")).find("s") >= 0, "rush keeps the extra crowd and timer")
+	_assert(str(card.get("featured", "")).find("Velociraptor") >= 0, "featured name stays on the board")
+	_assert(str(card.get("featured_label", "")) == "Featured", "Featured is a caption on the wall board")
+	_assert(str(card.get("featured", "")).find("featured") < 0, "the stand name is not jammed into featured")
+	_assert(str(exhibit.call("ribbon_prompt", "t_rex")).find("Tail") >= 0, "waiting bones stay on the stand ribbon")
+	_assert(mus.get("_money") == null, "the hall does not host a second bank")
 	mus.free()
 
 
@@ -674,14 +1152,13 @@ func _test_header_counts_pending_unveils() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var note: String = str(mus._note.text)
-	_assert(note.find("5 unveils waiting") >= 0, "header counts pending unveils")
-	_assert(note.find("Brachiosaurus") < 0, "header does not list Brachiosaurus Skull")
-	_assert(note.find("Stegosaurus") < 0, "header does not list Stegosaurus pieces")
-	_assert(note.find("Tooth") < 0 and note.find("Vertebra") < 0, "header does not list Triceratops bones")
-	_assert(note.find("Triceratops featured") >= 0, "featured stays its own short line")
-	_assert(note.find("Triceratopsfeatured") < 0, "featured keeps the space before featured")
-	_assert(note.find("\n") >= 0, "waiting and featured stay stacked")
+	var card: Dictionary = _hall_board(mus)
+	_assert(str(card.get("featured", "")).find("Triceratops") >= 0, "the board names the featured stand")
+	_assert(str(card.get("featured", "")).find("Brachiosaurus") < 0, "the board does not list Brachiosaurus Skull")
+	_assert(str(card.get("featured", "")).find("Stegosaurus") < 0, "the board does not list Stegosaurus pieces")
+	_assert(str(card.get("featured", "")).find("Tooth") < 0 and str(card.get("featured", "")).find("Vertebra") < 0, "the board does not list Triceratops bones")
+	_assert(str(card.get("featured_label", "")) == "Featured", "Featured stays its own caption")
+	_assert(str(GS.pending_unveil_waiting_line()) == "5 unveils waiting", "waiting count still exists for ribbons")
 	var exhibit: Node2D = mus._canvas
 	if exhibit.has_method("ribbon_prompt"):
 		var ribbon: String = str(exhibit.call("ribbon_prompt", "brachiosaurus"))
@@ -699,22 +1176,15 @@ func _test_header_copy_keeps_word_spaces() -> void:
 	root.add_child(mus)
 	mus.visible = true
 	mus._refresh()
-	var income: String = str(mus._income.text)
-	var note: String = str(mus._note.text)
-	var money: String = str(mus._money.text)
-	_assert(money == "$388276", "wallet stays a dollar amount")
-	_assert(income.find("$") >= 0 and income.find(" / sec from the exhibit") >= 0, "rate keeps spaces around / sec from the exhibit")
-	_assert(income.find("/secfrom") < 0, "rate is not jammed into /secfromtheexhibit")
-	_assert(note.find("Triceratops featured") >= 0, "featured line keeps the space")
-	_assert(note.find("Triceratopsfeatured") < 0, "featured is not jammed into Triceratopsfeatured")
-	var font: Font = mus._income.get_theme_font("font")
-	var sized: int = mus._income.get_theme_font_size("font_size")
-	if font != null:
-		var with_space: float = font.get_string_size("a b", HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
-		var jammed: float = font.get_string_size("ab", HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
-		_assert(with_space > jammed + 1.0, "catalog font still advances on a word space")
-		var rate_w: float = font.get_string_size(income, HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
-		_assert(mus._income.size.x + 0.5 >= rate_w, "rate label is wide enough to keep its spaces")
+	var card: Dictionary = _hall_board(mus)
+	var stats: Dictionary = _header_stats(mus)
+	_assert(mus.get("_money") == null, "the hall does not print a second bank $")
+	_assert(str(stats.get("rate", "")).begins_with("$"), "rate is a $ amount")
+	_assert(str(stats.get("rate_label", "")) == "/ sec", " / sec is a caption, not jammed onto the $")
+	_assert(str(card.get("featured", "")) == "Triceratops", "featured name is only the stand")
+	_assert(str(card.get("featured_label", "")) == "Featured", "Featured is not jammed into Triceratopsfeatured")
+	_assert(str(stats.get("visitors", "")).is_valid_int(), "visitor count is not glued to the word visitors")
+	_assert(str(stats.get("visitors_label", "")) == "visitors", "visitors is its own word")
 	mus.free()
 
 
@@ -727,30 +1197,86 @@ func _test_header_cluster_is_centered_in_the_bar() -> void:
 	var mus: Node = (load("res://museum.gd") as GDScript).new()
 	root.add_child(mus)
 	mus.visible = true
+	var settings: Node = root.get_node_or_null("Settings")
+	if settings != null:
+		if settings.has_method("set_nav_visible"):
+			settings.call("set_nav_visible", true)
+		if settings.has_method("set_nav_context"):
+			settings.call("set_nav_context", "museum")
+		if settings.has_method("_layout_nav_chrome"):
+			settings.call("_layout_nav_chrome")
 	mus._refresh()
 	var view: Vector2 = mus._view()
-	var back_r: Rect2 = Rect2(mus._back.position, mus._back.size)
-	var money_r: Rect2 = _header_text_rect(mus._money)
-	var income_r: Rect2 = _header_text_rect(mus._income)
-	var rush_r: Rect2 = _header_text_rect(mus._rush) if mus._rush != null and bool(mus._rush.visible) else Rect2()
-	var note_r: Rect2 = _header_text_rect(mus._note)
-	var mid_r: Rect2 = income_r.merge(rush_r) if rush_r.size.x > 0.0 else income_r
-	var cluster: Rect2 = money_r.merge(mid_r).merge(note_r)
-	var left: float = back_r.end.x
-	var right: float = view.x
-	var avail_center: float = (left + right) * 0.5
-	var gap_rate: float = mid_r.position.x - money_r.end.x
-	var gap_note: float = note_r.position.x - mid_r.end.x
-	_assert(money_r.size.x > 1.0 and income_r.size.x > 1.0 and note_r.size.x > 1.0, "header text has measurable width")
-	_assert(not cluster.intersects(back_r), "header cluster stays clear of Back")
-	_assert(cluster.position.x >= left + 8.0, "cluster is not jammed against Back")
-	_assert(gap_rate >= 8.0 and gap_rate <= 36.0, "wallet and rate sit in one cluster, not a left jam")
-	_assert(gap_note >= 8.0 and gap_note <= 36.0, "rate and featured sit in one cluster, not a far-right dump")
-	_assert(absf(cluster.get_center().x - avail_center) <= 24.0, "wallet + rate + featured sit in the remaining bar center")
-	_assert(cluster.end.y <= mus.HEADER_H + 1.0, "centered cluster stays inside the 86px header")
-	_assert(str(mus._income.text).find(" / sec from the exhibit") >= 0, "centered rate keeps readable spaces")
-	_assert(str(mus._note.text).find("Triceratops featured") >= 0, "centered featured keeps its space")
+	var exhibit: Node2D = mus._canvas
+	var board: Rect2 = exhibit.call("hall_board_rect")
+	var cluster: Rect2 = _header_cluster_rect(mus)
+	_assert(mus.get("_money") == null, "header cluster has no second bank $")
+	_assert(mus.get("_back") == null, "the hall does not host its own Back")
+	_assert(is_equal_approx(board.get_center().x, 1000.0), "the title board stays on the hall axis")
+	_assert(board.end.y <= 220.0, "the title board stays on the north wall")
+	_assert(cluster.size.x > 1.0, "header cluster is in the chrome bar")
+	_assert(cluster.end.y <= float(mus.HEADER_H) + 0.5, "header cluster stays in HEADER_H")
+	if settings != null:
+		var nav: Control = settings.get("_nav_bar") as Control
+		_assert(nav != null, "hall overlay nav lives in the shared header")
+		if nav != null:
+			var nav_r: Rect2 = Rect2(nav.global_position, nav.size)
+			_assert(nav_r.position.x >= view.x * 0.45, "hall overlay nav sits on the right")
+			_assert(nav_r.position.y <= 16.0, "hall overlay nav sits in the header")
+			_assert(cluster.end.x <= nav_r.position.x - 4.0, "header cluster stays clear of Dig/Upgrades/Menu")
+		if settings.has_method("overlay_content_right"):
+			_assert(cluster.end.x <= float(settings.call("overlay_content_right")) + 0.5, "overlay_content_right reserves the wider nav cluster")
+		_assert_header_stats_centered_in_gutter(mus, settings)
+	_assert(str(_header_stats(mus).get("rate_label", "")) == "/ sec", "header rate caption keeps the space")
+	_assert(str(_hall_board(mus).get("featured", "")) == "Triceratops", "board featured keeps its own word")
 	mus.free()
+
+
+func _assert_header_stats_centered_in_gutter(mus: Node, settings: Node) -> void:
+	var left: float = 16.0
+	var right: float = mus._view().x - 16.0
+	if settings != null and settings.has_method("overlay_content_left"):
+		left = float(settings.call("overlay_content_left"))
+	if settings != null and settings.has_method("overlay_content_right"):
+		right = float(settings.call("overlay_content_right"))
+	var header_mid: float = mus._view().x * 0.5
+	var text_cluster := Rect2()
+	var started := false
+	var pairs: Array = [
+		["_visitors", "_visitors_cap", "visitors"],
+		["_each", "_each_cap", "each"],
+		["_rate", "_rate_cap", "rate"],
+	]
+	for pair in pairs:
+		var value: Label = _header_label(mus, str(pair[0]))
+		var caption: Label = _header_label(mus, str(pair[1]))
+		var name: String = str(pair[2])
+		_assert(value != null and caption != null, "%s pair exists in the header" % name)
+		if value == null or caption == null:
+			continue
+		var value_text: Rect2 = _header_text_rect(value)
+		var cap_text: Rect2 = _header_text_rect(caption)
+		_assert(value_text.size.x > 1.0 and cap_text.size.x > 1.0, "%s number and word have text" % name)
+		_assert(int(value.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "%s number is center-aligned" % name)
+		_assert(int(caption.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "%s word is center-aligned" % name)
+		_assert(value.size.x + 0.5 >= maxf(value_text.size.x, cap_text.size.x), "%s column is wide enough to center the shorter line" % name)
+		_assert(caption.size.x + 0.5 >= maxf(value_text.size.x, cap_text.size.x), "%s word box matches the column so it can center" % name)
+		_assert(absf(value.position.x - caption.position.x) <= 0.5, "%s number and word share a column left" % name)
+		_assert(absf(value.size.x - caption.size.x) <= 0.5, "%s number and word share a column width" % name)
+		_assert(absf(value_text.get_center().x - cap_text.get_center().x) <= 2.0, "%s number and word are centered as a unit" % name)
+		var pair_text: Rect2 = value_text.merge(cap_text)
+		if not started:
+			text_cluster = pair_text
+			started = true
+		else:
+			text_cluster = text_cluster.merge(pair_text)
+	_assert(started, "visitor and money text sit in the header gutter")
+	if started:
+		_assert(text_cluster.position.x >= left - 0.5, "header stats stay right of the wallet")
+		_assert(text_cluster.end.x <= right + 0.5, "header stats stay left of Dig/Upgrades/Menu")
+		var ideal_left: float = header_mid - text_cluster.size.x * 0.5
+		var placed_left: float = clampf(ideal_left, left, right - text_cluster.size.x)
+		_assert(absf(text_cluster.get_center().x - (placed_left + text_cluster.size.x * 0.5)) <= 8.0, "visitor and money text are centered in the museum header")
 
 
 func _header_text_rect(label: Label) -> Rect2:
@@ -883,7 +1409,7 @@ func _test_toast_names_the_new_piece() -> void:
 	_assert(banner.to_lower().find("tail") >= 0, "toast names the tail, not the whole T. rex")
 	_assert(banner.to_lower().find("unveil") >= 0, "toast says they are unveiling that fossil")
 	_assert(banner.find("+$40") < 0, "toast does not lead with the cash burst")
-	_assert(banner.find("/sec") >= 0, "toast shows the rush $/sec")
+	_assert(banner.find("visitor") >= 0, "toast shows the extra visitors")
 	mus.free()
 
 

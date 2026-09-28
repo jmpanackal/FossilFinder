@@ -52,6 +52,7 @@ func _run() -> void:
 	_test_roster_files_and_shapes()
 	_test_catalog_lists_every_playable_part()
 	_test_small_finds_stay_trilobite_and_amber()
+	_test_plant_fossils_are_cycad_and_flower()
 	_test_spawn_gates_match_roster()
 	_test_rank_0_is_only_starter_one_cells()
 	_test_late_pit_can_hide_the_big_bones()
@@ -188,17 +189,45 @@ func _test_catalog_lists_every_playable_part() -> void:
 
 func _test_small_finds_stay_trilobite_and_amber() -> void:
 	_reset()
-	_assert(TN.extra_fossil_paths.size() == 2, "Small Finds extras are only two scraps")
+	_assert(TN.extra_fossil_paths.size() == 4, "extras are the two cases: scraps and plants")
+	var seen: Dictionary = {}
 	for path in TN.extra_fossil_paths:
 		var data: Resource = load(str(path))
 		_assert(data != null, "%s extra scrap loads" % str(path))
 		if data == null:
 			continue
 		var id: String = str(data.get("piece_id"))
-		_assert(id == "trilobite" or id == "amber_insect", "extra scrap is trilobite or amber, not %s" % id)
-		_assert(str(GS.stand_for_piece(id)) == "small_finds", "%s stays in Small Finds" % id)
+		_assert(_is_case_extra(id), "extra scrap is a case piece, not %s" % id)
+		seen[id] = true
+		if id == "trilobite" or id == "amber_insect":
+			_assert(str(GS.stand_for_piece(id)) == "small_finds", "%s stays in Small Finds" % id)
+		else:
+			_assert(str(GS.stand_for_piece(id)) == "plant_fossils", "%s mounts in Plant Fossils" % id)
+	_assert(seen.has("trilobite") and seen.has("amber_insect"), "Small Finds extras stay trilobite and amber")
 	_assert(str(GS.stand_for_piece("velociraptor_claw")) == "velociraptor", "raptor claw is not a Small Find")
 	_assert(str(GS.stand_for_piece("brachiosaurus_tooth")) == "brachiosaurus", "brach tooth is not a Small Find")
+
+
+func _test_plant_fossils_are_cycad_and_flower() -> void:
+	_reset()
+	var cycad: Resource = load("res://cycad.tres")
+	var flower: Resource = load("res://fossil_flower.tres")
+	_assert(cycad != null, "cycad resource exists")
+	_assert(flower != null, "fossil flower resource exists")
+	if cycad == null or flower == null:
+		return
+	_assert(str(cycad.get("piece_id")) == "cycad", "cycad piece_id matches")
+	_assert(str(flower.get("piece_id")) == "fossil_flower", "flower piece_id matches")
+	_assert(str(cycad.get("stand_id")) == "plant_fossils", "cycad stand is Plant Fossils")
+	_assert(str(flower.get("stand_id")) == "plant_fossils", "flower stand is Plant Fossils")
+	_assert(int(cycad.occupied_cells()) == 1, "cycad is a one-cell extra")
+	_assert(int(flower.occupied_cells()) == 1, "fossil flower is a one-cell extra")
+	_assert(str(GS.stand_for_piece("cycad")) == "plant_fossils", "cycad maps to Plant Fossils")
+	_assert(str(GS.stand_for_piece("fossil_flower")) == "plant_fossils", "fossil flower maps to Plant Fossils")
+	_assert(str(GS.stand_title("plant_fossils")) == "Plant Fossils", "plant plaque is Plant Fossils")
+	GS.install_find("cycad", "Cycad", 1.0, true)
+	_assert(bool(GS.stand_is_filled("plant_fossils")), "a cycad lights the Plant Fossils case")
+	_assert(not bool(GS.stand_is_filled("small_finds")), "a cycad does not fill Small Finds")
 
 
 func _test_spawn_gates_match_roster() -> void:
@@ -247,7 +276,7 @@ func _test_rank_0_is_only_starter_one_cells() -> void:
 		for find in site.get("finds"):
 			var id: String = _piece_id(find)
 			_assert(
-				id == "t_rex_tooth" or id == "triceratops_tooth" or id == "stegosaurus_foot" or id == "trilobite" or id == "amber_insect",
+				id == "t_rex_tooth" or id == "triceratops_tooth" or id == "stegosaurus_foot" or _is_case_extra(id),
 				"5x4 never hides %s" % id
 			)
 			_assert(id != "tooth", "5x4 does not restore the nameless tooth")
@@ -365,7 +394,7 @@ func _test_extras_are_scraps_or_small_in_season() -> void:
 		_assert(id != "brachiosaurus_neck", "extras never bury the brach neck early")
 		var row: Dictionary = _row_for_id(id)
 		if row.is_empty():
-			_assert(id == "trilobite" or id == "amber_insect", "unknown extra %s is not a dino part" % id)
+			_assert(_is_case_extra(id), "unknown extra %s is not a dino part" % id)
 			continue
 		_assert(int(row["cells"]) <= 3, "in-season extra %s stays small" % id)
 		_assert(int(row["rank"]) <= 1, "in-season extra %s is in season at rank 1" % id)
@@ -380,6 +409,10 @@ func _test_extras_are_scraps_or_small_in_season() -> void:
 			_assert(_piece_id(find) != "brachiosaurus_neck", "start pit extras never hide the neck")
 			_assert(not _piece_id(find).ends_with("_skull"), "start pit extras never hide a skull")
 	site.free()
+
+
+func _is_case_extra(piece_id: String) -> bool:
+	return piece_id == "trilobite" or piece_id == "amber_insect" or piece_id == "cycad" or piece_id == "fossil_flower"
 
 
 func _assert(ok: bool, label: String) -> void:
