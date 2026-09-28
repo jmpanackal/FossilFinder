@@ -1100,7 +1100,7 @@ func collection_status_line(piece_id: String) -> String:
 
 
 func _duplicate_sale(cleanliness: float, set_bonus: bool, condition: int = Tuning.CONDITION_GOOD) -> int:
-	var bonus: float = 100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult * Tuning.condition_value(condition)
+	var bonus: float = 100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult * Tuning.condition_value(condition) * fame_mult()
 	if set_bonus:
 		bonus *= Tuning.set_complete_sale_mult
 	return int(round(bonus))
@@ -1136,6 +1136,27 @@ func install_find(piece_id: String, display_name: String, cleanliness: float, cl
 		skeleton_completed.emit(stand_id, bonus)
 		note = "%s COMPLETE! +$%d, visitors x%s." % [stand_title(stand_id), bonus, _mult_text(Tuning.complete_stand_mult)]
 	return note
+
+
+var _fame_frame: int = -1
+var _fame_value: float = 1.0
+
+
+## Museum fame: collectors pay more for bones as the museum earns more.
+## Cached per frame because every find card asks for it.
+func fame_mult() -> float:
+	var frame: int = Engine.get_process_frames()
+	if frame != _fame_frame:
+		_fame_frame = frame
+		_fame_value = 1.0 + museum_income_base() * Tuning.fame_per_income
+	return _fame_value
+
+
+func fame_line() -> String:
+	var mult: float = fame_mult()
+	if mult < 1.05:
+		return ""
+	return "Museum fame: finds pay x%s" % (("%.1f" % mult) if mult < 10.0 else str(int(round(mult))))
 
 
 ## Masterpiece: complete, and every piece Great (4 stars) or better.
@@ -1353,6 +1374,21 @@ func stand_region_filled(stand_id: String, region: String) -> bool:
 		if data != null and data.mount_region == region:
 			return true
 	return false
+
+
+## Weakest condition among the bones mounted in one region of a stand (0 = empty).
+func stand_region_condition(stand_id: String, region: String) -> int:
+	var worst: int = 0
+	for piece_id in pieces:
+		var id: String = str(piece_id)
+		if stand_for_piece(id) != stand_id:
+			continue
+		var data: FossilData = fossil_data_for(id)
+		if data == null or data.mount_region != region:
+			continue
+		var cond: int = piece_condition(id)
+		worst = cond if worst == 0 else mini(worst, cond)
+	return worst if worst > 0 else Tuning.CONDITION_GOOD
 
 
 func stand_region_clean(stand_id: String, region: String) -> bool:

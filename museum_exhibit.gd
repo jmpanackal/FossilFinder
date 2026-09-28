@@ -937,25 +937,25 @@ func _draw_t_rex_bay() -> void:
 	var legs_clean: bool = _region_clean("t_rex", "legs")
 	var tail_on: bool = _region_on("t_rex", "tail")
 	var tail_clean: bool = _region_clean("t_rex", "tail")
-	_rect(xf, -8, -84, 70, 38, torso_on, torso_clean)
-	_rect(xf, 54, -72, 54, 14, tail_on, tail_clean)
-	_rect(xf, -6, -52, 22, 30, legs_on, legs_clean)
-	_rect(xf, -2, -26, 16, 26, legs_on, legs_clean)
-	_rect(xf, 28, -48, 18, 26, legs_on, legs_clean)
-	_rect(xf, 26, -24, 20, 24, legs_on, legs_clean)
+	_rect(xf, -8, -84, 70, 38, torso_on, torso_clean, _cond("t_rex", "torso"))
+	_rect(xf, 54, -72, 54, 14, tail_on, tail_clean, _cond("t_rex", "tail"))
+	_rect(xf, -6, -52, 22, 30, legs_on, legs_clean, _cond("t_rex", "legs"))
+	_rect(xf, -2, -26, 16, 26, legs_on, legs_clean, _cond("t_rex", "legs"))
+	_rect(xf, 28, -48, 18, 26, legs_on, legs_clean, _cond("t_rex", "legs"))
+	_rect(xf, 26, -24, 20, 24, legs_on, legs_clean, _cond("t_rex", "legs"))
 	var jaw_bone_on: bool = GameState.has_piece("t_rex_jaw")
 	var jaw_bone_clean: bool = _owned_clean("t_rex_jaw")
-	_rect(xf, -4, -66, 18, 6, jaw_bone_on, jaw_bone_clean)
-	_rect(xf, -30, -100, 26, 26, head_on, head_clean)
-	_rect(xf, -78, -110, 52, 26, head_on, head_clean)
-	_rect(xf, -72, -86, 34, 8, jaw_bone_on, jaw_bone_clean)
+	_rect(xf, -4, -66, 18, 6, jaw_bone_on, jaw_bone_clean, _cond("t_rex", "jaw_bone"))
+	_rect(xf, -30, -100, 26, 26, head_on, head_clean, _cond("t_rex", "head"))
+	_rect(xf, -78, -110, 52, 26, head_on, head_clean, _cond("t_rex", "head"))
+	_rect(xf, -72, -86, 34, 8, jaw_bone_on, jaw_bone_clean, _cond("t_rex", "jaw_bone"))
 	for i in display_slots("t_rex_tooth"):
 		var tooth_x: float = -70.0 + float(i) * 5.5
 		_poly(xf, PackedVector2Array([
 			Vector2(tooth_x, -86.0),
 			Vector2(tooth_x + 4.0, -86.0),
 			Vector2(tooth_x + 2.0, -78.0),
-		]), slot_on("t_rex_tooth", i), _slot_clean("t_rex_tooth", i))
+		]), slot_on("t_rex_tooth", i), _slot_clean("t_rex_tooth", i), GameState.piece_condition("t_rex_tooth"))
 	_draw_stand_finish("t_rex", stand)
 
 
@@ -1180,21 +1180,21 @@ func _draw_triceratops_bay() -> void:
 	var tail_on: bool = _region_on("triceratops", "tail")
 	var tail_clean: bool = _region_clean("triceratops", "tail")
 	var xf := _fit(mount, Vector2(-98, -100), Vector2(104, 0))
-	_rect(xf, -14, -68, 82, 36, body_on, body_clean)
-	_rect(xf, 60, -56, 44, 12, tail_on, tail_clean)
-	_rect(xf, -10, -34, 16, 34, legs_on, legs_clean)
-	_rect(xf, 16, -34, 16, 34, legs_on, legs_clean)
-	_rect(xf, 42, -34, 16, 34, legs_on, legs_clean)
-	_rect(xf, 66, -32, 16, 32, legs_on, legs_clean)
-	_rect(xf, -62, -92, 40, 46, skull_on, skull_clean)
-	_rect(xf, -86, -66, 38, 26, skull_on, skull_clean)
-	_rect(xf, -98, -56, 16, 12, skull_on, skull_clean)
-	_rect(xf, -48, -100, 8, 20, brow_on, brow_clean)
-	_rect(xf, -32, -98, 8, 18, brow_on, brow_clean)
-	_rect(xf, -78, -72, 8, 16, nose_on, nose_clean)
+	_rect(xf, -14, -68, 82, 36, body_on, body_clean, _cond("triceratops", "body"))
+	_rect(xf, 60, -56, 44, 12, tail_on, tail_clean, _cond("triceratops", "tail"))
+	_rect(xf, -10, -34, 16, 34, legs_on, legs_clean, _cond("triceratops", "legs"))
+	_rect(xf, 16, -34, 16, 34, legs_on, legs_clean, _cond("triceratops", "legs"))
+	_rect(xf, 42, -34, 16, 34, legs_on, legs_clean, _cond("triceratops", "legs"))
+	_rect(xf, 66, -32, 16, 32, legs_on, legs_clean, _cond("triceratops", "legs"))
+	_rect(xf, -62, -92, 40, 46, skull_on, skull_clean, _cond("triceratops", "skull"))
+	_rect(xf, -86, -66, 38, 26, skull_on, skull_clean, _cond("triceratops", "skull"))
+	_rect(xf, -98, -56, 16, 12, skull_on, skull_clean, _cond("triceratops", "skull"))
+	_rect(xf, -48, -100, 8, 20, brow_on, brow_clean, _cond("triceratops", "brow"))
+	_rect(xf, -32, -98, 8, 18, brow_on, brow_clean, _cond("triceratops", "brow"))
+	_rect(xf, -78, -72, 8, 16, nose_on, nose_clean, _cond("triceratops", "nose"))
 	for i in display_slots("triceratops_tooth"):
 		var tooth_x: float = -98.0 + float(i) * 3.6
-		_rect(xf, tooth_x, -50.0, 3.0, 8.0, slot_on("triceratops_tooth", i), _slot_clean("triceratops_tooth", i))
+		_rect(xf, tooth_x, -50.0, 3.0, 8.0, slot_on("triceratops_tooth", i), _slot_clean("triceratops_tooth", i), GameState.piece_condition("triceratops_tooth"))
 	if skull_on:
 		draw_circle(xf * Vector2(-62, -52), 5.0 * xf.x.length(), Color("2B2118"))
 	_draw_stand_finish("triceratops", stand)
@@ -1219,17 +1219,17 @@ func _draw_sauropod_bay() -> void:
 	var head_on: bool = _region_on("brachiosaurus", "head")
 	var head_clean: bool = _region_clean("brachiosaurus", "head")
 	_rect(xf, -18, -70, 74, 36, torso_on, arm_clean or legs_clean)
-	_rect(xf, 48, -56, 42, 12, tail_on, tail_clean)
-	_rect(xf, -16, -40, 16, 40, arm_on, arm_clean)
-	_rect(xf, 6, -36, 16, 36, legs_on, legs_clean)
-	_rect(xf, 28, -36, 16, 36, legs_on, legs_clean)
-	_rect(xf, 48, -34, 16, 34, legs_on, legs_clean)
-	_rect(xf, -28, -102, 22, 36, neck_on, neck_clean)
-	_rect(xf, -42, -124, 20, 28, neck_on, neck_clean)
-	_rect(xf, -70, -132, 32, 16, head_on, head_clean)
+	_rect(xf, 48, -56, 42, 12, tail_on, tail_clean, _cond("brachiosaurus", "tail"))
+	_rect(xf, -16, -40, 16, 40, arm_on, arm_clean, _cond("brachiosaurus", "arm"))
+	_rect(xf, 6, -36, 16, 36, legs_on, legs_clean, _cond("brachiosaurus", "legs"))
+	_rect(xf, 28, -36, 16, 36, legs_on, legs_clean, _cond("brachiosaurus", "legs"))
+	_rect(xf, 48, -34, 16, 34, legs_on, legs_clean, _cond("brachiosaurus", "legs"))
+	_rect(xf, -28, -102, 22, 36, neck_on, neck_clean, _cond("brachiosaurus", "neck"))
+	_rect(xf, -42, -124, 20, 28, neck_on, neck_clean, _cond("brachiosaurus", "neck"))
+	_rect(xf, -70, -132, 32, 16, head_on, head_clean, _cond("brachiosaurus", "head"))
 	for i in display_slots("brachiosaurus_tooth"):
 		var peg_x: float = -68.0 + float(i) * 4.0
-		_rect(xf, peg_x, -118.0, 3.0, 6.0, slot_on("brachiosaurus_tooth", i), _slot_clean("brachiosaurus_tooth", i))
+		_rect(xf, peg_x, -118.0, 3.0, 6.0, slot_on("brachiosaurus_tooth", i), _slot_clean("brachiosaurus_tooth", i), GameState.piece_condition("brachiosaurus_tooth"))
 	_draw_stand_finish("brachiosaurus", stand)
 
 
@@ -1248,15 +1248,15 @@ func _draw_raptor_bay() -> void:
 	var legs_clean: bool = _region_clean("velociraptor", "legs")
 	var head_on: bool = _region_on("velociraptor", "head")
 	var head_clean: bool = _region_clean("velociraptor", "head")
-	_rect(xf, -14, -50, 52, 22, torso_on, torso_clean)
-	_rect(xf, 32, -46, 64, 8, tail_on, tail_clean)
-	_rect(xf, 2, -34, 14, 34, legs_on, legs_clean)
-	_rect(xf, 14, -16, 16, 6, slot_on("velociraptor_claw", 0), _slot_clean("velociraptor_claw", 0))
-	_rect(xf, -8, -14, 12, 5, slot_on("velociraptor_claw", 1), _slot_clean("velociraptor_claw", 1))
-	_rect(xf, -8, -30, 10, 18, legs_on, legs_clean)
-	_rect(xf, -28, -64, 16, 18, head_on, head_clean)
-	_rect(xf, -54, -72, 28, 16, head_on, head_clean)
-	_rect(xf, -50, -58, 14, 6, head_on, head_clean)
+	_rect(xf, -14, -50, 52, 22, torso_on, torso_clean, _cond("velociraptor", "torso"))
+	_rect(xf, 32, -46, 64, 8, tail_on, tail_clean, _cond("velociraptor", "tail"))
+	_rect(xf, 2, -34, 14, 34, legs_on, legs_clean, _cond("velociraptor", "legs"))
+	_rect(xf, 14, -16, 16, 6, slot_on("velociraptor_claw", 0), _slot_clean("velociraptor_claw", 0), GameState.piece_condition("velociraptor_claw"))
+	_rect(xf, -8, -14, 12, 5, slot_on("velociraptor_claw", 1), _slot_clean("velociraptor_claw", 1), GameState.piece_condition("velociraptor_claw"))
+	_rect(xf, -8, -30, 10, 18, legs_on, legs_clean, _cond("velociraptor", "legs"))
+	_rect(xf, -28, -64, 16, 18, head_on, head_clean, _cond("velociraptor", "head"))
+	_rect(xf, -54, -72, 28, 16, head_on, head_clean, _cond("velociraptor", "head"))
+	_rect(xf, -50, -58, 14, 6, head_on, head_clean, _cond("velociraptor", "head"))
 	_draw_stand_finish("velociraptor", stand)
 
 
@@ -1290,17 +1290,17 @@ func _draw_stego_bay() -> void:
 	var head_on: bool = _region_on("stegosaurus", "head")
 	var head_clean: bool = _region_clean("stegosaurus", "head")
 	var xf := _fit(mount, Vector2(-52, -88), Vector2(108, 0))
-	_rect(xf, -18, -54, 82, 28, torso_on, torso_clean)
-	_rect(xf, 56, -46, 40, 10, tail_on, tail_clean)
-	_rect(xf, -12, -28, 14, 20, legs_on, legs_clean)
-	_rect(xf, 12, -28, 14, 20, legs_on, legs_clean)
-	_rect(xf, 36, -28, 14, 20, legs_on, legs_clean)
-	_rect(xf, 58, -26, 14, 18, legs_on, legs_clean)
+	_rect(xf, -18, -54, 82, 28, torso_on, torso_clean, _cond("stegosaurus", "torso"))
+	_rect(xf, 56, -46, 40, 10, tail_on, tail_clean, _cond("stegosaurus", "tail"))
+	_rect(xf, -12, -28, 14, 20, legs_on, legs_clean, _cond("stegosaurus", "legs"))
+	_rect(xf, 12, -28, 14, 20, legs_on, legs_clean, _cond("stegosaurus", "legs"))
+	_rect(xf, 36, -28, 14, 20, legs_on, legs_clean, _cond("stegosaurus", "legs"))
+	_rect(xf, 58, -26, 14, 18, legs_on, legs_clean, _cond("stegosaurus", "legs"))
 	var foot_xs: Array[float] = [-12.0, 12.0, 36.0, 58.0]
 	for i in display_slots("stegosaurus_foot"):
 		var foot_x: float = foot_xs[i] if i < foot_xs.size() else 58.0 + float(i - 3) * 16.0
-		_rect(xf, foot_x, -8.0, 14.0, 8.0, slot_on("stegosaurus_foot", i), _slot_clean("stegosaurus_foot", i))
-	_rect(xf, -44, -48, 28, 14, head_on, head_clean)
+		_rect(xf, foot_x, -8.0, 14.0, 8.0, slot_on("stegosaurus_foot", i), _slot_clean("stegosaurus_foot", i), GameState.piece_condition("stegosaurus_foot"))
+	_rect(xf, -44, -48, 28, 14, head_on, head_clean, _cond("stegosaurus", "head"))
 	var plate_pts: Array[PackedVector2Array] = [
 		PackedVector2Array([Vector2(-4, -54), Vector2(8, -84), Vector2(20, -54)]),
 		PackedVector2Array([Vector2(22, -54), Vector2(36, -88), Vector2(50, -54)]),
@@ -1309,9 +1309,9 @@ func _draw_stego_bay() -> void:
 	for i in display_slots("stegosaurus_plate"):
 		if i >= plate_pts.size():
 			continue
-		_poly(xf, plate_pts[i], slot_on("stegosaurus_plate", i), _slot_clean("stegosaurus_plate", i))
-	_rect(xf, 90, -54, 6, 16, tail_on, tail_clean)
-	_rect(xf, 100, -50, 6, 14, tail_on, tail_clean)
+		_poly(xf, plate_pts[i], slot_on("stegosaurus_plate", i), _slot_clean("stegosaurus_plate", i), GameState.piece_condition("stegosaurus_plate"))
+	_rect(xf, 90, -54, 6, 16, tail_on, tail_clean, _cond("stegosaurus", "tail"))
+	_rect(xf, 100, -50, 6, 14, tail_on, tail_clean, _cond("stegosaurus", "tail"))
 	_draw_stand_finish("stegosaurus", stand)
 
 
@@ -1364,9 +1364,27 @@ func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:
 	var x0: float = chip.end.x - gap * 4.0 - r - 2.0
 	for i in 5:
 		_draw_star(Vector2(x0 + gap * float(i), y), r, i < stars)
+	var note: String = stand_condition_note(stand_id)
+	if not note.is_empty() and not GameState.stand_is_masterpiece(stand_id):
+		var font: Font = Ui.display_font()
+		var size: int = label_font_size(11)
+		var w: float = font.get_string_size(note, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		draw_string(font, Vector2(chip.end.x - w, y + r + float(size) + 4.0), note, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(Ui.GOLD, 0.85))
 
 
-func _draw_masterpiece_frame(stand_id: String, chip: Rect2) -> void:
+## Why the stars are what they are: how many bones hold the stand back.
+func stand_condition_note(stand_id: String) -> String:
+	var below: int = 0
+	for piece_id in GameState.stand_piece_ids(stand_id):
+		var cond: int = int(GameState.piece_condition(str(piece_id)))
+		if cond > 0 and cond < Tuning.masterpiece_min_condition:
+			below += 1
+	if below <= 0:
+		return ""
+	return "%d bone%s below Great" % [below, "" if below == 1 else "s"]
+
+
+func _draw_masterpiece_frame(stand_id: String, _chip: Rect2) -> void:
 	## Gold frame + "Masterpiece" tag: a finished stand where every bone is Great+.
 	var stand: Rect2 = stand_rect(stand_id)
 	draw_rect(stand.grow(4.0), Color("FFD66B"), false, 4.0)
@@ -1375,7 +1393,9 @@ func _draw_masterpiece_frame(stand_id: String, chip: Rect2) -> void:
 	var size: int = label_font_size(12)
 	var text := "MASTERPIECE"
 	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	var tag := Rect2(Vector2(chip.position.x, chip.end.y + 26.0), Vector2(w + 12.0, float(size) + 8.0))
+	## A badge hung on the frame's top edge, clear of the skeleton.
+	var tag_size := Vector2(w + 14.0, float(size) + 8.0)
+	var tag := Rect2(Vector2(stand.get_center().x - tag_size.x * 0.5, stand.position.y - tag_size.y * 0.6), tag_size)
 	draw_rect(tag, Color("FFD66B"))
 	draw_string(font, Vector2(tag.position.x + 6.0, tag.end.y - 5.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color("2A1D12"))
 
@@ -1684,36 +1704,71 @@ func _fit(mount: Rect2, local_min: Vector2, local_max: Vector2) -> Transform2D:
 	return Transform2D(0.0, Vector2(s, s), 0.0, origin)
 
 
-func _rect(xf: Transform2D, x: float, y: float, w: float, h: float, owned: bool, clean: bool) -> void:
+## Mounted bone color by condition (Poor .. Perfect): the skeleton shows its stars.
+const COND_FILL: PackedColorArray = [
+	Color("A99A84"),
+	Color("CDBD9E"),
+	Color("E6D6B2"),
+	Color("F7E9C6"),
+	Color("FFF7E2"),
+]
+const PERFECT_EDGE := Color("FFD66B")
+
+
+func _cond(stand_id: String, region: String) -> int:
+	return int(GameState.stand_region_condition(stand_id, region))
+
+
+func _rect(xf: Transform2D, x: float, y: float, w: float, h: float, owned: bool, clean: bool, cond: int = 3) -> void:
 	var a := xf * Vector2(x, y)
 	var b := xf * Vector2(x + w, y + h)
-	_draw_bone_rect(Rect2(a, b - a), owned, clean)
+	_draw_bone_rect(Rect2(a, b - a), owned, clean, cond)
 
 
-func _poly(xf: Transform2D, locals: PackedVector2Array, owned: bool, clean: bool) -> void:
+func _poly(xf: Transform2D, locals: PackedVector2Array, owned: bool, clean: bool, cond: int = 3) -> void:
 	var pts := PackedVector2Array()
 	for p in locals:
 		pts.append(xf * p)
-	_draw_bone_poly(pts, owned, clean)
+	_draw_bone_poly(pts, owned, clean, cond)
 
 
-func _draw_bone_rect(rect: Rect2, owned: bool, clean: bool) -> void:
+func _bone_fill(clean: bool, cond: int) -> Color:
+	var base: Color = COND_FILL[clampi(cond, 1, 5) - 1]
+	return base if clean else base.lerp(Color("6E5230"), 0.55)
+
+
+func _draw_bone_rect(rect: Rect2, owned: bool, clean: bool, cond: int = 3) -> void:
 	if owned:
-		var color := Color("F7E9C6") if clean else Color("8A6A3E")
+		var color := _bone_fill(clean, cond)
 		draw_rect(rect, color)
-		draw_rect(rect, color.darkened(0.18), false, 1.2)
+		var edge: Color = PERFECT_EDGE if cond >= 5 else color.darkened(0.18)
+		draw_rect(rect, edge, false, 2.0 if cond >= 5 else 1.2)
+		_draw_wear(rect, cond)
 	else:
 		draw_rect(rect, EMPTY_FILL)
 		draw_rect(rect, EMPTY_LINE, false, 2.0)
 
 
-func _draw_bone_poly(points: PackedVector2Array, owned: bool, clean: bool) -> void:
+func _draw_wear(rect: Rect2, cond: int) -> void:
+	## Poor/Fair bones show cracks and chips so the low stars have a visible cause.
+	var cracks: int = maxi(0, 3 - cond)
+	if cracks <= 0 or rect.size.x < 8.0 or rect.size.y < 8.0:
+		return
+	var ink := Color(0.25, 0.18, 0.12, 0.8)
+	for i in cracks:
+		var t: float = (float(i) + 1.0) / float(cracks + 1)
+		var top := Vector2(rect.position.x + rect.size.x * t, rect.position.y + 2.0)
+		var mid := Vector2(top.x + rect.size.x * 0.08, rect.position.y + rect.size.y * 0.5)
+		var bottom := Vector2(top.x - rect.size.x * 0.05, rect.end.y - 3.0)
+		draw_line(top, mid, ink, 1.5)
+		draw_line(mid, bottom, ink, 1.5)
+
+
+func _draw_bone_poly(points: PackedVector2Array, owned: bool, clean: bool, cond: int = 3) -> void:
 	if points.size() < 3:
 		return
-	var fill := Color("F7E9C6") if owned and clean else Color("8A6A3E")
-	if not owned:
-		fill = EMPTY_FILL
-	var line := fill.darkened(0.18) if owned else EMPTY_LINE
+	var fill := _bone_fill(clean, cond) if owned else EMPTY_FILL
+	var line := (PERFECT_EDGE if cond >= 5 else fill.darkened(0.18)) if owned else EMPTY_LINE
 	draw_colored_polygon(points, fill)
 	for i in points.size():
 		draw_line(points[i], points[(i + 1) % points.size()], line, 2.0, true)

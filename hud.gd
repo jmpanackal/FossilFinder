@@ -81,6 +81,7 @@ var _tool_style_key: String = ""
 var _layout_key: String = ""
 var _cards_key: String = ""
 var _ribbon: Control
+var _fame_label: Label
 
 
 func _ready() -> void:
@@ -134,6 +135,14 @@ func _ready() -> void:
 	_finds_label = _make_rail_title("FindsLabel")
 	root.add_child(_finds_label)
 
+	## "Museum fame: finds pay x12" explains why late bones pay more.
+	_fame_label = Label.new()
+	_fame_label.name = "FameLabel"
+	_fame_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(_fame_label, 13, Ui.GOLD)
+	_fame_label.visible = false
+	root.add_child(_fame_label)
+
 	_find_box = HFlowContainer.new()
 	_find_box.name = "FindTray"
 	_find_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -168,6 +177,20 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 	_apply_tool_flashes()
 	_find_box.visible = show_find or not _chips.is_empty()
 	_layout_if_changed()
+	_refresh_fame()
+
+
+func _refresh_fame() -> void:
+	if _fame_label == null or _finds_frame == null:
+		return
+	var line: String = GameState.fame_line() if GameState.has_method("fame_line") else ""
+	_fame_label.visible = not line.is_empty()
+	if line != _fame_label.text:
+		_fame_label.text = line
+		_fame_label.size = _fame_label.get_combined_minimum_size()
+	var at := Vector2(_finds_frame.position.x + _finds_frame.size.x - _fame_label.size.x - 14.0, _finds_frame.position.y + 10.0)
+	if _fame_label.position != at:
+		_fame_label.position = at
 
 
 func _current_layout_key() -> String:

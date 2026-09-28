@@ -25,6 +25,9 @@ func _run() -> void:
 	_test_workshop_ranks_repair_more()
 	await _test_masterpiece_needs_complete_and_great()
 	await _test_workshop_can_finish_a_masterpiece()
+	_test_region_condition_is_the_weakest_bone()
+	_test_fame_scales_bone_value_with_income()
+	_test_find_card_says_new_or_duplicate()
 	_reset()
 	print("masterpiece %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -119,6 +122,55 @@ func _test_workshop_can_finish_a_masterpiece() -> void:
 	GS.run_workshop()
 	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the workshop repair completes the Masterpiece")
 	_assert(_masters.size() == 1, "and it is celebrated")
+
+
+func _test_region_condition_is_the_weakest_bone() -> void:
+	## The museum colors each part by its weakest bone, so stars have a visible cause.
+	_reset()
+	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 5)
+	var region: String = str(GS.fossil_data_for("t_rex_skull").mount_region)
+	_assert(int(GS.stand_region_condition("t_rex", region)) == 5, "a Perfect skull paints its region Perfect")
+	for id in GS.stand_piece_ids("t_rex"):
+		if id != "t_rex_skull" and str(GS.fossil_data_for(id).mount_region) == region:
+			GS.install_find(id, id, 1.0, true, 1)
+			_assert(int(GS.stand_region_condition("t_rex", region)) == 1, "a Poor bone in the same region shows as Poor")
+			break
+	var exhibit_script: GDScript = load("res://museum_exhibit.gd") as GDScript
+	var exhibit: Node2D = exhibit_script.new()
+	root.add_child(exhibit)
+	_reset()
+	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 2)
+	_assert(str(exhibit.call("stand_condition_note", "t_rex")).contains("below Great"), "the stand says how many bones are below Great")
+	exhibit.queue_free()
+
+
+func _test_fame_scales_bone_value_with_income() -> void:
+	_reset()
+	_reset_fame_cache()
+	_assert(is_equal_approx(float(GS.fame_mult()), 1.0), "an empty museum pays base price")
+	for sid in ["t_rex", "triceratops", "velociraptor"]:
+		_fill_stand(sid, 5)
+	GS.fame_mult()
+	var income: float = float(GS.museum_income_base())
+	GS.set("_fame_frame", -1)
+	_assert(float(GS.fame_mult()) > 1.0 + income * float(TN.fame_per_income) - 0.01, "fame grows with museum income")
+	_assert(str(GS.fame_line()).contains("finds pay x"), "the tray explains the fame bonus in plain words")
+
+
+func _reset_fame_cache() -> void:
+	GS.set("_fame_frame", -1)
+
+
+func _test_find_card_says_new_or_duplicate() -> void:
+	var chip_script: GDScript = load("res://find_chip.gd") as GDScript
+	var chip: Control = chip_script.new()
+	root.add_child(chip)
+	_assert(str(chip.call("_museum_line", "New · 1/6")).begins_with("New for museum"), "a needed bone says New for museum")
+	_assert(str(chip.call("_museum_line", "Duplicate · 6/6")).contains("sold for cash"), "an extra copy says it is sold for cash")
+	_assert(str(chip.call("_museum_line", "Upgrade · Great")).begins_with("Upgrades exhibit"), "a better copy says it upgrades the exhibit")
+	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_FRAGILE})).contains("losing stars"), "plaster on a fragile bone says what it saved")
+	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_SOLID})) == "", "plaster on a solid bone adds no noise")
+	chip.queue_free()
 
 
 func _assert(ok: bool, label: String) -> void:

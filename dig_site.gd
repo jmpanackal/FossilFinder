@@ -1268,7 +1268,8 @@ func _find_value(find: Dictionary, data) -> int:
 	var cond: float = Tuning.condition_value(int(find.get("condition", Tuning.CONDITION_GOOD)))
 	var kind: float = Tuning.bone_kind_value[clampi(int(find.get("kind", 0)), 0, 2)]
 	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
-	return int(round(float(data.base_value) * cond * kind * quality * Tuning.fossil_value_mult))
+	var fame: float = GameState.fame_mult() if GameState.has_method("fame_mult") else 1.0
+	return int(round(float(data.base_value) * cond * kind * quality * Tuning.fossil_value_mult * fame))
 
 
 func _find_centroid(find: Dictionary) -> Vector2:

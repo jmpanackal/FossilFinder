@@ -109,7 +109,8 @@ func _main_id(site: Node) -> String:
 
 
 func _sale(cleanliness: float, set_bonus: bool) -> int:
-	var base: float = 100.0 * float(TN.duplicate_cash) * (0.5 + cleanliness * 0.5) * float(TN.fossil_value_mult)
+	## Museum fame scales every bone sale with the museum's income.
+	var base: float = 100.0 * float(TN.duplicate_cash) * (0.5 + cleanliness * 0.5) * float(TN.fossil_value_mult) * float(GS.fame_mult())
 	if set_bonus:
 		var mult: float = 2.0
 		if TN.get("set_complete_sale_mult") != null:

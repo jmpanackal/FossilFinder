@@ -8,11 +8,13 @@ const StarRating := preload("res://star_rating.gd")
 
 var _icon: Control
 var _name_label: Label
-var _grade_row: VBoxContainer
+var _grade_row: HBoxContainer
 var _grade_label: Label
 var _stars: Control
 var _status_label: Label
 var _price_label: Label
+var _note_label: Label
+var _name_size: int = 16
 var _data: FossilDataScript
 var _piece_id: String = ""
 var _index: int = 0
@@ -55,17 +57,18 @@ func _init() -> void:
 	_name_label = Label.new()
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_name_label.max_lines_visible = 2
-	_name_label.clip_text = false
+	## One line that shrinks to fit: long names never spill past the card.
+	_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_name_label.max_lines_visible = 1
+	_name_label.clip_text = true
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	_name_label.add_theme_constant_override("line_spacing", -2)
 	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	Ui.apply_label(_name_label, 16, Ui.GOLD)
 	col.add_child(_name_label)
-	_grade_row = VBoxContainer.new()
+	_grade_row = HBoxContainer.new()
 	_grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_grade_row.add_theme_constant_override("separation", 0)
+	_grade_row.add_theme_constant_override("separation", 5)
 	_grade_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grade_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(_grade_row)
@@ -84,7 +87,10 @@ func _init() -> void:
 	_stars.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_stars.custom_minimum_size = Vector2(46, 8)
 	_stars.visible = false
+	_stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_grade_row.add_child(_stars)
+	_grade_row.move_child(_stars, 0)
+	_grade_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_status_label = Label.new()
 	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -94,6 +100,14 @@ func _init() -> void:
 	_status_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	Ui.apply_label(_status_label, 12, Ui.MUTED)
 	col.add_child(_status_label)
+	_note_label = Label.new()
+	_note_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_note_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_note_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_note_label.clip_text = true
+	_note_label.visible = false
+	Ui.apply_label(_note_label, 11, Color("F4F0E6"))
+	col.add_child(_note_label)
 	_price_label = Label.new()
 	_price_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -149,16 +163,19 @@ func fit_tray(width: float, crowded: bool) -> void:
 	var w: float = maxf(90.0, width)
 	var tight: bool = w < 140.0
 	var compact: bool = crowded or w < 200.0
-	custom_minimum_size = Vector2(w, 64.0 if tight else 70.0)
+	var tall: bool = _note_label != null and _note_label.visible and not tight
+	custom_minimum_size = Vector2(w, 64.0 if tight else (82.0 if tall else 70.0))
 	size = custom_minimum_size
 	var name_size: int = 11 if tight else (13 if compact else 16)
+	_name_size = name_size
 	var meta_size: int = 10 if tight else (11 if compact else 12)
-	var price_size: int = 10 if tight else (11 if compact else 12)
+	var price_size: int = 11 if tight else (13 if compact else 15)
 	Ui.apply_label(_name_label, name_size, Ui.GOLD)
 	Ui.apply_label(_grade_label, meta_size, Ui.MUTED)
 	Ui.apply_label(_status_label, meta_size, Ui.MUTED)
 	Ui.apply_label(_price_label, price_size, Ui.GOLD)
-	_price_label.custom_minimum_size = Vector2(28 if tight else (36 if compact else 50), 24 if tight else 28)
+	_price_label.custom_minimum_size = Vector2(30 if tight else (42 if compact else 56), 24 if tight else 28)
+	_fit_name()
 	if _stars != null:
 		_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
 	if _icon != null:
@@ -186,9 +203,30 @@ func catch_pos() -> Vector2:
 	return global_position + size * 0.5
 
 
+func _fit_name() -> void:
+	## Shrink the name until it fits the space between icon and price.
+	var room: float = custom_minimum_size.x - 16.0 - 8.0 * 2.0
+	if _icon != null:
+		room -= _icon.custom_minimum_size.x
+	if _price_label != null and _price_label.visible:
+		room -= _price_label.custom_minimum_size.x
+	Ui.apply_copy(_name_label, _name_label.text, _name_size, Ui.GOLD, maxf(room, 40.0))
+	_name_label.custom_minimum_size = Vector2(0, 0)
+	## The name always leads; the price stays one size under it.
+	var name_px: int = _name_label.get_theme_font_size("font_size")
+	var price_px: int = _price_label.get_theme_font_size("font_size")
+	if price_px >= name_px:
+		Ui.apply_label(_price_label, maxi(10, name_px - 1), Ui.GOLD)
+
+
 func _apply_stat_lines() -> void:
 	_grade_label.text = _condition_line(_card)
 	_status_label.text = _meter_line(_card)
+	_status_label.add_theme_color_override("font_color", _status_color(_status_label.text))
+	var note: String = _note_line(_card)
+	_note_label.text = note
+	_note_label.visible = not note.is_empty()
+	_fit_name()
 	_price_label.text = _price_text(_card)
 	var stars: int = int(_card.get("stars", 0))
 	var show_stars: bool = stars > 0 and _status != "underground"
@@ -210,7 +248,8 @@ func _condition_line(card: Dictionary) -> String:
 		if lost > 0 and cond > 0:
 			## Show what open air cost, so the reason for the stars is visible.
 			return "%s (was %s)" % [Tuning.condition_name(cond), Tuning.condition_name(cond + lost)]
-		return grade
+		## Stars sit right beside it, so "Great condition" reads as just "Great".
+		return grade.trim_suffix(" condition")
 	match _status:
 		"bagged":
 			return "Bagged"
@@ -230,16 +269,42 @@ func _meter_line(card: Dictionary) -> String:
 	var left: float = float(card.get("crumble_in", INF))
 	if left != INF and not bool(card.get("extracted", false)):
 		return "%s · -1 star in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
-	if bool(card.get("cast", false)):
-		return "In a plaster cast"
 	if _status == "bagged" or bool(card.get("extracted", false)):
 		var fate: String = str(card.get("fate", "")).strip_edges()
 		if not fate.is_empty():
-			return fate
+			return _museum_line(fate)
 	var progress: String = str(card.get("progress", "")).strip_edges()
 	if not progress.is_empty() and (bool(card.get("fully_exposed", false)) or _status == "brush"):
-		return progress
+		return _museum_line(progress)
 	return _tidy_dirt(str(card.get("dirt", "")))
+
+
+## Say plainly what this bone means for the museum.
+func _museum_line(line: String) -> String:
+	if line.begins_with("New ·"):
+		return "New for museum · %s" % line.substr(6).strip_edges()
+	if line.begins_with("Duplicate"):
+		return "Duplicate · sold for cash"
+	if line.begins_with("Upgrade"):
+		return "Upgrades exhibit! (%s)" % line.substr(line.find("·") + 1).strip_edges()
+	return line
+
+
+func _status_color(line: String) -> Color:
+	if line.begins_with("New"):
+		return Color("A8E07A")
+	if line.begins_with("Upgrade"):
+		return Ui.GOLD
+	if line.contains("-1 star"):
+		return Color("FF9A7A")
+	return Ui.MUTED
+
+
+## Plaster only matters for bones that crumble: say what it did.
+func _note_line(card: Dictionary) -> String:
+	if bool(card.get("cast", false)) and Tuning.bone_crumbles(int(card.get("kind", 0))):
+		return "Plaster stopped it losing stars"
+	return ""
 
 
 func _price_text(card: Dictionary) -> String:

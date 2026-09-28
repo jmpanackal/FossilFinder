@@ -208,6 +208,9 @@ var set_complete_sale_mult: float = 2.0
 var complete_stand_mult: float = 2.0
 var skeleton_bonus_mult: float = 2.0
 ## Masterpiece: complete stand, every piece at least this condition (4 = Great).
+## Museum fame: bone sale value x (1 + museum $/sec x this), so finds keep
+## pace with the museum. Explained in-game as "collectors pay more".
+var fame_per_income: float = 0.5
 var masterpiece_min_condition: int = 4
 var masterpiece_mult: float = 1.5
 var masterpiece_bonus_mult: float = 2.0

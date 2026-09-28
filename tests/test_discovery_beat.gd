@@ -162,7 +162,7 @@ func _test_chip_leads_with_name_not_price() -> void:
 	if name_label != null and price_label != null:
 		_assert(name_label.get_theme_font_size("font_size") > price_label.get_theme_font_size("font_size"), "the bone name is louder than the price")
 	if price_label != null and grade_label != null:
-		_assert(price_label.get_theme_font_size("font_size") <= grade_label.get_theme_font_size("font_size") + 2, "price does not shout over condition")
+		_assert(price_label.get_theme_font_size("font_size") <= name_label.get_theme_font_size("font_size"), "price does not shout over the name")
 	chip.queue_free()
 
 
@@ -240,7 +240,7 @@ func _test_find_chip_stars_are_small_and_centered() -> void:
 		chip.call("fit_tray", 360.0, false)
 	chip.size = Vector2(360, 70)
 	var grade_row: Node = chip.get("_grade_row")
-	_assert(grade_row is VBoxContainer, "grade copy and stars stack so the words stay centered")
+	_assert(grade_row is HBoxContainer, "stars and the condition word sit on one line")
 	var stars: Control = chip.get("_stars") as Control
 	_assert(stars != null, "the compact star row exists")
 	if stars != null:
@@ -252,7 +252,7 @@ func _test_find_chip_stars_are_small_and_centered() -> void:
 	if name_label != null and grade_label != null:
 		_assert(name_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the bone name stays centered")
 		_assert(grade_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the grade stays centered")
-		_assert(grade_label.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "grade uses the full text column")
+		_assert(grade_label.size_flags_horizontal == Control.SIZE_SHRINK_CENTER, "grade hugs the stars on one centered line")
 	chip.queue_free()
 
 
