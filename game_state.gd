@@ -33,9 +33,9 @@ var _bases: Dictionary = {}
 var _fossil_by_id: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
-	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
+	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds, more $, and you feel for bone farther away. Never chips bone.", "cost": 8, "scale": 1.65, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
-	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Hands pull better finds and more $ from the soil.", "cost": 1500, "scale": 1.85, "max": 6},
+	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds, more $, and a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 75, "scale": 2.0, "max": 5, "requires": "shovel_click"},
@@ -49,8 +49,8 @@ var catalog: Array[Dictionary] = [
 	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 4500, "scale": 1.95, "max": 6},
 	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Blunted Point", "desc": "Takes more hits to crack bone.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "pick_titan", "cat": "Pickaxe", "tier": 3, "name": "Titan Pick", "desc": "The heaviest pick. Clay and rock give faster.", "cost": 80000, "scale": 1.7, "max": 6},
-	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting the bone goes faster.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "pick_click"},
-	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Even faster dusting once the first brush is maxed.", "cost": 3500, "scale": 1.95, "max": 6},
+	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting goes faster and the bristles reach the next bone cell.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "pick_click"},
+	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Faster dusting and a much wider sweep.", "cost": 3500, "scale": 1.95, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
 	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 100, "scale": 2.1, "max": 3},
@@ -963,6 +963,8 @@ func apply_upgrades() -> void:
 	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.70 * _lv("pick_hold") + 0.55 * _lv("pick_super") + 0.55 * _lv("pick_titan")
 	Tuning.pickaxe_radius = 1.0 + 0.35 * _lv("pick_radius") + 0.35 * _lv("pick_super") + 0.35 * _lv("pick_titan")
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
+	Tuning.brush_reach_px = 5.0 * brush_ranks + 7.0 * _lv("brush_master")
+	Tuning.hands_sense_radius = 1.0 + 0.3 * _lv("hands_click") + 0.45 * _lv("hands_craft")
 	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time") + 8.0 * _lv("round_marathon")
 	Tuning.museum_income_mult = 1.0
 	var ticket_cents: int = _donation_rank_cents("lighting", int(_lv("lighting")))

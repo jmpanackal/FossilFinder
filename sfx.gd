@@ -15,6 +15,7 @@ const _TONES := {
 	"ui": Vector3(440.0, 0.05, 0.18),
 	"crack": Vector3(70.0, 0.08, 0.34),
 	"dust": Vector3(620.0, 0.04, 0.16),
+	"sense": Vector3(740.0, 0.09, 0.20),
 }
 
 const _FANFARES := {
@@ -130,7 +131,7 @@ func ensure_bus() -> void:
 	AudioServer.set_bus_send(idx, "Master")
 
 
-func play(id: String) -> void:
+func play(id: String, pitch: float = 1.0) -> void:
 	last_id = id
 	unlock_web_audio()
 	ensure_bus()
@@ -154,7 +155,7 @@ func play(id: String) -> void:
 			player.stream = _make_beep(tone.x, tone.y, tone.z)
 		add_child(player)
 		_players[id] = player
-	player.pitch_scale = randf_range(0.97, 1.03) if _FANFARES.has(id) else randf_range(0.94, 1.06)
+	player.pitch_scale = (randf_range(0.97, 1.03) if _FANFARES.has(id) else randf_range(0.94, 1.06)) * maxf(pitch, 0.1)
 	player.play()
 
 

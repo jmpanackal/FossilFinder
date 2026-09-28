@@ -47,6 +47,8 @@ func _ready() -> void:
 	dig_site.pickaxe_struck.connect(_on_pickaxe)
 	dig_site.tool_used.connect(_on_tool_used)
 	dig_site.lucky_struck.connect(_on_lucky_struck)
+	if dig_site.has_signal("bone_sensed"):
+		dig_site.bone_sensed.connect(_on_bone_sensed)
 	hud.tool_selected.connect(dig_site.set_tool)
 	hud.end_shift.connect(_end_round)
 	if Settings.has_signal("end_shift_pressed"):
@@ -409,6 +411,10 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 				color = Color("FFE08A")
 		_spawn_float(Matrix.float_text(find), origin + offset, color)
 		_spawn_loot_fly(Matrix.icon_kind(find), origin, float(i) * 0.045, int(find.get("rarity", 0)))
+
+
+func _on_bone_sensed(world_pos: Vector2) -> void:
+	_spawn_float("Bone below!", world_pos + Vector2(0, -18), Color("FFF1C4"), 18)
 
 
 func _on_fossil_exposed(world_pos: Vector2, first: bool) -> void:

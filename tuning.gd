@@ -149,6 +149,16 @@ var damage_matrix := [
 
 var shovel_radius: float = 0.0
 var brush_clean_per_pixel: float = 0.0015
+## Scrubbing back and forth builds a combo; each reversal adds one step.
+var brush_combo_max: int = 5
+var brush_combo_step: float = 0.2
+var brush_combo_hold: float = 0.45
+## Bristle reach in pixels past the aimed cell. 0 = one cell.
+var brush_reach_px: float = 0.0
+var brush_splash: float = 0.6
+## Hands feel for bone: cells within this radius that hide an unexposed
+## fossil get marked. Grows with Hands upgrades so hands stay the survey tool.
+var hands_sense_radius: float = 1.0
 
 ## Click vs hold. Later upgrades can raise one path without touching the other.
 var hands_click_mult: float = 0.40

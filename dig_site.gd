@@ -16,6 +16,8 @@ signal fossil_ready_to_dust(find_index: int)
 signal tool_used(tool: int)
 signal lucky_struck(amount: int, world_pos: Vector2)
 signal lucky_fled
+signal bone_sensed(world_pos: Vector2)
+signal brush_combo_changed(level: int)
 
 var input_enabled: bool = true
 var current_tool: int = Tuning.TOOL_HANDS
@@ -29,6 +31,7 @@ var fossil_layer: int = 0
 var fossil_cells: Dictionary = {}
 var exposed_cells: Dictionary = {}
 var cleanliness: Dictionary = {}
+var sensed_cells: Dictionary = {}
 var finds: Array = []
 var _focus_index: int = 0
 
@@ -38,6 +41,9 @@ var _hold_time: float = 0.0
 var _holding_dig: bool = false
 var _brush_last := Vector2.ZERO
 var _brushing: bool = false
+var _brush_dir := Vector2.ZERO
+var _brush_combo: float = 0.0
+var _brush_idle: float = 0.0
 var _signaled_ready_to_dust: bool = false
 var _bone_pulse: float = 0.0
 var _grace_left: float = 0.0
@@ -127,6 +133,7 @@ func start_round() -> void:
 	extracted_clean = false
 	exposed_cells.clear()
 	cleanliness.clear()
+	sensed_cells.clear()
 	finds.clear()
 	_focus_index = 0
 	_signaled_ready_to_dust = false
@@ -137,6 +144,7 @@ func start_round() -> void:
 	_hold_time = 0.0
 	_holding_dig = false
 	_brushing = false
+	_reset_brush_combo()
 	_boost_flash = 0.0
 	_boosted_tools.clear()
 	_reset_lucky()
@@ -639,11 +647,14 @@ func _process(delta: float) -> void:
 		_holding_dig = false
 		_hold_time = 0.0
 		_fossil_hold = 0.0
+	_tick_brush_combo(delta)
 	if current_tool == Tuning.TOOL_BRUSH and holding:
 		var mouse := _mouse_world()
 		if _brushing:
-			var travel := mouse.distance_to(_brush_last)
+			var move := mouse - _brush_last
+			var travel := move.length()
 			if travel > 0.15:
+				_track_scrub(move)
 				_apply_brush(mouse, travel)
 		_brush_last = mouse
 		_brushing = true
@@ -811,6 +822,8 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 	var radius: float = 0.0
 	if not _using_hands():
 		radius = Tuning.shovel_radius
+	else:
+		_sense_bone(center)
 	var targets: Array[Vector2i] = Tuning.shovel_hit_cells(center, radius)
 	_collect_lucky(targets)
 	for cell in targets:
@@ -834,6 +847,30 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 	_begin_strike_punches(center, punch_hits)
 	_finish_strike(center, juice_layer, payout, struck, heard)
 	_mark_tool_used(current_tool, cell_center(center))
+
+
+func _sense_bone(center: Vector2i) -> void:
+	## Hands are the survey tool: feel for bone under the surrounding cells.
+	var radius: float = Tuning.hands_sense_radius
+	if radius <= 0.0:
+		return
+	var fresh: bool = false
+	for cell in Tuning.shovel_hit_cells(center, radius):
+		if not _in_bounds(cell) or sensed_cells.has(cell) or exposed_cells.has(cell):
+			continue
+		var find := _find_at(cell)
+		if find.is_empty() or bool(find.get("extracted", false)):
+			continue
+		sensed_cells[cell] = true
+		fresh = true
+	if fresh:
+		_grid_dirty = true
+		Sfx.play("sense")
+		bone_sensed.emit(cell_center(center))
+
+
+func is_sensed(cell: Vector2i) -> bool:
+	return sensed_cells.has(cell) and not exposed_cells.has(cell)
 
 
 func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void:
@@ -873,23 +910,91 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 
 
 func _apply_brush(world: Vector2, travel: float) -> void:
-	var cell := _cell_at(world)
-	if not _is_exposed_fossil(cell):
+	var aim := _cell_at(world)
+	var gain: float = travel * Tuning.brush_clean_per_pixel * brush_scrub_mult()
+	var touched: Array[Vector2i] = []
+	if _is_exposed_fossil(aim):
+		touched.append(aim)
+	if Tuning.brush_reach_px > 0.0:
+		for raw in exposed_cells:
+			var cell: Vector2i = raw
+			if cell == aim:
+				continue
+			if _distance_to_rect(world, _top_rect(cell.x, cell.y)) <= Tuning.brush_reach_px:
+				touched.append(cell)
+	var cleaned: float = 0.0
+	var ready: Array = []
+	for cell in touched:
+		var before: float = float(cleanliness.get(cell, 0.0))
+		if before >= 1.0:
+			continue
+		var share: float = gain if cell == aim else gain * Tuning.brush_splash
+		var after := clampf(before + share, 0.0, 1.0)
+		cleanliness[cell] = after
+		cleaned = maxf(cleaned, after - before)
+		var find := _find_at(cell)
+		if not find.is_empty() and not ready.has(find):
+			ready.append(find)
+	if touched.is_empty() or cleaned <= 0.0:
 		return
-	var before: float = float(cleanliness.get(cell, 0.0))
-	if before >= 1.0:
-		return
-	var after := clampf(before + travel * Tuning.brush_clean_per_pixel, 0.0, 1.0)
-	cleanliness[cell] = after
 	_grid_dirty = true
-	_puff_dust(cell_center(cell), after - before)
-	_mark_tool_used(Tuning.TOOL_BRUSH, cell_center(cell))
+	_puff_dust(world if not _in_bounds(aim) else cell_center(touched[0]), cleaned)
+	_mark_tool_used(Tuning.TOOL_BRUSH, cell_center(touched[0]))
 	if travel > 4.0:
-		Sfx.play("dust")
-	_focus_find(_find_at(cell))
-	var find := _find_at(cell)
-	if not find.is_empty() and _find_is_fully_exposed(find) and _find_clean(find) >= Tuning.clean_extract_threshold:
-		_extract_find(find, true)
+		Sfx.play("dust", 1.0 + 0.08 * brush_combo_level())
+	_focus_find(_find_at(touched[0]))
+	for raw in ready:
+		var find: Dictionary = raw
+		if _find_is_fully_exposed(find) and _find_clean(find) >= Tuning.clean_extract_threshold:
+			_extract_find(find, true)
+
+
+static func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
+	var nearest := Vector2(
+		clampf(point.x, rect.position.x, rect.end.x),
+		clampf(point.y, rect.position.y, rect.end.y)
+	)
+	return point.distance_to(nearest)
+
+
+func brush_combo_level() -> int:
+	return int(floor(_brush_combo))
+
+
+func brush_scrub_mult() -> float:
+	return 1.0 + Tuning.brush_combo_step * float(brush_combo_level())
+
+
+func _track_scrub(move: Vector2) -> void:
+	## A reversal (back-and-forth stroke) raises the combo; long strokes do not.
+	if move.length() < 2.0:
+		return
+	var dir := move.normalized()
+	if _brush_dir != Vector2.ZERO and dir.dot(_brush_dir) < -0.3 and has_visible_find():
+		var before: int = brush_combo_level()
+		_brush_combo = minf(_brush_combo + 1.0, float(Tuning.brush_combo_max))
+		_brush_idle = 0.0
+		if brush_combo_level() != before:
+			brush_combo_changed.emit(brush_combo_level())
+	_brush_dir = dir
+
+
+func _tick_brush_combo(delta: float) -> void:
+	if _brush_combo <= 0.0:
+		return
+	_brush_idle += delta
+	if _brush_idle <= Tuning.brush_combo_hold:
+		return
+	var before: int = brush_combo_level()
+	_brush_combo = maxf(0.0, _brush_combo - delta * 6.0)
+	if brush_combo_level() != before:
+		brush_combo_changed.emit(brush_combo_level())
+
+
+func _reset_brush_combo() -> void:
+	_brush_combo = 0.0
+	_brush_idle = 0.0
+	_brush_dir = Vector2.ZERO
 
 
 func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0) -> int:
@@ -1560,6 +1665,8 @@ func _draw_top(x: int, y: int) -> void:
 	_draw_cracks(rect, cell, layer)
 	if not _is_exposed_fossil(cell) and layer < Tuning.layer_count:
 		_draw_inclusion(rect, cell)
+	if is_sensed(cell):
+		_draw_sensed(rect)
 	if _is_exposed_fossil(cell):
 		_draw_bone_mark(rect, cell, float(cleanliness.get(cell, 0.0)))
 		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
@@ -1575,6 +1682,26 @@ func _draw_north_cell_shade(rect: Rect2, _color: Color) -> void:
 		var fade: float = 1.0 - float(i) / float(steps)
 		var wash := Color(0.10, 0.07, 0.05, 0.26 * fade)
 		draw_rect(Rect2(rect.position.x, rect.position.y + float(i) * slice, rect.size.x, slice + 0.6), wash)
+
+
+func _draw_sensed(rect: Rect2) -> void:
+	## Bone felt below: ivory corner ticks plus a small bone glyph.
+	var ink := Color("FFF1C4", 0.85)
+	var tick: float = minf(rect.size.x, rect.size.y) * 0.22
+	var r := rect.grow(-3.0)
+	for corner in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+		var sx: float = 1.0 if corner.x <= r.get_center().x else -1.0
+		var sy: float = 1.0 if corner.y <= r.get_center().y else -1.0
+		draw_line(corner, corner + Vector2(tick * sx, 0.0), ink, 2.0)
+		draw_line(corner, corner + Vector2(0.0, tick * sy), ink, 2.0)
+	var c := rect.get_center()
+	var half: float = minf(rect.size.x * 0.18, 12.0)
+	var knob: float = maxf(2.0, half * 0.32)
+	var bone := Color("F7E9C6", 0.75)
+	draw_line(c - Vector2(half, 0.0), c + Vector2(half, 0.0), bone, knob * 1.1)
+	for end in [c - Vector2(half, 0.0), c + Vector2(half, 0.0)]:
+		draw_circle(end + Vector2(0.0, -knob * 0.6), knob, bone)
+		draw_circle(end + Vector2(0.0, knob * 0.6), knob, bone)
 
 
 func _draw_bone_pulse() -> void:
@@ -1758,6 +1885,16 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 			var puff: float = 11.0 if boosted else 7.0
 			c.draw_circle(pos, puff, Color(0.5, 0.8, 0.9, 0.28 if boosted else 0.25))
 			c.draw_arc(pos, puff + 2.0, 0.0, TAU, 20, color, 2.5 if boosted else 2.0)
+			if Tuning.brush_reach_px > 0.0:
+				c.draw_arc(pos, puff + 2.0 + Tuning.brush_reach_px, 0.0, TAU, 28, Color(color, 0.35), 1.5)
+			var combo: int = brush_combo_level()
+			if combo > 0:
+				var hot := Color("FFE08A").lerp(Color("FF9A3C"), float(combo) / float(maxi(Tuning.brush_combo_max, 1)))
+				var font: Font = UiStyle.display_font()
+				var tag := "SCRUB x%.1f" % brush_scrub_mult()
+				var at := pos + Vector2(12, 14)
+				c.draw_string_outline(font, at, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0.1, 0.07, 0.05, 0.85))
+				c.draw_string(font, at, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, hot)
 	_draw_cursor_label(c, pos, Tuning.TOOL_NAMES[current_tool], color)
 
 
