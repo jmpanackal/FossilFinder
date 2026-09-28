@@ -1356,12 +1356,28 @@ func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:
 	var stars: int = stand_condition_stars(stand_id)
 	if stars <= 0:
 		return
+	if GameState.stand_is_masterpiece(stand_id):
+		_draw_masterpiece_frame(stand_id, chip)
 	var r: float = 8.0
 	var gap: float = 18.0
 	var y: float = chip.end.y + 13.0
 	var x0: float = chip.end.x - gap * 4.0 - r - 2.0
 	for i in 5:
 		_draw_star(Vector2(x0 + gap * float(i), y), r, i < stars)
+
+
+func _draw_masterpiece_frame(stand_id: String, chip: Rect2) -> void:
+	## Gold frame + "Masterpiece" tag: a finished stand where every bone is Great+.
+	var stand: Rect2 = stand_rect(stand_id)
+	draw_rect(stand.grow(4.0), Color("FFD66B"), false, 4.0)
+	draw_rect(stand.grow(9.0), Color(1.0, 0.84, 0.42, 0.35), false, 3.0)
+	var font: Font = Ui.display_font()
+	var size: int = label_font_size(12)
+	var text := "MASTERPIECE"
+	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var tag := Rect2(Vector2(chip.position.x, chip.end.y + 26.0), Vector2(w + 12.0, float(size) + 8.0))
+	draw_rect(tag, Color("FFD66B"))
+	draw_string(font, Vector2(tag.position.x + 6.0, tag.end.y - 5.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color("2A1D12"))
 
 
 func _draw_star(center: Vector2, r: float, filled: bool) -> void:

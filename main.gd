@@ -40,6 +40,7 @@ func _ready() -> void:
 	Settings.menu_toggled.connect(_on_settings_toggled)
 	GameState.progress_reset.connect(_on_progress_reset)
 	GameState.skeleton_completed.connect(_on_skeleton_completed)
+	GameState.masterpiece_completed.connect(_on_masterpiece_completed)
 	_sync_view()
 	dig_site.layer_cleared.connect(_on_layer_cleared)
 	dig_site.fossil_cell_exposed.connect(_on_fossil_exposed)
@@ -379,6 +380,19 @@ func _end_round() -> void:
 			_last_fossil_stars = maxi(_last_fossil_stars, int(entry["stars"]))
 		_last_fossil_line = Summary.join_find_lines(names)
 	_show_summary()
+	_run_workshop()
+
+
+func _run_workshop() -> void:
+	## Repair Workshop: fix the weakest bones on display after each shift.
+	var repairs: Array = GameState.run_workshop()
+	if repairs.is_empty() or toast == null or not toast.has_method("show_toast"):
+		return
+	var lines: PackedStringArray = []
+	for raw in repairs:
+		var r: Dictionary = raw
+		lines.append("%s: %s → %s" % [str(r["name"]), Tuning.condition_name(int(r["from"])), Tuning.condition_name(int(r["to"]))])
+	toast.show_toast("Workshop repaired %d bone%s" % [repairs.size(), "" if repairs.size() == 1 else "s"], ", ".join(lines))
 
 
 func _show_summary() -> void:
@@ -418,6 +432,16 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 				color = Color("FFE08A")
 		_spawn_float(Matrix.float_text(find), origin + offset, color)
 		_spawn_loot_fly(Matrix.icon_kind(find), origin, float(i) * 0.045, int(find.get("rarity", 0)))
+
+
+func _on_masterpiece_completed(stand_id: String, bonus: int) -> void:
+	var title_text: String = "%s Masterpiece!" % GameState.stand_title(stand_id)
+	var sub: String = "Every bone Great or better: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
+	if hud != null and hud.visible and hud.has_method("celebrate"):
+		hud.celebrate(-1, title_text, sub, 5, 3)
+	elif toast != null and toast.has_method("show_toast"):
+		toast.show_toast(title_text, sub, 5)
+	Sfx.play("unveil")
 
 
 func _on_skeleton_completed(stand_id: String, bonus: int) -> void:

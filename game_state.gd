@@ -6,6 +6,8 @@ signal upgrades_changed
 signal hall_changed
 signal progress_reset
 signal skeleton_completed(stand_id: String, bonus: int)
+## Complete stand where every bone is Great or better.
+signal masterpiece_completed(stand_id: String, bonus: int)
 
 const STAND_T_REX := "t_rex"
 const STAND_TRICERATOPS := "triceratops"
@@ -74,6 +76,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "benches", "cat": "Museum", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 450, "scale": 2.0, "max": 5},
 	{"id": "unveil_time", "cat": "Museum", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 200, "scale": 1.85, "max": 4},
 	{"id": "unveil_crowd", "cat": "Museum", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes bring more people.", "cost": 220, "scale": 1.85, "max": 4},
+	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Repair Workshop", "desc": "Repairs one more bone after each shift.", "unlock_name": "Repair Workshop", "unlock_desc": "After each shift, repairs a bone on display by one star (up to Great). Gets back stars lost to drying out.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
 	{"id": "glass_case", "cat": "Museum", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 1000, "scale": 1.85, "max": 6},
 	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
 	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
@@ -430,6 +433,7 @@ func _tuning_snapshot() -> Dictionary:
 		"hands_sense_radius": Tuning.hands_sense_radius,
 		"condition_luck": Tuning.condition_luck,
 		"cast_rank": Tuning.cast_rank,
+		"workshop": int(_lv("workshop")),
 	}
 
 
@@ -522,6 +526,9 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return "Crowd surge on unveil +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
 		"unveil_crowd":
 			return _pct_delta_line("+%d%% visitors on unveil", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
+		"workshop":
+			var jobs: int = int(at["workshop"])
+			return "Repairs %d bone%s per shift" % [jobs, "" if jobs == 1 else "s"]
 		"restoration":
 			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
 		_:
@@ -1119,13 +1126,67 @@ func _matrix_hall_piece(find: Dictionary) -> String:
 func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool, condition: int = Tuning.CONDITION_GOOD) -> String:
 	var stand_id: String = stand_for_piece(piece_id)
 	var was_complete: bool = stand_id != "" and stand_is_complete(stand_id)
+	var was_master: bool = stand_id != "" and stand_is_masterpiece(stand_id)
 	var note: String = _install_piece(piece_id, display_name, cleanliness, clean, clampi(condition, 1, 5))
+	if stand_id != "" and not was_master and stand_is_masterpiece(stand_id):
+		call_deferred("_award_masterpiece", stand_id)
 	if stand_id != "" and not was_complete and stand_is_complete(stand_id):
 		var bonus: int = skeleton_bonus(stand_id)
 		add_money(bonus)
 		skeleton_completed.emit(stand_id, bonus)
 		note = "%s COMPLETE! +$%d, visitors x%s." % [stand_title(stand_id), bonus, _mult_text(Tuning.complete_stand_mult)]
 	return note
+
+
+## Masterpiece: complete, and every piece Great (4 stars) or better.
+func stand_is_masterpiece(stand_id: String) -> bool:
+	if stand_id.is_empty() or not stand_is_complete(stand_id):
+		return false
+	for piece_id in stand_piece_ids(stand_id):
+		if piece_condition(str(piece_id)) < Tuning.masterpiece_min_condition:
+			return false
+	return true
+
+
+func masterpiece_bonus(stand_id: String) -> int:
+	return int(round(float(skeleton_bonus(stand_id)) * Tuning.masterpiece_bonus_mult))
+
+
+func _award_masterpiece(stand_id: String) -> void:
+	var bonus: int = masterpiece_bonus(stand_id)
+	add_money(bonus)
+	hall_changed.emit()
+	masterpiece_completed.emit(stand_id, bonus)
+
+
+## Repair Workshop: after a shift, raise the weakest bones on display by one
+## star each (never past Great). Returns what was repaired, for the summary.
+func run_workshop() -> Array:
+	var repairs: Array = []
+	var jobs: int = int(_lv("workshop"))
+	for _job in jobs:
+		var pick: String = ""
+		var lowest: int = Tuning.CONDITION_PERFECT
+		for piece_id in pieces:
+			var id: String = str(piece_id)
+			var cond: int = piece_condition(id)
+			if cond < Tuning.workshop_max_condition and cond < lowest:
+				lowest = cond
+				pick = id
+		if pick.is_empty():
+			break
+		var stand_id: String = stand_for_piece(pick)
+		var was_master: bool = stand_is_masterpiece(stand_id)
+		var piece: Dictionary = pieces[pick]
+		piece["condition"] = lowest + 1
+		pieces[pick] = piece
+		repairs.append({"piece_id": pick, "name": str(piece.get("name", pick)), "from": lowest, "to": lowest + 1})
+		if not was_master and stand_is_masterpiece(stand_id):
+			_award_masterpiece(stand_id)
+	if not repairs.is_empty():
+		collection_changed.emit()
+		hall_changed.emit()
+	return repairs
 
 
 ## The finished-skeleton payout: the stand's full bone value, doubled.
@@ -1530,6 +1591,8 @@ func stand_visitors(stand_id: String) -> int:
 		total += piece_visitors(str(piece_id))
 	if stand_id != "" and stand_is_complete(stand_id):
 		total = int(round(float(total) * Tuning.complete_stand_mult))
+		if stand_is_masterpiece(stand_id):
+			total = int(round(float(total) * Tuning.masterpiece_mult))
 	if stand_id != "" and stand_id == featured_stand_id:
 		total = int(round(float(total) * Tuning.spotlight_mult))
 	return total

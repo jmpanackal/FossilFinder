@@ -461,6 +461,11 @@ func empty_display_visible() -> bool:
 	var stand_id: String = str(GameState.featured_stand_id)
 	if stand_id != "" and GameState.stand_is_filled(stand_id):
 		return false
+	## Any unveiled stand means something is on display.
+	for piece_id in GameState.pieces:
+		var sid: String = GameState.stand_for_piece(str(piece_id))
+		if sid != "" and not GameState.stand_has_pending_unveil(sid):
+			return false
 	return true
 
 

@@ -207,6 +207,12 @@ var set_complete_sale_mult: float = 2.0
 ## Finishing every piece of a stand: permanent visitor multiplier + lump sum.
 var complete_stand_mult: float = 2.0
 var skeleton_bonus_mult: float = 2.0
+## Masterpiece: complete stand, every piece at least this condition (4 = Great).
+var masterpiece_min_condition: int = 4
+var masterpiece_mult: float = 1.5
+var masterpiece_bonus_mult: float = 2.0
+## Repair Workshop never repairs past this condition (Perfect only comes from the ground).
+var workshop_max_condition: int = 4
 var extra_complete_set_chance: float = 0.22
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0

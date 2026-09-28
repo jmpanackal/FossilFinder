@@ -113,10 +113,11 @@ Next:
 Replaces bone breaking, which never really happened (hold-dig skipped bone).
 
 - **Condition** (Poor / Fair / Good / Great / Perfect) is rolled when the pit is made and revealed when the bone is fully dug out. It sets value (0.5x-2x) and museum visitors (0.5x-2x). Gentle Digging / Gentle Picking improve the odds. Tools never damage bone.
-- **Brushing:** 2-4 layers of dirt (by depth) wipe away where the brush passes. A starter brush lifts half a layer per pass.
+- **Brushing:** 3-5 layers of dirt (by depth) clump over the bone, and the bone's outline shows through. One full sweep across a spot lifts one pass of dirt: half a layer for a starter brush, up to 1.5 with upgrades. Slow dragging does not clean extra.
 - **Museum:** a better copy upgrades the exhibit (the old one is sold). Stands show average condition stars.
-- **Fragile bones** (~20%) and **Opal bones** (~6%, worth 2.5x) crumble one condition step at a time once in open air. A countdown ring over the bone and the find card show the time left.
+- **Fragile bones** (~20%) and **Opal bones** (~6%, worth 2.5x) lose one star at a time once in open air. A "-1 ★ 6s" plate over the bone and the find card ("Good (was Perfect)") show what is happening and why.
 - **Plaster Cast** (Hands upgrade, 3 ranks): hold Hands on a dug-out bone to wrap it, like a cast on a broken arm. It stops crumbling and is collected at once.
 - **Feedback:** reveals, upgrades and finished skeletons pop a ribbon on the Finds tray border. It's louder for better finds and never covers the dig cells. First-time explanations appear as its second line.
 
-Next (phase 3): a museum repair upgrade that restores a crumbled piece one step for money, and *Masterpiece* skeletons (complete, all Fine or better) with a gold plaque and a big bonus.
+- **Repair Workshop** (Museum upgrade, 3 ranks): after each shift it repairs the weakest bones on display by one star each, up to Great. Perfect only comes from the ground.
+- **Masterpiece:** a complete stand where every bone is Great or better gets a gold frame and tag, x1.5 visitors on top of the completion x2, and a one-time bonus (the stand's bone value x4). A better copy or a workshop repair can finish one.
