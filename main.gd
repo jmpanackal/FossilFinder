@@ -39,6 +39,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_sync_view)
 	Settings.menu_toggled.connect(_on_settings_toggled)
 	GameState.progress_reset.connect(_on_progress_reset)
+	GameState.skeleton_completed.connect(_on_skeleton_completed)
 	_sync_view()
 	dig_site.layer_cleared.connect(_on_layer_cleared)
 	dig_site.fossil_cell_exposed.connect(_on_fossil_exposed)
@@ -411,6 +412,22 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 				color = Color("FFE08A")
 		_spawn_float(Matrix.float_text(find), origin + offset, color)
 		_spawn_loot_fly(Matrix.icon_kind(find), origin, float(i) * 0.045, int(find.get("rarity", 0)))
+
+
+func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
+	## The biggest moment in the game: louder than any single find.
+	var title_text: String = "%s complete!" % GameState.stand_title(stand_id)
+	var sub: String = "+$%d  ·  visitors x%s forever" % [bonus, GameState._mult_text(Tuning.complete_stand_mult)]
+	if toast != null and toast.has_method("show_toast"):
+		toast.show_toast(title_text, sub, 5)
+	Sfx.play("unveil")
+	if Tuning.shake_enabled:
+		_shake_left = Tuning.shake_time * 2.5
+	if screen == "dig" and dig_site != null and dig_site.visible:
+		var center: Vector2 = Tuning.pit_grid_rect().get_center()
+		_spawn_float(title_text.to_upper(), center + Vector2(0, -30), Color("FFE08A"), 34)
+		_spawn_float("+$%d" % bonus, center + Vector2(0, 14), Color("E4B75A"), 26)
+		_ping(center)
 
 
 func _on_bone_sensed(world_pos: Vector2) -> void:

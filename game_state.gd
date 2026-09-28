@@ -5,6 +5,7 @@ signal collection_changed
 signal upgrades_changed
 signal hall_changed
 signal progress_reset
+signal skeleton_completed(stand_id: String, bonus: int)
 
 const STAND_T_REX := "t_rex"
 const STAND_TRICERATOPS := "triceratops"
@@ -1060,6 +1061,34 @@ func _matrix_hall_piece(find: Dictionary) -> String:
 
 
 func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
+	var stand_id: String = stand_for_piece(piece_id)
+	var was_complete: bool = stand_id != "" and stand_is_complete(stand_id)
+	var note: String = _install_piece(piece_id, display_name, cleanliness, clean)
+	if stand_id != "" and not was_complete and stand_is_complete(stand_id):
+		var bonus: int = skeleton_bonus(stand_id)
+		add_money(bonus)
+		skeleton_completed.emit(stand_id, bonus)
+		note = "%s COMPLETE! +$%d, visitors x%s." % [stand_title(stand_id), bonus, _mult_text(Tuning.complete_stand_mult)]
+	return note
+
+
+## The finished-skeleton payout: the stand's full bone value, doubled.
+func skeleton_bonus(stand_id: String) -> int:
+	var total: float = 0.0
+	for piece_id in stand_piece_ids(stand_id):
+		var data: FossilData = fossil_data_for(str(piece_id))
+		if data != null:
+			total += float(data.base_value) * float(piece_need(str(piece_id)))
+	return int(round(total * Tuning.skeleton_bonus_mult))
+
+
+func _mult_text(mult: float) -> String:
+	if is_equal_approx(mult, round(mult)):
+		return "%d" % int(round(mult))
+	return "%.1f" % mult
+
+
+func _install_piece(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
 	var need: int = piece_need(piece_id)
 	var count: int = piece_count(piece_id)
 	if pieces.has(piece_id) and count >= need:
@@ -1420,6 +1449,8 @@ func stand_visitors(stand_id: String) -> int:
 		if stand_for_piece(str(piece_id)) != stand_id:
 			continue
 		total += piece_visitors(str(piece_id))
+	if stand_id != "" and stand_is_complete(stand_id):
+		total = int(round(float(total) * Tuning.complete_stand_mult))
 	if stand_id != "" and stand_id == featured_stand_id:
 		total = int(round(float(total) * Tuning.spotlight_mult))
 	return total

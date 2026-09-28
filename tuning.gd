@@ -206,6 +206,9 @@ var visitor_draw_exhibit_dirty: int = 2
 var unveil_surge_visitors: int = 8
 var duplicate_cash: float = 0.4
 var set_complete_sale_mult: float = 2.0
+## Finishing every piece of a stand: permanent visitor multiplier + lump sum.
+var complete_stand_mult: float = 2.0
+var skeleton_bonus_mult: float = 2.0
 var extra_complete_set_chance: float = 0.22
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0
