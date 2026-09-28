@@ -525,7 +525,7 @@ func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
 func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
 	## Condition stays secret until the bone is fully dug out.
 	var known: bool = index >= 0 and index < dig_site.finds.size() and dig_site._find_is_fully_exposed(dig_site.finds[index])
-	var text: String = "-1 star: drying out! Now %s" % Tuning.condition_name(condition) if known else "-1 star: drying out!"
+	var text: String = "-1 star (%s)" % Tuning.condition_name(condition) if known else "-1 star"
 	_spawn_float(text, world_pos + Vector2(0, -20), Color("D8C8A8"), 18)
 
 

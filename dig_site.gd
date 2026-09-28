@@ -83,6 +83,8 @@ var _strike_finds: Array = []
 var _matrix_juice: Array = []
 var _pending: Array = []
 var _cast_hold: float = 0.0
+## Bones are numbered 1, 2, 3... in the order you uncover them this shift.
+var _seen_count: int = 0
 var _cast_index: int = -1
 
 const PUNCH_DIRT := 0
@@ -149,6 +151,7 @@ func start_round() -> void:
 	cleanliness.clear()
 	dust.clear()
 	sensed_cells.clear()
+	_seen_count = 0
 	finds.clear()
 	_focus_index = 0
 	_signaled_ready_to_dust = false
@@ -1144,6 +1147,8 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	fossil_cell_exposed.emit(cell_center(cell), first)
 	if not bool(find.get("spotted", false)):
 		find["spotted"] = true
+		_seen_count += 1
+		find["number"] = _seen_count
 		find_spotted.emit(int(fossil_cells.get(cell, -1)), cell_center(cell))
 	var kind: int = int(find.get("kind", Tuning.BONE_SOLID))
 	if Tuning.bone_crumbles(kind) and not bool(find.get("kind_seen", false)):
@@ -1334,6 +1339,7 @@ func _card_for_find(index: int) -> Dictionary:
 		"stars": cond if named else 0,
 		"grade": Tuning.condition_label(cond) if named else "",
 		"condition": cond if named else 0,
+		"number": int(find.get("number", index + 1)),
 		"kind": int(find.get("kind", Tuning.BONE_SOLID)),
 		"kind_name": Tuning.bone_kind_name(int(find.get("kind", Tuning.BONE_SOLID))),
 		"crumble_in": crumble_in(find),
@@ -1827,6 +1833,9 @@ func _draw_top(x: int, y: int) -> void:
 	var color: Color
 	var painted: bool = false
 	var bone: bool = exposed_cells.has(cell)
+	if bone and bool(_find_at(cell).get("extracted", false)):
+		_draw_collected_hollow(rect, cell)
+		return
 	if bone:
 		color = _bone_color(cell)
 		if _bone_pulse > 0.0:
@@ -1859,6 +1868,17 @@ func _draw_top(x: int, y: int) -> void:
 			_draw_plaster(rect, cell)
 		else:
 			_draw_dust(rect, cell)
+
+
+func _draw_collected_hollow(rect: Rect2, cell: Vector2i) -> void:
+	## A collected bone has left the pit: an empty hollow with its imprint,
+	## so it's clear the bone is safe in your bag (not still in the air).
+	var hollow: Color = Tuning.shaft_interior_color(int(_find_at(cell).get("layer", 0)))
+	draw_rect(rect, hollow)
+	draw_rect(rect, Tuning.cell_line, false, 1.5)
+	var data = _find_at(cell).get("data", null)
+	if data != null and data.has_method("draw_silhouette"):
+		data.draw_silhouette(self, rect.grow(-6.0), Color(0, 0, 0, 0.28))
 
 
 func _draw_cell_art(layer: int, rect: Rect2) -> bool:
@@ -1909,6 +1929,8 @@ func _draw_find_markers() -> void:
 	var font: Font = UiStyle.display_font()
 	for i in finds.size():
 		var find: Dictionary = finds[i]
+		if bool(find.get("extracted", false)):
+			continue
 		var cells: Dictionary = find.get("cells", {})
 		var shown: Array = []
 		for raw in cells:
@@ -1925,7 +1947,7 @@ func _draw_find_markers() -> void:
 		var c := r.position + Vector2(10.0, 10.0)
 		draw_circle(c, 9.0, col)
 		draw_arc(c, 9.0, 0.0, TAU, 20, Color("1B1410"), 1.5)
-		var text := str(i + 1)
+		var text := str(int(find.get("number", i + 1)))
 		var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
 		draw_string(font, c + Vector2(-tw * 0.5, 4.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("1B1410"))
 
@@ -2187,9 +2209,10 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		x += star_w + 4.0
 		c.draw_string(font, Vector2(x, anchor.y + 4.5), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 		if Tuning.cast_owned() and _castable(find):
-			var tip := "Hold Hands: plaster (keeps stars, stays dirty)"
+			## Short prompt ABOVE the timer so it never hides the bone itself.
+			var tip := "Hold to plaster" if _using_hands() else "Hands (1): plaster"
 			var tw: float = font.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-			var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.end.y + 3.0), Vector2(tw + 12.0, 18.0))
+			var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.position.y - 21.0), Vector2(tw + 12.0, 18.0))
 			c.draw_rect(tip_rect, Color(PLASTER, 0.92))
 			c.draw_string(font, Vector2(tip_rect.position.x + 6.0, tip_rect.end.y - 5.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("3A2A1C"))
 

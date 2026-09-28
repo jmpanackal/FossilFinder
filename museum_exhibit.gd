@@ -1386,6 +1386,28 @@ func stand_at_stars(hall_pos: Vector2) -> String:
 	return ""
 
 
+## Data for the hover card (StarTip): stars, word, bones under 4 stars.
+func stand_condition_info(stand_id: String) -> Dictionary:
+	var stars: int = stand_condition_stars(stand_id)
+	var below: int = 0
+	var total: int = 0
+	for piece_id in GameState.stand_piece_ids(stand_id):
+		var cond: int = int(GameState.piece_condition(str(piece_id)))
+		if cond <= 0:
+			continue
+		total += 1
+		if cond < Tuning.masterpiece_min_condition:
+			below += 1
+	return {
+		"stars": stars,
+		"word": Tuning.condition_name(maxi(stars, 1)),
+		"below": below,
+		"total": total,
+		"complete": GameState.stand_is_complete(stand_id),
+		"master": GameState.stand_is_masterpiece(stand_id),
+	}
+
+
 ## Plain-language explanation of a stand's stars, shown on hover.
 func stand_condition_tip(stand_id: String) -> String:
 	var stars: int = stand_condition_stars(stand_id)

@@ -41,6 +41,9 @@ var _meta_size: int = 12
 var _price_size: int = 15
 var _tight: bool = false
 var _clean_shown: float = 0.0
+## Condensed: many finds at once -> icon, stars and price only; hover for the
+## full card. A colored top strip still says new / duplicate / crumbling.
+var _condensed: bool = false
 var _bar_flash: float = 0.0
 
 
@@ -151,7 +154,9 @@ func set_extra(_text: String) -> void:
 	_apply_stat_lines()
 
 
-func fit_tray(width: float, crowded: bool) -> void:
+func fit_tray(width: float, crowded: bool, condensed: bool = false) -> void:
+	_condensed = condensed
+	mouse_filter = Control.MOUSE_FILTER_PASS if condensed else Control.MOUSE_FILTER_IGNORE
 	var w: float = maxf(90.0, width)
 	_tight = w < 140.0
 	var compact: bool = crowded or w < 200.0
@@ -162,6 +167,11 @@ func fit_tray(width: float, crowded: bool) -> void:
 	_price_size = 11 if _tight else (13 if compact else 15)
 	## StarRating resets its own size on _ready; pin the caption size here.
 	_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
+	if condensed:
+		## Condensed cards show only stars + price, so give them room.
+		_stars.custom_minimum_size = Vector2(62.0, 11.0)
+		_price_size = 15
+		_name_size = 16
 	_apply_fonts()
 	_layout()
 
@@ -190,6 +200,21 @@ func catch_pos() -> Vector2:
 	return global_position + size * 0.5
 
 
+func _layout_condensed(w: float, body_h: float) -> void:
+	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 34.0)
+	_icon.position = Vector2(PAD, (body_h - icon_s) * 0.5)
+	_icon.size = Vector2(icon_s, icon_s)
+	var left: float = _icon.position.x + icon_s + 4.0
+	var col_w: float = maxf(w - PAD - left, 20.0)
+	var row_h: float = float(_meta_size) + 8.0
+	var y: float = (body_h - row_h * 2.0) * 0.5
+	_grade_row.position = Vector2(left, y)
+	_grade_row.size = Vector2(col_w, row_h)
+	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_price_label.position = Vector2(left, y + row_h)
+	_price_label.size = Vector2(col_w, row_h)
+
+
 func _layout() -> void:
 	## [icon] | name (1-2 lines, full width)
 	##        | stars + condition .......... price
@@ -205,6 +230,13 @@ func _layout() -> void:
 	_icon.size = Vector2(icon_s, icon_s)
 	_marker.position = Vector2(2.0, 2.0)
 	_marker.size = Vector2(16.0, 16.0)
+	_bar.position = Vector2(0.0, h - BAR_H)
+	_bar.size = Vector2(w, BAR_H)
+	if _condensed:
+		_layout_condensed(w, body_h)
+		queue_redraw()
+		return
+	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var left: float = _icon.position.x + icon_s + 6.0
 	var right: float = w - PAD
 	var col_w: float = maxf(right - left, 20.0)
@@ -277,7 +309,7 @@ func _two_line_width(text: String, font: Font, fs: int) -> float:
 
 
 func _apply_stat_lines() -> void:
-	if _stars.custom_minimum_size.x > 48.0:
+	if _stars.custom_minimum_size.x > 64.0:
 		_stars.custom_minimum_size = Vector2(46, 8)
 	_grade_label.text = _condition_line(_card)
 	_status_label.text = _meter_line(_card)
@@ -290,9 +322,10 @@ func _apply_stat_lines() -> void:
 	if _stars.has_method("set_rating"):
 		_stars.call("set_rating", stars)
 	_stars.visible = show_stars
-	_grade_label.visible = not _grade_label.text.is_empty()
+	_grade_label.visible = not _grade_label.text.is_empty() and not _condensed
 	_grade_row.visible = (_grade_label.visible or show_stars) and not _tight
-	_status_label.visible = not _status_label.text.is_empty() and not _tight
+	_status_label.visible = not _status_label.text.is_empty() and not _tight and not _condensed
+	_name_label.visible = not _condensed
 	_price_label.visible = not _price_label.text.is_empty()
 	_apply_fonts()
 
@@ -449,7 +482,7 @@ func _draw_marker() -> void:
 	_marker.draw_circle(c, r, col)
 	_marker.draw_arc(c, r, 0.0, TAU, 20, Color("1B1410"), 1.5)
 	var font: Font = Ui.display_font()
-	var text: String = str(_index + 1)
+	var text: String = str(int(_card.get("number", _index + 1)))
 	var fs: int = 11
 	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	_marker.draw_string(font, c + Vector2(-tw * 0.5, fs * 0.38), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("1B1410"))
@@ -469,6 +502,17 @@ func _draw_bar() -> void:
 		fill = Color("A8E07A")
 	fill = fill.lerp(Color.WHITE, _bar_flash * 0.5)
 	_bar.draw_rect(Rect2(rect.position, Vector2(rect.size.x * (1.0 if done else t), rect.size.y)), fill)
+
+
+func status_color() -> Color:
+	return _status_color(_status_label.text)
+
+
+func _draw() -> void:
+	## Condensed cards keep their status as a colored strip along the top.
+	if not _condensed or _status_label.text.is_empty():
+		return
+	draw_rect(Rect2(3.0, 2.0, size.x - 6.0, 3.0), _status_color(_status_label.text))
 
 
 func _process(delta: float) -> void:

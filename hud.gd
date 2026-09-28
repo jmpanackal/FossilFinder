@@ -35,6 +35,8 @@ const CHIP_COMFORT_MIN := 232.0
 const CHIP_COMFORT_MAX := 300.0
 const CHIP_MIN_W := 90.0
 const CHIP_GAP := 8.0
+## At this many finds the tray switches to condensed cards (hover for details).
+const CONDENSE_AT := 5
 const WALLET_MONEY_SAMPLE := "$8888888"
 const WALLET_RATE_SAMPLE := "$8888.88/s"
 const WALLET_RIGHT_PAD := 20.0
@@ -83,6 +85,8 @@ var _layout_key: String = ""
 var _cards_key: String = ""
 var _ribbon: Control
 var _fame_label: Control
+var _detail_chip: Control
+var _detail_for: Control
 
 
 func _ready() -> void:
@@ -221,6 +225,8 @@ func set_find_cards(cards: Array) -> void:
 	for raw in cards:
 		if raw is Dictionary and _card_is_uncovered(raw):
 			shown.append(raw)
+	## Tray order = discovery order, matching the numbers on the bones.
+	shown.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("number", a.get("index", 0))) < int(b.get("number", b.get("index", 0))))
 	var key: String = _cards_signature(shown)
 	if key == _cards_key and _chips.size() == shown.size():
 		return
@@ -237,6 +243,7 @@ func set_find_cards(cards: Array) -> void:
 	var n: int = shown.size()
 	var each: float = _chip_width_for_count(n, tray_w)
 	var crowded: bool = n >= 4 or each < 220.0
+	var condensed: bool = n >= CONDENSE_AT
 	for i in shown.size():
 		var card: Dictionary = shown[i]
 		if not card.has("index"):
@@ -245,7 +252,10 @@ func set_find_cards(cards: Array) -> void:
 		if chip != null and chip.has_method("apply_card"):
 			chip.call("apply_card", card)
 		if chip != null and chip.has_method("fit_tray"):
-			chip.call("fit_tray", each, crowded)
+			chip.call("fit_tray", each, crowded, condensed)
+		if chip != null and not chip.mouse_entered.is_connected(_on_chip_hover):
+			chip.mouse_entered.connect(_on_chip_hover.bind(chip))
+			chip.mouse_exited.connect(_on_chip_unhover.bind(chip))
 	_apply_headline_to_chips()
 	_find_box.visible = not shown.is_empty()
 	_layout_key = ""
@@ -263,7 +273,7 @@ func _cards_signature(shown: Array) -> String:
 		parts.append("%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s" % [
 			c.get("index", -1), c.get("name", ""), c.get("status", ""), c.get("stars", 0),
 			c.get("dirt", ""), c.get("value", 0), c.get("fate", ""), c.get("progress", ""),
-			c.get("exposed", 0), -1 if left == INF else int(ceil(left)), "%s:%s" % [c.get("cast", false), c.get("crumbled", 0)],
+			c.get("exposed", 0), -1 if left == INF else int(ceil(left)), "%s:%s:%s" % [c.get("cast", false), c.get("crumbled", 0), c.get("number", 0)],
 		])
 	return ";".join(parts)
 
@@ -316,6 +326,30 @@ func ribbon_anchor(index: int) -> Vector2:
 		anchor_x = chip.global_position.x + chip.size.x * 0.5
 	var top: float = _finds_frame.position.y if _finds_frame != null else Tuning.footer_top()
 	return Vector2(anchor_x, top)
+
+
+func _on_chip_hover(chip: Control) -> void:
+	## Condensed card hovered: show the full card just above it.
+	if chip == null or not bool(chip.get("_condensed")):
+		return
+	if _detail_chip == null:
+		_detail_chip = FindChipScript.new()
+		_detail_chip.name = "FindDetail"
+		_detail_chip.z_index = 20
+		_find_box.get_parent().add_child(_detail_chip)
+	_detail_for = chip
+	_detail_chip.call("apply_card", chip.get("_card"))
+	_detail_chip.call("fit_tray", 300.0, false, false)
+	var x: float = chip.global_position.x + chip.size.x * 0.5 - 150.0
+	x = clampf(x, 8.0, Tuning.view_w - 308.0)
+	_detail_chip.position = Vector2(x, chip.global_position.y - _detail_chip.size.y - 6.0)
+	_detail_chip.visible = true
+
+
+func _on_chip_unhover(chip: Control) -> void:
+	if _detail_chip != null and _detail_for == chip:
+		_detail_chip.visible = false
+		_detail_for = null
 
 
 func ribbon() -> Control:
