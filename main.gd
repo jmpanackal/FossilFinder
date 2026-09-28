@@ -3,6 +3,7 @@ extends Node2D
 const FloatingTextScene := preload("res://floating_text.gd")
 const RevealPing := preload("res://reveal_ping.gd")
 const LootFlyScene := preload("res://loot_fly.gd")
+const FindChipScript := preload("res://find_chip.gd")
 const Matrix := preload("res://matrix_find.gd")
 const Lucky := preload("res://lucky_strike.gd")
 
@@ -53,6 +54,8 @@ func _ready() -> void:
 		dig_site.bone_sensed.connect(_on_bone_sensed)
 	if dig_site.has_signal("condition_revealed"):
 		dig_site.condition_revealed.connect(_on_condition_revealed)
+	if dig_site.has_signal("find_spotted"):
+		dig_site.find_spotted.connect(_on_find_spotted)
 	if dig_site.has_signal("bone_kind_seen"):
 		dig_site.bone_kind_seen.connect(_on_bone_kind_seen)
 		dig_site.bone_crumbled.connect(_on_bone_crumbled)
@@ -491,6 +494,12 @@ func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> v
 		_ping(world_pos)
 
 
+func _on_find_spotted(index: int, world_pos: Vector2) -> void:
+	## Its card appears now: fly the bone from the pit into that card.
+	_refresh_find_cards()
+	_spawn_fossil_fly(index, world_pos)
+
+
 func _refresh_find_cards() -> void:
 	## Make sure the find's card exists before a ribbon is pinned to it.
 	if hud != null and hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
@@ -592,8 +601,10 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 	})
 	if hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
 		hud.set_find_cards(dig_site.live_find_cards())
-	if hud.has_method("catch_find") and dig_site.has_method("find_index_for"):
-		hud.catch_find(int(dig_site.find_index_for(id)))
+	if dig_site.has_method("find_index_for"):
+		var bagged_index: int = int(dig_site.find_index_for(id))
+		if bagged_index >= 0:
+			_spawn_fossil_fly(bagged_index, dig_site.find_centroid(bagged_index))
 	if hud.has_method("set_find_headline"):
 		hud.set_find_headline("")
 
@@ -706,7 +717,7 @@ func _spawn_fossil_fly(find_index: int, world_pos: Vector2) -> void:
 		var find: Dictionary = dig_site.finds[find_index]
 		data = find.get("data", null) as Resource
 	var fly = LootFlyScene.new()
-	fly.setup_fossil(data, _world_to_hud(world_pos), dest)
+	fly.setup_fossil(data, _world_to_hud(world_pos), dest, 0.0, FindChipScript.color_for(find_index))
 	if hud != null and hud.has_method("catch_find"):
 		fly.arrived.connect(func() -> void: hud.catch_find(find_index))
 	if hud != null:

@@ -1,12 +1,31 @@
 class_name FindChip
 extends Panel
 
+## One card in the Finds tray. Laid out by hand (not nested containers) so
+## text never spills past the card at any tray width:
+##   [#n marker + bone icon] [name / stars+condition / status tag] [price]
+##   [brushing progress bar along the bottom edge]
+## The numbered color marker matches the one drawn on the bone in the pit.
+
 const Ui := preload("res://ui_style.gd")
 const ArtCatalogScript := preload("res://art_catalog.gd")
 const FossilDataScript := preload("res://fossil_data.gd")
 const StarRating := preload("res://star_rating.gd")
 
+## Shared with the pit so card N and bone N wear the same color.
+const FIND_COLORS: PackedColorArray = [
+	Color("FF8A65"),
+	Color("4DD0C8"),
+	Color("B39DDB"),
+	Color("AED581"),
+	Color("FFD54F"),
+	Color("64B5F6"),
+]
+const PAD := 8.0
+const BAR_H := 6.0
+
 var _icon: Control
+var _marker: Control
 var _name_label: Label
 var _grade_row: HBoxContainer
 var _grade_label: Label
@@ -14,7 +33,7 @@ var _stars: Control
 var _status_label: Label
 var _price_label: Label
 var _note_label: Label
-var _name_size: int = 16
+var _bar: Control
 var _data: FossilDataScript
 var _piece_id: String = ""
 var _index: int = 0
@@ -23,104 +42,76 @@ var _card: Dictionary = {}
 var _extra: String = ""
 var _pop: float = 0.0
 var _lit: float = 0.0
+var _name_size: int = 16
+var _meta_size: int = 12
+var _price_size: int = 15
+var _tight: bool = false
+var _clean_shown: float = 0.0
+var _bar_flash: float = 0.0
+
+
+static func color_for(index: int) -> Color:
+	return FIND_COLORS[posmod(index, FIND_COLORS.size())]
 
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = Vector2(232, 70)
 	clip_contents = true
-	var row := HBoxContainer.new()
-	row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 8
-	row.offset_right = -8
-	row.offset_top = 5
-	row.offset_bottom = -5
-	row.add_theme_constant_override("separation", 8)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(row)
 	_icon = Control.new()
-	_icon.custom_minimum_size = Vector2(36, 36)
-	_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_icon.draw.connect(_draw_icon)
-	row.add_child(_icon)
-	var col := VBoxContainer.new()
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	col.clip_contents = true
-	col.add_theme_constant_override("separation", 0)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(col)
-	_name_label = Label.new()
-	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	## One line that shrinks to fit: long names never spill past the card.
-	_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_name_label.max_lines_visible = 1
-	_name_label.clip_text = true
+	add_child(_icon)
+	_marker = Control.new()
+	_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_marker.draw.connect(_draw_marker)
+	add_child(_marker)
+	_name_label = _make_label(HORIZONTAL_ALIGNMENT_CENTER)
+	## Names shrink to fit instead of trimming with "...".
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	_name_label.add_theme_constant_override("line_spacing", -2)
-	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	Ui.apply_label(_name_label, 16, Ui.GOLD)
-	col.add_child(_name_label)
 	_grade_row = HBoxContainer.new()
+	_grade_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_grade_row.add_theme_constant_override("separation", 5)
-	_grade_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_grade_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(_grade_row)
-	_grade_label = Label.new()
-	_grade_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_grade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_grade_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_grade_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_grade_label.clip_text = false
-	_grade_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	Ui.apply_label(_grade_label, 12, Ui.MUTED)
-	_grade_row.add_child(_grade_label)
+	add_child(_grade_row)
 	_stars = Control.new()
 	_stars.set_script(StarRating)
 	_stars.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stars.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_stars.custom_minimum_size = Vector2(46, 8)
 	_stars.visible = false
-	_stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_grade_row.add_child(_stars)
-	_grade_row.move_child(_stars, 0)
+	_grade_label = Label.new()
+	_grade_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_grade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_grade_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_status_label = Label.new()
-	_status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_status_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_status_label.clip_text = false
-	_status_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	Ui.apply_label(_status_label, 12, Ui.MUTED)
-	col.add_child(_status_label)
-	_note_label = Label.new()
-	_note_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_note_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_note_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_note_label.clip_text = true
-	_note_label.visible = false
-	Ui.apply_label(_note_label, 11, Color("F4F0E6"))
-	col.add_child(_note_label)
-	_price_label = Label.new()
-	_price_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_grade_row.add_child(_grade_label)
+	_status_label = _make_label(HORIZONTAL_ALIGNMENT_CENTER)
+	_price_label = _make_label(HORIZONTAL_ALIGNMENT_RIGHT)
 	_price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_price_label.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_price_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_price_label.custom_minimum_size = Vector2(50, 28)
-	_price_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_price_label.clip_text = false
-	_price_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	Ui.apply_label(_price_label, 12, Ui.GOLD)
-	row.add_child(_price_label)
+	_note_label = _make_label(HORIZONTAL_ALIGNMENT_CENTER)
+	_note_label.visible = false
+	_bar = Control.new()
+	_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bar.draw.connect(_draw_bar)
+	add_child(_bar)
+	resized.connect(_layout)
+	_apply_fonts()
 	_refresh_chrome()
+
+
+func _make_label(align: HorizontalAlignment) -> Label:
+	var label := Label.new()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = align
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.max_lines_visible = 1
+	add_child(label)
+	return label
 
 
 func apply_card(card: Dictionary) -> void:
@@ -131,10 +122,7 @@ func apply_card(card: Dictionary) -> void:
 	_status = str(card.get("status", "underground"))
 	var find_name: String = str(card.get("name", "")).strip_edges()
 	var named: bool = bool(card.get("extracted", false)) or bool(card.get("fully_exposed", false)) or _status == "bagged" or _status == "brush"
-	if named and not find_name.is_empty() and find_name != "Bone":
-		_name_label.text = find_name
-	else:
-		_name_label.text = "Bone"
+	_name_label.text = find_name if named and not find_name.is_empty() and find_name != "Bone" else "Bone"
 	if named and not was_named:
 		light_up()
 	var raw: Variant = card.get("data", null)
@@ -148,10 +136,16 @@ func apply_card(card: Dictionary) -> void:
 		_piece_id = _data.piece_id if _data.piece_id != "" else _data.name.to_snake_case()
 	if bool(card.get("extracted", false)) or _status == "bagged":
 		_lit = maxf(_lit, 0.55)
+	var clean: float = _brush_progress()
+	if clean > _clean_shown + 0.001:
+		_bar_flash = 1.0
+	_clean_shown = clean
 	_apply_stat_lines()
 	_refresh_chrome()
-	if _icon != null:
-		_icon.queue_redraw()
+	_layout()
+	_icon.queue_redraw()
+	_marker.queue_redraw()
+	_bar.queue_redraw()
 
 
 func set_extra(_text: String) -> void:
@@ -161,32 +155,27 @@ func set_extra(_text: String) -> void:
 
 func fit_tray(width: float, crowded: bool) -> void:
 	var w: float = maxf(90.0, width)
-	var tight: bool = w < 140.0
+	_tight = w < 140.0
 	var compact: bool = crowded or w < 200.0
-	var tall: bool = _note_label != null and _note_label.visible and not tight
-	custom_minimum_size = Vector2(w, 64.0 if tight else (82.0 if tall else 70.0))
+	custom_minimum_size = Vector2(w, 64.0 if _tight else 70.0)
 	size = custom_minimum_size
-	var name_size: int = 11 if tight else (13 if compact else 16)
-	_name_size = name_size
-	var meta_size: int = 10 if tight else (11 if compact else 12)
-	var price_size: int = 11 if tight else (13 if compact else 15)
-	Ui.apply_label(_name_label, name_size, Ui.GOLD)
-	Ui.apply_label(_grade_label, meta_size, Ui.MUTED)
-	Ui.apply_label(_status_label, meta_size, Ui.MUTED)
-	Ui.apply_label(_price_label, price_size, Ui.GOLD)
-	_price_label.custom_minimum_size = Vector2(30 if tight else (42 if compact else 56), 24 if tight else 28)
-	_fit_name()
-	if _stars != null:
-		_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
-	if _icon != null:
-		var icon_s: float = 22.0 if tight else (28.0 if compact else 36.0)
-		_icon.custom_minimum_size = Vector2(icon_s, icon_s)
-	if tight:
-		_grade_row.visible = false
-		_status_label.visible = false
-	else:
-		_grade_row.visible = not _grade_label.text.is_empty() or (_stars != null and _stars.visible)
-		_status_label.visible = not _status_label.text.is_empty()
+	_name_size = 11 if _tight else (13 if compact else 16)
+	_meta_size = 10 if _tight else (11 if compact else 12)
+	_price_size = 11 if _tight else (13 if compact else 15)
+	## StarRating resets its own size on _ready; pin the caption size here.
+	_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
+	_apply_fonts()
+	_layout()
+
+
+func _apply_fonts() -> void:
+	Ui.apply_label(_name_label, _name_size, Ui.GOLD)
+	Ui.apply_label(_grade_label, _meta_size, Ui.INK)
+	Ui.apply_label(_status_label, _meta_size, Ui.MUTED)
+	## The name always leads; the price stays one size under it.
+	Ui.apply_label(_price_label, mini(_price_size, _name_size - 1), Ui.GOLD)
+	Ui.apply_label(_note_label, maxi(_meta_size - 1, 9), Color("F4F0E6"))
+	_status_label.add_theme_color_override("font_color", _status_color(_status_label.text))
 
 
 func light_up() -> void:
@@ -203,41 +192,83 @@ func catch_pos() -> Vector2:
 	return global_position + size * 0.5
 
 
-func _fit_name() -> void:
-	## Shrink the name until it fits the space between icon and price.
-	var room: float = custom_minimum_size.x - 16.0 - 8.0 * 2.0
-	if _icon != null:
-		room -= _icon.custom_minimum_size.x
-	if _price_label != null and _price_label.visible:
-		room -= _price_label.custom_minimum_size.x
-	Ui.apply_copy(_name_label, _name_label.text, _name_size, Ui.GOLD, maxf(room, 40.0))
-	_name_label.custom_minimum_size = Vector2(0, 0)
-	## The name always leads; the price stays one size under it.
-	var name_px: int = _name_label.get_theme_font_size("font_size")
+func _layout() -> void:
+	## Explicit rects: icon | text column | price, with the bar underneath.
+	var w: float = maxf(size.x, custom_minimum_size.x)
+	var h: float = maxf(size.y, custom_minimum_size.y)
+	var body_h: float = h - BAR_H
+	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 40.0)
+	if _tight:
+		icon_s = 22.0
+	_icon.position = Vector2(PAD, (body_h - icon_s) * 0.5)
+	_icon.size = Vector2(icon_s, icon_s)
+	_marker.position = Vector2(2.0, 2.0)
+	_marker.size = Vector2(18.0, 18.0)
+	var price_w: float = 0.0
+	if _price_label.visible and not _price_label.text.is_empty():
+		var font: Font = Ui.display_font()
+		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 6.0
+	var right: float = w - PAD - price_w
+	var left: float = _icon.position.x + icon_s + 6.0
+	var col_w: float = maxf(right - left - 4.0, 20.0)
+	_price_label.position = Vector2(right, 0.0)
+	_price_label.size = Vector2(price_w, body_h)
+	var line_h: float = float(_meta_size) + 5.0
+	var name_h: float = float(_name_size) + 5.0
+	var rows: Array = [_name_label]
+	if _grade_row.visible:
+		rows.append(_grade_row)
+	if _status_label.visible:
+		rows.append(_status_label)
+	if _note_label.visible and not _tight:
+		rows.append(_note_label)
+	_fit_name(col_w)
+	var total: float = 0.0
+	for row in rows:
+		total += name_h if row == _name_label else line_h
+	var y: float = maxf(2.0, (body_h - total) * 0.5)
+	for row in rows:
+		var rh: float = name_h if row == _name_label else line_h
+		var ctrl: Control = row
+		ctrl.position = Vector2(left, y)
+		ctrl.size = Vector2(col_w, rh)
+		y += rh
+	_grade_row.custom_minimum_size = Vector2(0, 0)
+	_bar.position = Vector2(0.0, h - BAR_H)
+	_bar.size = Vector2(w, BAR_H)
+
+
+func _fit_name(room: float) -> void:
+	var font: Font = Ui.display_font()
+	var fs: int = _name_size
+	while fs > 9 and font.get_string_size(_name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+		fs -= 1
+	if _name_label.get_theme_font_size("font_size") != fs:
+		_name_label.add_theme_font_size_override("font_size", fs)
 	var price_px: int = _price_label.get_theme_font_size("font_size")
-	if price_px >= name_px:
-		Ui.apply_label(_price_label, maxi(10, name_px - 1), Ui.GOLD)
+	if price_px >= fs:
+		_price_label.add_theme_font_size_override("font_size", maxi(9, fs - 1))
 
 
 func _apply_stat_lines() -> void:
+	if _stars.custom_minimum_size.x > 48.0:
+		_stars.custom_minimum_size = Vector2(46, 8)
 	_grade_label.text = _condition_line(_card)
 	_status_label.text = _meter_line(_card)
-	_status_label.add_theme_color_override("font_color", _status_color(_status_label.text))
 	var note: String = _note_line(_card)
 	_note_label.text = note
 	_note_label.visible = not note.is_empty()
-	_fit_name()
 	_price_label.text = _price_text(_card)
 	var stars: int = int(_card.get("stars", 0))
 	var show_stars: bool = stars > 0 and _status != "underground"
-	if _stars != null and _stars.has_method("set_rating"):
+	if _stars.has_method("set_rating"):
 		_stars.call("set_rating", stars)
-	if _stars != null:
-		_stars.visible = show_stars
+	_stars.visible = show_stars
 	_grade_label.visible = not _grade_label.text.is_empty()
-	_grade_row.visible = _grade_label.visible or show_stars
-	_status_label.visible = not _status_label.text.is_empty()
+	_grade_row.visible = (_grade_label.visible or show_stars) and not _tight
+	_status_label.visible = not _status_label.text.is_empty() and not _tight
 	_price_label.visible = not _price_label.text.is_empty()
+	_apply_fonts()
 
 
 func _condition_line(card: Dictionary) -> String:
@@ -279,14 +310,14 @@ func _meter_line(card: Dictionary) -> String:
 	return _tidy_dirt(str(card.get("dirt", "")))
 
 
-## Say plainly what this bone means for the museum.
+## Short, plain words for what this bone means for the museum.
 func _museum_line(line: String) -> String:
 	if line.begins_with("New ·"):
 		return "New for museum · %s" % line.substr(6).strip_edges()
 	if line.begins_with("Duplicate"):
-		return "Duplicate · sold for cash"
+		return "Duplicate · sells"
 	if line.begins_with("Upgrade"):
-		return "Upgrades exhibit! (%s)" % line.substr(line.find("·") + 1).strip_edges()
+		return "Upgrades exhibit!"
 	return line
 
 
@@ -310,7 +341,7 @@ func _note_line(card: Dictionary) -> String:
 func _price_text(card: Dictionary) -> String:
 	var value: int = int(card.get("value", 0))
 	if value > 0 and _status != "underground":
-		return "$%d" % value
+		return Ui.money_text(value)
 	return ""
 
 
@@ -340,6 +371,8 @@ func _percent_in(text: String) -> int:
 
 
 func _brush_progress() -> float:
+	if _card.has("clean"):
+		return clampf(float(_card.get("clean", 0.0)), 0.0, 1.0)
 	var dirt: String = str(_card.get("dirt", ""))
 	if dirt.strip_edges().is_empty():
 		return 1.0 if _status == "bagged" else 0.0
@@ -358,16 +391,60 @@ func _draw_icon() -> void:
 	if dest.size.x < 2.0 or dest.size.y < 2.0:
 		return
 	if _piece_id != "" and ArtCatalogScript.draw_if_present(_icon, "bones", _piece_id, dest):
+		_draw_cast_band(dest)
 		return
 	var color := Color("8A7355").lerp(Color("F7E9C6"), clampf(_lit, 0.0, 1.0))
 	if _status == "underground":
 		color = Color("5A4330")
 	if _data != null:
 		_data.draw_silhouette(_icon, dest.grow(-1.0), color)
+	_draw_cast_band(dest)
+
+
+func _draw_cast_band(dest: Rect2) -> void:
+	## A white plaster band across the icon marks a wrapped bone.
+	if not bool(_card.get("cast", false)):
+		return
+	var band := Rect2(dest.position.x, dest.get_center().y - dest.size.y * 0.14, dest.size.x, dest.size.y * 0.28)
+	_icon.draw_rect(band, Color("F4F0E6", 0.9))
+	_icon.draw_line(band.position + Vector2(band.size.x * 0.3, 0), band.position + Vector2(band.size.x * 0.4, band.size.y), Color("C9C0B0"), 1.5)
+	_icon.draw_line(band.position + Vector2(band.size.x * 0.6, 0), band.position + Vector2(band.size.x * 0.7, band.size.y), Color("C9C0B0"), 1.5)
+
+
+func _draw_marker() -> void:
+	## Numbered color dot that matches the marker on this bone in the pit.
+	var c: Vector2 = _marker.size * 0.5
+	var r: float = minf(c.x, c.y)
+	var col: Color = color_for(_index)
+	_marker.draw_circle(c, r, col)
+	_marker.draw_arc(c, r, 0.0, TAU, 20, Color("1B1410"), 1.5)
+	var font: Font = Ui.display_font()
+	var text: String = str(_index + 1)
+	var fs: int = 11
+	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	_marker.draw_string(font, c + Vector2(-tw * 0.5, fs * 0.38), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("1B1410"))
+
+
+func _draw_bar() -> void:
+	## Live brushing progress along the card's bottom edge: bright enough to
+	## read from the corner of your eye while you brush in the pit.
+	var rect := Rect2(Vector2.ZERO, _bar.size)
+	_bar.draw_rect(rect, Color(0.08, 0.05, 0.03, 0.9))
+	if _status == "underground":
+		return
+	var t: float = _clean_shown
+	var done: bool = t >= 0.995 or _status == "bagged"
+	var fill: Color = Color("B07A3A").lerp(Color("FFD66B"), t)
+	if done:
+		fill = Color("A8E07A")
+	fill = fill.lerp(Color.WHITE, _bar_flash * 0.5)
+	_bar.draw_rect(Rect2(rect.position, Vector2(rect.size.x * (1.0 if done else t), rect.size.y)), fill)
 
 
 func _process(delta: float) -> void:
-	if _pop <= 0.0:
-		return
-	_pop = maxf(0.0, _pop - delta * 2.8)
-	_refresh_chrome()
+	if _pop > 0.0:
+		_pop = maxf(0.0, _pop - delta * 2.8)
+		_refresh_chrome()
+	if _bar_flash > 0.0:
+		_bar_flash = maxf(0.0, _bar_flash - delta * 3.0)
+		_bar.queue_redraw()

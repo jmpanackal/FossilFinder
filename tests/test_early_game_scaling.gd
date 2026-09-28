@@ -1014,9 +1014,9 @@ func _test_fully_brushed_chip_stays_complete_and_priced() -> void:
 		_assert(price_label != null and price_label.visible and price_label.text == "$90", "the payout stays on the chip at 100%")
 		_assert(price_label != null and price_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "payout stays on the right")
 		_assert(price_label != null and price_label.vertical_alignment == VERTICAL_ALIGNMENT_CENTER, "payout stays vertically centered")
-		if price_label != null and chip.get_child_count() > 0:
-			var row: Node = chip.get_child(0)
-			_assert(row.get_child_count() >= 3 and row.get_child(row.get_child_count() - 1) == price_label, "layout stays icon | text | $")
+		if price_label != null and name_label != null:
+			var icon: Control = chip.get("_icon") as Control
+			_assert(icon.position.x < name_label.position.x and name_label.position.x < price_label.position.x, "layout stays icon | text | $")
 		var done_box: StyleBox = chip.get_theme_stylebox("panel")
 		_assert(done_box != null and "border_color" in done_box, "finished chip uses a brass panel")
 		if done_box != null and "border_color" in done_box:

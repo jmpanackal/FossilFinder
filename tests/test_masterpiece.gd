@@ -166,7 +166,7 @@ func _test_find_card_says_new_or_duplicate() -> void:
 	var chip: Control = chip_script.new()
 	root.add_child(chip)
 	_assert(str(chip.call("_museum_line", "New · 1/6")).begins_with("New for museum"), "a needed bone says New for museum")
-	_assert(str(chip.call("_museum_line", "Duplicate · 6/6")).contains("sold for cash"), "an extra copy says it is sold for cash")
+	_assert(str(chip.call("_museum_line", "Duplicate · 6/6")).begins_with("Duplicate"), "an extra copy says Duplicate")
 	_assert(str(chip.call("_museum_line", "Upgrade · Great")).begins_with("Upgrades exhibit"), "a better copy says it upgrades the exhibit")
 	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_FRAGILE})).contains("losing stars"), "plaster on a fragile bone says what it saved")
 	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_SOLID})) == "", "plaster on a solid bone adds no noise")

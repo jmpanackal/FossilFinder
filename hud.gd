@@ -10,6 +10,7 @@ const ToolIcon := preload("res://tool_icon.gd")
 const ShopIcon := preload("res://shop_icon.gd")
 const FindChipScript := preload("res://find_chip.gd")
 const RewardRibbonScript := preload("res://reward_ribbon.gd")
+const FameBadgeScript := preload("res://fame_badge.gd")
 
 const CLOCK_SIZE := 72.0
 const CLOCK_TIME_SIZE := 32
@@ -81,7 +82,7 @@ var _tool_style_key: String = ""
 var _layout_key: String = ""
 var _cards_key: String = ""
 var _ribbon: Control
-var _fame_label: Label
+var _fame_label: Control
 
 
 func _ready() -> void:
@@ -135,11 +136,9 @@ func _ready() -> void:
 	_finds_label = _make_rail_title("FindsLabel")
 	root.add_child(_finds_label)
 
-	## "Museum fame: finds pay x12" explains why late bones pay more.
-	_fame_label = Label.new()
-	_fame_label.name = "FameLabel"
-	_fame_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Ui.apply_label(_fame_label, 13, Ui.GOLD)
+	## Museum fame medal: explains why late bones pay more.
+	_fame_label = FameBadgeScript.new()
+	_fame_label.name = "FameBadge"
 	_fame_label.visible = false
 	root.add_child(_fame_label)
 
@@ -183,12 +182,10 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 func _refresh_fame() -> void:
 	if _fame_label == null or _finds_frame == null:
 		return
-	var line: String = GameState.fame_line() if GameState.has_method("fame_line") else ""
-	_fame_label.visible = not line.is_empty()
-	if line != _fame_label.text:
-		_fame_label.text = line
-		_fame_label.size = _fame_label.get_combined_minimum_size()
-	var at := Vector2(_finds_frame.position.x + _finds_frame.size.x - _fame_label.size.x - 14.0, _finds_frame.position.y + 10.0)
+	var mult: float = GameState.fame_mult() if GameState.has_method("fame_mult") else 1.0
+	_fame_label.call("set_mult", mult)
+	## Hang the medal on the tray's top-right corner, clear of the cards.
+	var at := Vector2(_finds_frame.position.x + _finds_frame.size.x - _fame_label.size.x - 10.0, _finds_frame.position.y - _fame_label.size.y * 0.5)
 	if _fame_label.position != at:
 		_fame_label.position = at
 

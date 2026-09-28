@@ -21,6 +21,10 @@ const STAR_STEP := 0.11
 
 var title: String = ""
 var subtitle: String = ""
+## Subtitle wrapped to at most SUB_MAX_W wide so explanations never stretch
+## the ribbon across the whole screen.
+var _sub_lines: PackedStringArray = PackedStringArray()
+const SUB_MAX_W := 460.0
 var stars: int = 0
 var tier: int = TIER_GOOD
 var _anchor := Vector2.ZERO
@@ -81,15 +85,15 @@ func _start(entry: Dictionary) -> void:
 func _layout() -> void:
 	var font: Font = Ui.display_font()
 	var w: float = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE).x
-	if not subtitle.is_empty():
-		w = maxf(w, font.get_string_size(subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x)
+	_sub_lines = _wrap(subtitle, font)
+	for line in _sub_lines:
+		w = maxf(w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x)
 	if stars > 0:
 		w = maxf(w, STAR_GAP * 5.0)
 	var h: float = float(TITLE_SIZE) + 6.0
 	if stars > 0:
 		h += STAR_R * 2.0 + 6.0
-	if not subtitle.is_empty():
-		h += float(SUB_SIZE) + 6.0
+	h += float(_sub_lines.size()) * (float(SUB_SIZE) + 5.0) + (1.0 if _sub_lines.size() > 0 else 0.0)
 	size = Vector2(w, h) + PAD * 2.0
 	var x: float = _anchor.x - size.x * 0.5
 	var view_w: float = Tuning.view_w
@@ -104,6 +108,23 @@ func _follow_anchor() -> void:
 		var fresh: Variant = anchor_for.call(_index)
 		if fresh is Vector2:
 			_anchor = fresh
+
+
+func _wrap(text: String, font: Font) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if text.is_empty():
+		return lines
+	var line: String = ""
+	for word in text.split(" ", false):
+		var trial: String = word if line.is_empty() else line + " " + word
+		if not line.is_empty() and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x > SUB_MAX_W:
+			lines.append(line)
+			line = word
+		else:
+			line = trial
+	if not line.is_empty():
+		lines.append(line)
+	return lines
 
 
 func _process(delta: float) -> void:
@@ -193,9 +214,10 @@ func _draw() -> void:
 				pop = 1.0 + 0.35 * clampf(1.0 - fmod(_age, STAR_STEP) / STAR_STEP, 0.0, 1.0)
 			_draw_star(Vector2(x0 + STAR_GAP * float(i), y + STAR_R), STAR_R * pop, on, accent)
 		y += STAR_R * 2.0 + 6.0
-	if not subtitle.is_empty():
-		var sw: float = font.get_string_size(subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x
-		draw_string(font, Vector2((size.x - sw) * 0.5, y + float(SUB_SIZE)), subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE, Ui.INK)
+	for line in _sub_lines:
+		var sw: float = font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x
+		draw_string(font, Vector2((size.x - sw) * 0.5, y + float(SUB_SIZE)), line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE, Ui.INK)
+		y += float(SUB_SIZE) + 5.0
 
 
 func _draw_star(center: Vector2, r: float, on: bool, accent: Color) -> void:

@@ -35,6 +35,21 @@ const HUD_SHADOW := Color(0.05, 0.03, 0.02, 0.28)
 static var _font: Font
 
 
+## "$950", "$1,240", "$12.4k", "$1.25M": readable at a glance at any stage.
+static func money_text(amount: float) -> String:
+	var v: float = absf(amount)
+	var sign: String = "-" if amount < 0.0 else ""
+	if v >= 1000000.0:
+		return "%s$%.2fM" % [sign, v / 1000000.0]
+	if v >= 10000.0:
+		return "%s$%.1fk" % [sign, v / 1000.0]
+	var whole: int = int(round(v))
+	var text: String = str(whole)
+	if whole >= 1000:
+		text = "%d,%03d" % [whole / 1000, whole % 1000]
+	return "%s$%s" % [sign, text]
+
+
 static func display_font() -> Font:
 	if _font != null:
 		return _font

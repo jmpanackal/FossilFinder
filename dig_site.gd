@@ -6,6 +6,7 @@ const Lucky := preload("res://lucky_strike.gd")
 const Matrix := preload("res://matrix_find.gd")
 const ArtCatalogScript := preload("res://art_catalog.gd")
 const UiStyle := preload("res://ui_style.gd")
+const FindChipScript := preload("res://find_chip.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
@@ -25,6 +26,8 @@ signal bone_kind_seen(find_index: int, kind: int, world_pos: Vector2)
 signal bone_crumbled(find_index: int, condition: int, world_pos: Vector2)
 ## A bone was wrapped in a plaster cast and collected.
 signal bone_cast(find_index: int, world_pos: Vector2)
+## The first cell of a find came into view (its card appears now).
+signal find_spotted(find_index: int, world_pos: Vector2)
 
 var input_enabled: bool = true
 var current_tool: int = Tuning.TOOL_HANDS
@@ -1139,6 +1142,9 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	_focus_find(find)
 	_grid_dirty = true
 	fossil_cell_exposed.emit(cell_center(cell), first)
+	if not bool(find.get("spotted", false)):
+		find["spotted"] = true
+		find_spotted.emit(int(fossil_cells.get(cell, -1)), cell_center(cell))
 	var kind: int = int(find.get("kind", Tuning.BONE_SOLID))
 	if Tuning.bone_crumbles(kind) and not bool(find.get("kind_seen", false)):
 		find["kind_seen"] = true
@@ -1612,6 +1618,7 @@ func _draw() -> void:
 			_draw_top(x, y)
 	_drawing = false
 	_draw_bone_pulse()
+	_draw_find_markers()
 	_draw_lucky()
 
 
@@ -1893,6 +1900,32 @@ func _draw_sensed(rect: Rect2) -> void:
 		draw_circle(end + Vector2(0.0, knob * 0.6), knob, bone)
 
 
+func _draw_find_markers() -> void:
+	## Outline + numbered dot per find, matching its card in the Finds tray.
+	var font: Font = UiStyle.display_font()
+	for i in finds.size():
+		var find: Dictionary = finds[i]
+		var cells: Dictionary = find.get("cells", {})
+		var shown: Array = []
+		for raw in cells:
+			if exposed_cells.has(raw):
+				shown.append(raw)
+		if shown.is_empty():
+			continue
+		var col: Color = FindChipScript.color_for(i)
+		for raw in shown:
+			var cell: Vector2i = raw
+			draw_rect(_top_rect(cell.x, cell.y).grow(1.0), col, false, 2.5)
+		var first: Vector2i = shown[0]
+		var r := _top_rect(first.x, first.y)
+		var c := r.position + Vector2(10.0, 10.0)
+		draw_circle(c, 9.0, col)
+		draw_arc(c, 9.0, 0.0, TAU, 20, Color("1B1410"), 1.5)
+		var text := str(i + 1)
+		var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		draw_string(font, c + Vector2(-tw * 0.5, 4.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("1B1410"))
+
+
 func _draw_bone_pulse() -> void:
 	if _bone_pulse <= 0.0 or exposed_cells.is_empty():
 		return
@@ -2038,14 +2071,22 @@ const PLASTER_LINE := Color("C9C0B0")
 
 
 func _draw_plaster(rect: Rect2, cell: Vector2i) -> void:
-	## A plaster cast: white wrap with bandage strips, like a cast on an arm.
-	draw_rect(rect.grow(-1.0), PLASTER)
-	var strips: int = 3
-	for i in strips:
-		var t: float = (float(i) + 0.5) / float(strips)
-		var x: float = rect.position.x + rect.size.x * t + (float(cell.y % 2) - 0.5) * 6.0
-		draw_line(Vector2(x - 8.0, rect.position.y + 2.0), Vector2(x + 8.0, rect.end.y - 2.0), PLASTER_LINE, 2.0)
-	draw_rect(rect.grow(-1.0), PLASTER_LINE, false, 1.0)
+	## Plaster straps over a still-visible bone: you can tell what it is, and
+	## that it is wrapped (like a cast on an arm), at a glance.
+	var strap_w: float = maxf(6.0, rect.size.x * 0.16)
+	var slant: float = rect.size.x * 0.12
+	for t in [0.28, 0.66]:
+		var x: float = rect.position.x + rect.size.x * t + (float(cell.y % 2) - 0.5) * 4.0
+		var pts := PackedVector2Array([
+			Vector2(x, rect.position.y + 1.0),
+			Vector2(x + strap_w, rect.position.y + 1.0),
+			Vector2(x + strap_w - slant, rect.end.y - 1.0),
+			Vector2(x - slant, rect.end.y - 1.0),
+		])
+		draw_colored_polygon(pts, Color(PLASTER, 0.92))
+		draw_line(pts[0], pts[3], PLASTER_LINE, 1.0)
+		draw_line(pts[1], pts[2], PLASTER_LINE, 1.0)
+	draw_rect(rect.grow(-1.0), PLASTER, false, 2.5)
 
 
 ## Dirt layers from the surface down: loose dust, caked dirt, clay, crust.
