@@ -29,6 +29,8 @@ static func glyph_for(id: String) -> String:
 			return "hold"
 		"hands_craft":
 			return "fossil"
+		"hands_sense":
+			return "fossil"
 		"hands_swift":
 			return "hold"
 		"shovel_click":

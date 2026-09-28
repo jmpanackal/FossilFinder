@@ -58,16 +58,29 @@ func _first_bone(site: Node2D) -> Vector2i:
 
 func _test_sense_radius_scales_with_hands_upgrades() -> void:
 	_reset()
-	var base: float = float(TN.hands_sense_radius)
-	_assert(base >= 1.0, "bare hands feel the neighboring cells")
+	_assert(float(TN.hands_sense_radius) <= 0.0, "bare hands cannot feel for bone")
 	GS.levels["hands_click"] = 5
+	GS.apply_upgrades()
+	_assert(float(TN.hands_sense_radius) <= 0.0, "Calloused Fingers alone does not grant Bone Sense")
+	GS.levels["hands_sense"] = 1
+	GS.apply_upgrades()
+	var base: float = float(TN.hands_sense_radius)
+	_assert(base >= 1.0, "Bone Sense rank 1 feels the neighboring cells")
+	GS.levels["hands_sense"] = 4
 	GS.levels["hands_craft"] = 6
 	GS.apply_upgrades()
-	_assert(float(TN.hands_sense_radius) >= base + 3.0, "maxed hands survey a wide patch")
+	_assert(float(TN.hands_sense_radius) >= base + 3.0, "maxed Bone Sense + Fieldcraft survey a wide patch")
+	_assert(str(GS.shop_effect_line("hands_sense")).find("cells") >= 0, "Bone Sense shop line names the reach")
 
 
 func _test_hands_sense_marks_nearby_bone_only() -> void:
 	_reset()
+	var bare := _make_site()
+	bare.call("_sense_bone", _first_bone(bare))
+	_assert(bare.sensed_cells.is_empty(), "without Bone Sense, hands mark nothing")
+	bare.queue_free()
+	GS.levels["hands_sense"] = 1
+	GS.apply_upgrades()
 	var site := _make_site()
 	var bone: Vector2i = _first_bone(site)
 	_assert(bone.x >= 0, "the pit hides a bone")

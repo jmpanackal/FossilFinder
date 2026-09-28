@@ -35,9 +35,10 @@ var _fossil_by_id: Dictionary = {}
 var _stand_ids_cache: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
-	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds, more $, and you feel for bone farther away. Never chips bone.", "cost": 8, "scale": 1.65, "max": 5},
+	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
-	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds, more $, and a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
+	{"id": "hands_sense", "cat": "Hands", "tier": 1, "name": "Bone Sense", "desc": "Feel for buried bone farther away.", "unlock_name": "Bone Sense", "unlock_desc": "Digging by hand marks buried bone in nearby cells.", "unlock_action": "Unlock", "cost": 60, "scale": 1.9, "max": 4},
+	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds and more $. With Bone Sense, a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 75, "scale": 2.0, "max": 5, "requires": "shovel_click"},
@@ -415,6 +416,7 @@ func _tuning_snapshot() -> Dictionary:
 		"matrix_hands_pay": Tuning.matrix_hands_pay,
 		"matrix_dirt_chance": Tuning.matrix_dirt_chance,
 		"matrix_stone_chance": Tuning.matrix_stone_chance,
+		"hands_sense_radius": Tuning.hands_sense_radius,
 	}
 
 
@@ -424,6 +426,11 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_over_line("+%d%% click harvest", float(zero["hands_click_mult"]), float(at["hands_click_mult"]))
 		"hands_hold", "hands_swift", "shovel_hold":
 			return _pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"]))
+		"hands_sense":
+			var reach: float = float(at["hands_sense_radius"])
+			if float(zero["hands_sense_radius"]) <= 0.0 and reach > 0.0:
+				return "Feel bone %.1f cells away" % reach
+			return "Feel bone %.1f -> %.1f cells away" % [float(zero["hands_sense_radius"]), reach]
 		"hands_craft":
 			return _join_effects(PackedStringArray([
 				"+%d%% harvest quality" % int(round((float(at["matrix_hands_quality"]) - float(zero["matrix_hands_quality"])) * 100.0)),
@@ -966,7 +973,8 @@ func apply_upgrades() -> void:
 	Tuning.pickaxe_radius = 1.0 + 0.35 * _lv("pick_radius") + 0.35 * _lv("pick_super") + 0.35 * _lv("pick_titan")
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
 	Tuning.brush_reach_px = 5.0 * brush_ranks + 7.0 * _lv("brush_master")
-	Tuning.hands_sense_radius = 1.0 + 0.3 * _lv("hands_click") + 0.45 * _lv("hands_craft")
+	var sense: float = _lv("hands_sense")
+	Tuning.hands_sense_radius = 0.0 if sense <= 0.0 else 0.75 + 0.5 * sense + 0.45 * _lv("hands_craft")
 	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time") + 8.0 * _lv("round_marathon")
 	Tuning.museum_income_mult = 1.0
 	var ticket_cents: int = _donation_rank_cents("lighting", int(_lv("lighting")))

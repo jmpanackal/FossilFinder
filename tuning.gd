@@ -156,9 +156,9 @@ var brush_combo_hold: float = 0.45
 ## Bristle reach in pixels past the aimed cell. 0 = one cell.
 var brush_reach_px: float = 0.0
 var brush_splash: float = 0.6
-## Hands feel for bone: cells within this radius that hide an unexposed
-## fossil get marked. Grows with Hands upgrades so hands stay the survey tool.
-var hands_sense_radius: float = 1.0
+## Hands feel for bone (Bone Sense upgrade): cells within this radius that
+## hide an unexposed fossil get marked. 0 = not owned.
+var hands_sense_radius: float = 0.0
 
 ## Click vs hold. Later upgrades can raise one path without touching the other.
 var hands_click_mult: float = 0.40
