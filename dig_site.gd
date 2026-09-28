@@ -19,7 +19,7 @@ signal lucky_fled
 signal bone_sensed(world_pos: Vector2)
 ## A bone was fully uncovered and its hidden condition (1 Poor .. 5 Perfect) shows.
 signal condition_revealed(find_index: int, condition: int, world_pos: Vector2)
-## A fragile or fool's gold bone first meets open air.
+## A fragile or opal bone first meets open air.
 signal bone_kind_seen(find_index: int, kind: int, world_pos: Vector2)
 ## Open air cost a crumbling bone one condition step.
 signal bone_crumbled(find_index: int, condition: int, world_pos: Vector2)
@@ -942,12 +942,15 @@ func dust_layers(cell: Vector2i) -> int:
 
 
 func brush_stroke(from: Vector2, to: Vector2) -> void:
-	## Wipe dust along the stroke. Each dust patch is cleaned at most once per
-	## stroke, so scrubbing speed is about coverage, not wiggling in place.
+	## Wipe dust along the stroke. A patch loses one "pass" worth of dirt per
+	## full bristle-width of travel, so frame rate and slow dragging don't
+	## multiply cleaning; a click without moving is a small dab.
 	if exposed_cells.is_empty():
 		return
 	var radius: float = brush_radius()
-	var strength: float = brush_strength()
+	var travel: float = from.distance_to(to)
+	var share: float = clampf(travel / (radius * 2.0), Tuning.brush_dab, 1.0)
+	var strength: float = brush_strength() * share
 	var steps: int = maxi(1, int(ceil(from.distance_to(to) / maxf(radius * 0.5, 1.0))))
 	var hit: Dictionary = {}
 	var touched: Dictionary = {}
@@ -1173,7 +1176,7 @@ func crumble_in(find: Dictionary) -> float:
 
 
 func tick_crumble(delta: float) -> void:
-	## Fragile and fool's gold bones lose condition the longer they sit in open air.
+	## Fragile and opal bones lose condition the longer they sit in open air.
 	for i in finds.size():
 		var find: Dictionary = finds[i]
 		if not find_is_crumbling(find):
@@ -1838,8 +1841,8 @@ func _draw_top(x: int, y: int) -> void:
 	if bone:
 		_draw_bone_mark(rect, cell, 1.0)
 		var host := _find_at(cell)
-		if int(host.get("kind", 0)) == Tuning.BONE_GOLD:
-			_draw_gold_glints(rect, cell)
+		if int(host.get("kind", 0)) == Tuning.BONE_OPAL:
+			_draw_opal_glints(rect, cell)
 		if bool(host.get("cast", false)):
 			_draw_plaster(rect, cell)
 		else:
@@ -1956,7 +1959,7 @@ const BONE_BY_CONDITION: PackedColorArray = [
 ]
 
 
-const GOLD_BONE := Color("E2B84A")
+const OPAL_BONE := Color("CFE4EE")
 const CHALK_BONE := Color("D6CFC4")
 
 
@@ -1966,8 +1969,8 @@ func _bone_color(cell: Vector2i) -> Color:
 	var cond: int = int(find.get("condition", Tuning.CONDITION_GOOD))
 	var color: Color = BONE_BY_CONDITION[clampi(cond, 1, 5) - 1]
 	match int(find.get("kind", Tuning.BONE_SOLID)):
-		Tuning.BONE_GOLD:
-			color = color.lerp(GOLD_BONE, 0.55)
+		Tuning.BONE_OPAL:
+			color = color.lerp(OPAL_BONE, 0.55)
 		Tuning.BONE_FRAGILE:
 			color = color.lerp(CHALK_BONE, 0.45)
 	return color
@@ -2017,13 +2020,16 @@ func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
 	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 
 
-func _draw_gold_glints(rect: Rect2, cell: Vector2i) -> void:
+const OPAL_FLECKS: PackedColorArray = [Color("FF9ECF"), Color("7FE6F2"), Color("A6F28A"), Color("C9A6FF")]
+
+
+func _draw_opal_glints(rect: Rect2, cell: Vector2i) -> void:
+	## Rainbow flecks read as gemstone, not gold.
 	var seed: int = cell.x * 29 + cell.y * 61 + 3
-	for i in 3:
+	for i in 5:
 		var p := rect.position + Vector2(6.0 + _hash01(seed, i * 2) * (rect.size.x - 12.0), 5.0 + _hash01(seed, i * 2 + 1) * (rect.size.y - 10.0))
-		var r: float = 2.5 + _hash01(seed, 9 + i) * 2.0
-		draw_line(p - Vector2(r, 0), p + Vector2(r, 0), Color("FFF3B0"), 1.4)
-		draw_line(p - Vector2(0, r), p + Vector2(0, r), Color("FFF3B0"), 1.4)
+		var r: float = 2.0 + _hash01(seed, 9 + i) * 2.5
+		draw_circle(p, r, Color(OPAL_FLECKS[i % OPAL_FLECKS.size()], 0.75))
 
 
 const PLASTER := Color("EFEAE0")
@@ -2050,25 +2056,51 @@ const DUST_LAYER_COLORS: PackedColorArray = [
 ]
 
 
+const BONE_RIM := Color("F2E3BE")
+
+
 func _draw_dust(rect: Rect2, cell: Vector2i) -> void:
-	## Dirt sits on top of the bone in layers and disappears where the brush wipes.
+	## Dirt sits on the bone as lumpy clumps, not tiles: bone shows between them
+	## as you brush, and the bone's shape presses up through what is left.
 	if not dust.has(cell):
 		return
 	var grid: PackedFloat32Array = dust[cell]
 	var cw: float = rect.size.x / float(Tuning.DUST_COLS)
 	var ch: float = rect.size.y / float(Tuning.DUST_ROWS)
+	var lump: float = maxf(cw, ch) * 0.72
+	var inner: Rect2 = rect.grow(-lump * 0.55)
 	var seed: int = cell.x * 41 + cell.y * 73 + 11
+	var left: float = 0.0
 	for row in Tuning.DUST_ROWS:
 		for col in Tuning.DUST_COLS:
 			var i: int = row * Tuning.DUST_COLS + col
 			var amount: float = grid[i]
+			left += amount
 			if amount <= 0.02:
 				continue
 			## Remaining layers pick the color; the last partial layer thins out.
 			var depth: int = clampi(int(ceil(amount)) - 1, 0, DUST_LAYER_COLORS.size() - 1)
-			var shade: Color = DUST_LAYER_COLORS[depth].lerp(Color.BLACK, 0.06 * _hash01(seed, i))
-			shade.a = 1.0 if amount >= 1.0 else 0.30 + 0.70 * amount
-			draw_rect(Rect2(rect.position.x + float(col) * cw, rect.position.y + float(row) * ch, cw + 0.5, ch + 0.5), shade)
+			var shade: Color = DUST_LAYER_COLORS[depth].lerp(Color.BLACK, 0.08 * _hash01(seed, i))
+			shade.a = 1.0 if amount >= 1.0 else 0.35 + 0.65 * amount
+			var jitter := Vector2(_hash01(seed, i * 3) - 0.5, _hash01(seed, i * 3 + 1) - 0.5) * lump * 0.5
+			var center := rect.position + Vector2((float(col) + 0.5) * cw, (float(row) + 0.5) * ch) + jitter
+			center = Vector2(clampf(center.x, inner.position.x, inner.end.x), clampf(center.y, inner.position.y, inner.end.y))
+			var r: float = lump * (0.75 + 0.25 * minf(amount, 1.0)) * (0.85 + 0.3 * _hash01(seed, i * 3 + 2))
+			## Keep clumps inside the cell so dirt never spills onto neighbors.
+			var room: float = minf(minf(center.x - rect.position.x, rect.end.x - center.x), minf(center.y - rect.position.y, rect.end.y - center.y))
+			draw_circle(center, minf(r, room + 1.0), shade)
+	var full: float = float(grid.size() * maxi(dust_layers(cell), 1))
+	var dirty: float = clampf(left / maxf(full, 1.0), 0.0, 1.0)
+	if dirty <= 0.02:
+		return
+	## The bone's outline pressed up through the dirt, like a fossil in rock.
+	var data = _find_at(cell).get("data", null)
+	if data != null and data.has_method("draw_silhouette"):
+		var shape: Rect2 = rect.grow(-6.0)
+		data.draw_silhouette(self, Rect2(shape.position + Vector2(1.5, 1.5), shape.size), Color(0.12, 0.08, 0.05, 0.35 * dirty))
+		data.draw_silhouette(self, shape, Color(BONE_RIM, 0.28 * dirty + 0.10))
+	## A thin bone-colored rim says "there is a fossil under this dirt".
+	draw_rect(rect.grow(-1.5), Color(BONE_RIM, 0.65), false, 2.0)
 
 
 func _draw_fx(c: CanvasItem) -> void:
@@ -2079,7 +2111,8 @@ func _draw_fx(c: CanvasItem) -> void:
 
 
 func _draw_crumble_timers(c: CanvasItem) -> void:
-	## A shrinking ring + seconds over each crumbling bone, red when it is close.
+	## Over each crumbling bone: a plate reading "-1 [star] 6s" with a draining
+	## bar, red when close. With Plaster Cast owned, a prompt says how to save it.
 	var font: Font = UiStyle.display_font()
 	for find in finds:
 		var left: float = crumble_in(find)
@@ -2089,13 +2122,39 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		var span: float = Tuning.crumble_step[kind] if float(find.get("air", 0.0)) >= Tuning.crumble_first[kind] else Tuning.crumble_first[kind]
 		var frac: float = clampf(left / maxf(span, 0.1), 0.0, 1.0)
 		var urgent: bool = left <= 3.0
-		var color := Color("FF6A4A") if urgent else (Color("FFD66B") if kind == Tuning.BONE_GOLD else Color("F2E6C4"))
-		var center: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 12.0)
-		c.draw_circle(center, 13.0, Color(0.1, 0.07, 0.05, 0.75))
-		c.draw_arc(center, 11.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 28, color, 3.0)
-		var text: String = "%d" % int(ceil(left))
-		var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-		c.draw_string(font, center + Vector2(-w * 0.5, 4.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
+		var color := Color("FF6A4A") if urgent else (Color("9FE3F0") if kind == Tuning.BONE_OPAL else Color("F2E6C4"))
+		var anchor: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 16.0)
+		var secs: String = "%ds" % int(ceil(left))
+		var fs: int = 13
+		var minus_w: float = font.get_string_size("-1", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var secs_w: float = font.get_string_size(secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var star_w: float = 14.0
+		var w: float = minus_w + star_w + secs_w + 22.0
+		var plate := Rect2(anchor - Vector2(w * 0.5, 11.0), Vector2(w, 22.0))
+		c.draw_rect(plate, Color(0.1, 0.07, 0.05, 0.85))
+		c.draw_rect(plate, color, false, 1.5)
+		c.draw_rect(Rect2(plate.position.x + 2.0, plate.end.y - 4.0, (plate.size.x - 4.0) * frac, 2.0), color)
+		var x: float = plate.position.x + 6.0
+		c.draw_string(font, Vector2(x, anchor.y + 4.5), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		x += minus_w + 2.0
+		_fx_star(c, Vector2(x + star_w * 0.5, anchor.y - 0.5), 6.0, color)
+		x += star_w + 4.0
+		c.draw_string(font, Vector2(x, anchor.y + 4.5), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		if Tuning.cast_owned() and _castable(find):
+			var tip := "Hold Hands: plaster cast"
+			var tw: float = font.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+			var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.end.y + 3.0), Vector2(tw + 12.0, 18.0))
+			c.draw_rect(tip_rect, Color(PLASTER, 0.92))
+			c.draw_string(font, Vector2(tip_rect.position.x + 6.0, tip_rect.end.y - 5.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("3A2A1C"))
+
+
+func _fx_star(c: CanvasItem, center: Vector2, r: float, color: Color) -> void:
+	var pts := PackedVector2Array()
+	for k in 10:
+		var ang: float = -PI * 0.5 + float(k) * PI / 5.0
+		var rad: float = r if k % 2 == 0 else r * 0.45
+		pts.append(center + Vector2(cos(ang), sin(ang)) * rad)
+	c.draw_colored_polygon(pts, color)
 
 
 func _draw_cast_ring(c: CanvasItem) -> void:

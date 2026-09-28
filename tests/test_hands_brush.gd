@@ -25,6 +25,7 @@ func _run() -> void:
 	_test_wiping_everything_cleans_and_bags_the_bone()
 	_test_brush_upgrades_widen_the_bristles()
 	_test_deeper_bones_have_more_layers()
+	_test_slow_drags_do_not_clean_extra()
 	_reset()
 	print("hands_brush %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -200,8 +201,32 @@ func _test_wiping_everything_cleans_and_bags_the_bone() -> void:
 	site.queue_free()
 
 
+func _test_slow_drags_do_not_clean_extra() -> void:
+	## Cleaning follows distance, not frames: 40 tiny steps == 1 big stroke.
+	_reset()
+	var site := _make_site()
+	var bone: Vector2i = _first_bone(site)
+	site.call("_reveal_fossil_cell", bone)
+	_flatten(site, bone)
+	var rect: Rect2 = site.call("_top_rect", bone.x, bone.y)
+	var a := Vector2(rect.position.x, rect.get_center().y)
+	var b := Vector2(rect.end.x, rect.get_center().y)
+	site.call("brush_stroke", a, b)
+	var fast: float = _dust_left(site, bone)
+	site.call("_reveal_fossil_cell", bone)
+	site.dust.erase(bone)
+	site.exposed_cells.erase(bone)
+	site.call("_reveal_fossil_cell", bone)
+	var steps: int = 40
+	for i in steps:
+		site.call("brush_stroke", a.lerp(b, float(i) / steps), a.lerp(b, float(i + 1) / steps))
+	var slow: float = _dust_left(site, bone)
+	_assert(absf(slow - fast) <= fast * 0.25 + 1.0, "a slow drag cleans about the same as one quick sweep")
+	site.queue_free()
+
+
 func _test_deeper_bones_have_more_layers() -> void:
-	_assert(int(TN.dust_layers_for(0)) == 2, "soil bones have 2 layers of dirt")
+	_assert(int(TN.dust_layers_for(0)) >= 3, "soil bones have at least 3 layers of dirt")
 	_assert(int(TN.dust_layers_for(TN.layer_count - 1)) >= 4, "stone bones have at least 4 layers")
 
 

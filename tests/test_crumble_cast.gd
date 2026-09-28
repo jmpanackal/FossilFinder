@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Fragile and fool's gold bones crumble in open air; a Plaster Cast (Hands
+## Fragile and opal bones crumble in open air; a Plaster Cast (Hands
 ## upgrade) wraps a dug-out bone so it stops crumbling and is collected.
 ## Run: godot --headless --path <project> -s res://tests/test_crumble_cast.gd
 
@@ -61,8 +61,8 @@ func _test_kinds_roll_mostly_solid() -> void:
 	var counts := [0, 0, 0]
 	for i in 3000:
 		counts[int(TN.roll_bone_kind(rng))] += 1
-	_assert(counts[0] > counts[1] and counts[1] > counts[2], "solid > fragile > fool's gold")
-	_assert(counts[2] > 0, "fool's gold does turn up")
+	_assert(counts[0] > counts[1] and counts[1] > counts[2], "solid > fragile > opal")
+	_assert(counts[2] > 0, "opal does turn up")
 
 
 func _test_solid_bones_never_crumble() -> void:
@@ -102,19 +102,19 @@ func _test_buried_bones_do_not_crumble() -> void:
 
 
 func _test_gold_crumbles_faster_and_is_worth_more() -> void:
-	_assert(float(TN.crumble_first[TN.BONE_GOLD]) < float(TN.crumble_first[TN.BONE_FRAGILE]), "fool's gold crumbles sooner than fragile bone")
+	_assert(float(TN.crumble_first[TN.BONE_OPAL]) < float(TN.crumble_first[TN.BONE_FRAGILE]), "opal crumbles sooner than fragile bone")
 	_reset()
 	var site := _site_with(TN.BONE_SOLID, 3)
 	var solid: int = int(site.call("_find_preview_value", site.finds[0]))
-	site.finds[0]["kind"] = TN.BONE_GOLD
+	site.finds[0]["kind"] = TN.BONE_OPAL
 	var gold: int = int(site.call("_find_preview_value", site.finds[0]))
-	_assert(gold >= solid * 2, "fool's gold is worth at least double")
+	_assert(gold >= solid * 2, "opal is worth at least double")
 	site.queue_free()
 
 
 func _test_crumbling_stops_at_poor() -> void:
 	_reset()
-	var site := _site_with(TN.BONE_GOLD, 2)
+	var site := _site_with(TN.BONE_OPAL, 2)
 	_expose_all(site)
 	site.call("tick_crumble", 500.0)
 	_assert(int(site.finds[0]["condition"]) == 1, "crumbling bottoms out at Poor")
@@ -178,8 +178,8 @@ func _test_cast_upgrade_is_faster_per_rank() -> void:
 
 func _test_plain_names_and_hints() -> void:
 	_assert(str(TN.bone_kind_name(TN.BONE_FRAGILE)) == "Fragile", "fragile bones are just called Fragile")
-	_assert(str(TN.bone_kind_name(TN.BONE_GOLD)) == "Fool's gold", "pyrite is called Fool's gold")
-	_assert(str(TN.BONE_KIND_HINTS[TN.BONE_FRAGILE]).contains("crumbles"), "the fragile hint says what happens")
+	_assert(str(TN.bone_kind_name(TN.BONE_OPAL)) == "Opal", "gem bones are called Opal")
+	_assert(str(TN.BONE_KIND_HINTS[TN.BONE_FRAGILE]).contains("loses a star"), "the fragile hint says it loses stars")
 	var item: Dictionary = {}
 	for entry in GS.catalog:
 		if str(entry["id"]) == "hands_cast":

@@ -240,24 +240,26 @@ var condition_visitor_mult: PackedFloat32Array = [0.5, 0.75, 1.0, 1.5, 2.0]
 ## Brush: dust on each bone cell is a small grid wiped where the brush passes.
 const DUST_COLS := 8
 const DUST_ROWS := 5
-var brush_radius_frac: float = 0.30
+var brush_radius_frac: float = 0.24
 ## Layers of dirt caked on a bone, by how deep it was buried.
-var dust_layers_by_material: PackedInt32Array = [2, 2, 3, 4]
+var dust_layers_by_material: PackedInt32Array = [3, 3, 4, 5]
 ## Dirt one brush pass lifts per layer: starter brush = half a layer.
 var brush_base_strength: float = 0.5
 var brush_max_strength: float = 1.5
+## A click without moving lifts this share of a pass.
+var brush_dab: float = 0.12
 
 
 ## Bone kinds. Most bones are solid; some crumble once they meet open air.
 const BONE_SOLID := 0
 const BONE_FRAGILE := 1
-const BONE_GOLD := 2
-const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Fool's gold"]
+const BONE_OPAL := 2
+const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Opal"]
 ## Plain-language one-liners shown the first time each kind turns up.
 const BONE_KIND_HINTS: PackedStringArray = [
 	"",
-	"It dries out and crumbles in open air. Dig it out and brush it fast.",
-	"Bone turned to fool's gold: worth far more, but it crumbles fast in open air.",
+	"It dries out in open air: loses a star every 10s once uncovered. Dig it out and brush it fast.",
+	"Bone that turned into opal, a rainbow gemstone. Worth 2.5x, but it cracks as it dries: loses a star every 6s once uncovered.",
 ]
 var bone_kind_weights: PackedFloat32Array = [74.0, 20.0, 6.0]
 ## Seconds in open air before the first crumble, then between crumbles.
@@ -274,7 +276,7 @@ func bone_kind_name(kind: int) -> String:
 
 
 func bone_crumbles(kind: int) -> bool:
-	return kind == BONE_FRAGILE or kind == BONE_GOLD
+	return kind == BONE_FRAGILE or kind == BONE_OPAL
 
 
 func roll_bone_kind(rng: RandomNumberGenerator = null) -> int:

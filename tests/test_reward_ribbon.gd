@@ -33,9 +33,32 @@ func _run() -> void:
 	var main_script: GDScript = load("res://main.gd") as GDScript
 	_assert(int(main_script.call("condition_tier", 1)) < int(main_script.call("condition_tier", 4)), "Great finds celebrate louder than Poor ones")
 	_assert(int(main_script.call("condition_tier", 5)) == 3, "Perfect gets the biggest ribbon")
+	await _test_ribbon_follows_its_card(hud)
 	hud.queue_free()
 	print("reward_ribbon %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
+
+
+func _card(index: int, name: String) -> Dictionary:
+	return {"index": index, "name": name, "piece_id": name.to_snake_case(), "status": "brush", "stars": 4, "grade": "Great condition", "exposed": 1, "needed": 1, "fully_exposed": true, "value": 10}
+
+
+func _test_ribbon_follows_its_card(hud: CanvasLayer) -> void:
+	## Two bones found together: the second card re-flows the tray, and the
+	## ribbon for find 0 must stay centered over find 0's card.
+	var ribbon: Control = hud.call("ribbon")
+	ribbon.set("_queue", [])
+	ribbon.visible = false
+	hud.call("set_find_cards", [_card(0, "Tooth")])
+	await process_frame
+	hud.call("celebrate", 0, "Great condition!", "", 4, 2)
+	hud.call("set_find_cards", [_card(0, "Tooth"), _card(1, "Claw")])
+	for i in 3:
+		await process_frame
+	var chip: Control = hud.call("_chip_for_find", 0)
+	var chip_x: float = chip.global_position.x + chip.size.x * 0.5
+	var ribbon_x: float = ribbon.position.x + ribbon.size.x * 0.5
+	_assert(absf(chip_x - ribbon_x) < 2.0, "the ribbon stays over its card after the tray re-flows")
 
 
 func _assert(ok: bool, label: String) -> void:

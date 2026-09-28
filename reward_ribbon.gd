@@ -28,6 +28,10 @@ var _life: float = 0.0
 var _age: float = 0.0
 var _shown_stars: int = 0
 var _queue: Array = []
+## Returns the current anchor for a find index, so the ribbon follows its card
+## when the Finds tray re-flows (several bones found at once).
+var anchor_for: Callable
+var _index: int = -1
 
 
 func _ready() -> void:
@@ -40,8 +44,8 @@ func is_showing() -> bool:
 
 
 ## anchor = where the ribbon's bottom-center should sit (the tray's top edge).
-func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2) -> void:
-	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor}
+func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2, index: int = -1) -> void:
+	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor, "index": index}
 	if is_showing():
 		## Let the current one finish quickly, then show this one.
 		_life = minf(_life, 0.6)
@@ -56,6 +60,8 @@ func _start(entry: Dictionary) -> void:
 	stars = clampi(int(entry["stars"]), 0, 5)
 	tier = int(entry["tier"])
 	_anchor = entry["anchor"]
+	_index = int(entry.get("index", -1))
+	_follow_anchor()
 	_age = 0.0
 	_shown_stars = 0
 	_life = 2.6 + (1.8 if not subtitle.is_empty() else 0.0) + (0.6 if tier >= TIER_BEST else 0.0)
@@ -93,9 +99,22 @@ func _layout() -> void:
 	position = Vector2(x, y)
 
 
+func _follow_anchor() -> void:
+	if anchor_for.is_valid():
+		var fresh: Variant = anchor_for.call(_index)
+		if fresh is Vector2:
+			_anchor = fresh
+
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	var before: Vector2 = _anchor
+	_follow_anchor()
+	if _anchor != before:
+		var keep_scale: Vector2 = scale
+		_layout()
+		scale = keep_scale
 	_age += delta
 	var want: int = mini(stars, int(_age / STAR_STEP))
 	while _shown_stars < want:

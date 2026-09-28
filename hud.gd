@@ -243,7 +243,7 @@ func _cards_signature(shown: Array) -> String:
 		parts.append("%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s" % [
 			c.get("index", -1), c.get("name", ""), c.get("status", ""), c.get("stars", 0),
 			c.get("dirt", ""), c.get("value", 0), c.get("fate", ""), c.get("progress", ""),
-			c.get("exposed", 0), -1 if left == INF else int(ceil(left)), c.get("cast", false),
+			c.get("exposed", 0), -1 if left == INF else int(ceil(left)), "%s:%s" % [c.get("cast", false), c.get("crumbled", 0)],
 		])
 	return ";".join(parts)
 
@@ -278,14 +278,24 @@ func catch_find(index: int) -> void:
 func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0, tier: int = 1) -> void:
 	if _ribbon == null:
 		return
+	if not _ribbon.get("anchor_for").is_valid():
+		_ribbon.set("anchor_for", ribbon_anchor)
+	var chip: Control = _chip_for_find(index) if index >= 0 else null
+	if chip != null and chip.has_method("light_up"):
+		chip.call("light_up")
+	_ribbon.call("show_reward", title, subtitle, stars, tier, ribbon_anchor(index), index)
+
+
+## Where a ribbon for this find should sit: top edge of the tray, over its card.
+func ribbon_anchor(index: int) -> Vector2:
+	if _find_box != null:
+		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
 	var anchor_x: float = Tuning.pit_grid_rect().get_center().x
 	var chip: Control = _chip_for_find(index) if index >= 0 else null
 	if chip != null and chip.is_visible_in_tree():
 		anchor_x = chip.global_position.x + chip.size.x * 0.5
-		if chip.has_method("light_up"):
-			chip.call("light_up")
 	var top: float = _finds_frame.position.y if _finds_frame != null else Tuning.footer_top()
-	_ribbon.call("show_reward", title, subtitle, stars, tier, Vector2(anchor_x, top))
+	return Vector2(anchor_x, top)
 
 
 func ribbon() -> Control:

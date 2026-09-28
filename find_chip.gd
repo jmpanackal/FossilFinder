@@ -205,6 +205,11 @@ func _apply_stat_lines() -> void:
 func _condition_line(card: Dictionary) -> String:
 	var grade: String = str(card.get("grade", "")).strip_edges()
 	if not grade.is_empty():
+		var lost: int = int(card.get("crumbled", 0))
+		var cond: int = int(card.get("condition", 0))
+		if lost > 0 and cond > 0:
+			## Show what open air cost, so the reason for the stars is visible.
+			return "%s (was %s)" % [Tuning.condition_name(cond), Tuning.condition_name(cond + lost)]
 		return grade
 	match _status:
 		"bagged":
@@ -224,7 +229,7 @@ func _condition_line(card: Dictionary) -> String:
 func _meter_line(card: Dictionary) -> String:
 	var left: float = float(card.get("crumble_in", INF))
 	if left != INF and not bool(card.get("extracted", false)):
-		return "%s · crumbles in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
+		return "%s · -1 star in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
 	if bool(card.get("cast", false)):
 		return "In a plaster cast"
 	if _status == "bagged" or bool(card.get("extracted", false)):

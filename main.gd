@@ -460,31 +460,39 @@ func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> v
 		crumbled = int(dig_site.finds[index].get("crumbled", 0))
 	if sub.is_empty() and crumbled > 0:
 		sub = "It crumbled from %s in the open air." % Tuning.condition_name(cond + crumbled)
+	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
 		hud.celebrate(index, title_text, sub, cond, condition_tier(cond))
 	if cond >= 4:
 		_ping(world_pos)
 
 
+func _refresh_find_cards() -> void:
+	## Make sure the find's card exists before a ribbon is pinned to it.
+	if hud != null and hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
+		hud.set_find_cards(dig_site.live_find_cards())
+
+
 func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
-	## Fool's gold is always news; fragile bones only get explained the first time.
+	## Opal bones are always news; fragile bones only get explained the first time.
 	var first: bool = GameState.take_hint("kind_%d" % kind)
-	if kind != Tuning.BONE_GOLD and not first:
+	if kind != Tuning.BONE_OPAL and not first:
 		return
 	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Worth far more. Get it out before it crumbles!"
 	if first and not Tuning.cast_owned():
 		sub += " A Plaster Cast (Hands upgrade) saves it."
 	elif first:
 		sub += " Hold Hands on it once dug out to wrap it in a plaster cast."
-	var title_text: String = "Fool's gold bone!" if kind == Tuning.BONE_GOLD else "Fragile bone!"
+	var title_text: String = "Opal bone!" if kind == Tuning.BONE_OPAL else "Fragile bone!"
+	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
-		hud.celebrate(index, title_text, sub, 0, 2 if kind == Tuning.BONE_GOLD else 1)
+		hud.celebrate(index, title_text, sub, 0, 2 if kind == Tuning.BONE_OPAL else 1)
 
 
 func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
 	## Condition stays secret until the bone is fully dug out.
 	var known: bool = index >= 0 and index < dig_site.finds.size() and dig_site._find_is_fully_exposed(dig_site.finds[index])
-	var text: String = "Crumbling! Now %s" % Tuning.condition_name(condition) if known else "Crumbling!"
+	var text: String = "-1 star: drying out! Now %s" % Tuning.condition_name(condition) if known else "-1 star: drying out!"
 	_spawn_float(text, world_pos + Vector2(0, -20), Color("D8C8A8"), 18)
 
 
@@ -541,6 +549,13 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 	_round_fossil_pay += GameState.money - before
 	var grade := Tuning.condition_label(condition)
 	var stars := condition
+	var lost_to_air: int = 0
+	if dig_site.has_method("find_index_for"):
+		var fi: int = int(dig_site.find_index_for(id))
+		if fi >= 0:
+			lost_to_air = int(dig_site.finds[fi].get("crumbled", 0))
+	if lost_to_air > 0:
+		grade = "%s (was %s)" % [grade, Tuning.condition_name(condition + lost_to_air)]
 	var owns_brush: bool = GameState.owns_tool(Tuning.TOOL_BRUSH)
 	var dirt := Tuning.summary_dirt_line(cleanliness, owns_brush)
 	_round_finds.append({
