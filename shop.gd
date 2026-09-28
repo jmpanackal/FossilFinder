@@ -5,6 +5,7 @@ signal closed
 const Ui := preload("res://ui_style.gd")
 const UpgradeRow := preload("res://upgrade_node.gd")
 const ShopIcon := preload("res://shop_icon.gd")
+const ShopHero := preload("res://shop_hero.gd")
 
 const CATS: Array[String] = ["Hands", "Shovel", "Pickaxe", "Brush", "Site", "Museum"]
 const RAIL_W := 176.0
@@ -33,6 +34,8 @@ var _levels_hash: int = 0
 var _tab_keys: Dictionary = {}
 var _heat: Dictionary = {}
 var _stale_cats: Dictionary = {}
+var _heroes: Dictionary = {}
+var _best_tags: Dictionary = {}
 
 
 func _init() -> void:
@@ -206,6 +209,11 @@ func _make_tab(cat: String) -> Button:
 
 
 func _fill_page(page: VBoxContainer, cat: String) -> void:
+	var hero = ShopHero.new()
+	hero.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.add_child(hero)
+	hero.setup(cat)
+	_heroes[cat] = hero
 	var last_tier := -1
 	for item in GameState.catalog:
 		if str(item.get("cat", "")) != cat:
@@ -222,7 +230,9 @@ func _add_chapter(page: VBoxContainer, cat: String, tier: int) -> void:
 	var key: String = _chapter_key(cat, tier)
 	var frame := PanelContainer.new()
 	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	frame.add_theme_stylebox_override("panel", Ui.chapter_box())
+	var chapter_style = Ui.chapter_box()
+	chapter_style.border_color = ShopHero.accent_for(cat).darkened(0.25)
+	frame.add_theme_stylebox_override("panel", chapter_style)
 	page.add_child(frame)
 
 	var col := VBoxContainer.new()
@@ -330,6 +340,8 @@ func _add_row(item: Dictionary, cat: String, tier: int) -> void:
 
 func _select_cat(cat: String) -> void:
 	_selected_cat = cat
+	if _heroes.has(cat):
+		_heroes[cat].refresh()
 	if _stale_cats.has(cat):
 		_stale_cats.erase(cat)
 		for item in GameState.catalog:
@@ -404,6 +416,9 @@ func refresh(all_pages: bool = true) -> void:
 		_stale_cats.clear()
 	for cat in CATS:
 		_refresh_tiers(cat)
+	if _heroes.has(_selected_cat):
+		_heroes[_selected_cat].refresh()
+	_mark_best_buy()
 
 
 func _refresh_tab(cat: String) -> void:
@@ -489,6 +504,36 @@ func _ranks_total(cat: String, tier: int) -> int:
 		if str(item.get("cat", "")) == cat and int(item.get("tier", 1)) == tier:
 			total += int(item.get("max", 1))
 	return total
+
+
+func _mark_best_buy() -> void:
+	## "BEST NEXT" on the cheapest upgrade you can afford in the open tab.
+	var best_id: String = ""
+	var best_cost: int = 1 << 62
+	for item in GameState.catalog:
+		var id: String = str(item["id"])
+		if str(item.get("cat", "")) != _selected_cat or not _buttons.has(id):
+			continue
+		if not GameState.can_buy(id):
+			continue
+		var cost: int = GameState.cost_of(id)
+		if cost < best_cost:
+			best_cost = cost
+			best_id = id
+	for id in _best_tags.keys():
+		var old: Control = _best_tags[id]
+		if is_instance_valid(old):
+			old.visible = id == best_id
+	if best_id.is_empty() or _best_tags.has(best_id):
+		return
+	var tag := Label.new()
+	tag.text = "BEST NEXT"
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(tag, 11, Color("1B1410"))
+	tag.add_theme_stylebox_override("normal", Ui.badge_box())
+	tag.position = Vector2(64, -8)
+	_buttons[best_id].add_child(tag)
+	_best_tags[best_id] = tag
 
 
 func _first_ready_cat() -> String:

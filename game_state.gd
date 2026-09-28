@@ -669,6 +669,54 @@ func shop_row_title(id: String) -> String:
 	return "%s    %d / %d" % [shop_display_name(id), level, max_level]
 
 
+## Live "tool power" numbers for the shop tab header. Plain labels, real values.
+func shop_hero_stats(cat: String) -> Array:
+	var out: Array = []
+	var add := func(label: String, value: String) -> void: out.append({"label": label, "value": value})
+	match cat:
+		"Hands":
+			add.call("Harvest power", "%d%%" % int(round(Tuning.hands_click_mult * 100.0)))
+			add.call("Hold speed", ("%.1f/s" % Tuning.shovel_hold_tick_rate) if _lv("hands_hold") > 0.0 else "Locked")
+			add.call("Bone sense", ("%.1f cells" % Tuning.hands_sense_radius) if Tuning.hands_sense_radius > 0.0 else "Locked")
+			add.call("Plaster", ("%.1fs" % Tuning.cast_hold_seconds()) if Tuning.cast_owned() else "Locked")
+		"Shovel":
+			if not owns_tool(Tuning.TOOL_SHOVEL):
+				add.call("Shovel", "Locked")
+			else:
+				add.call("Dig power", "%d%%" % int(round(Tuning.shovel_click_mult * 100.0)))
+				add.call("Reach", "%d cells" % Tuning.shovel_hit_cells(Vector2i(8, 8), Tuning.shovel_radius).size())
+				add.call("Hold speed", ("%.1f/s" % Tuning.shovel_hold_tick_rate) if _lv("shovel_hold") > 0.0 else "Locked")
+				add.call("Great+ bones", "%d%%" % int(round(Tuning.great_or_better_chance() * 100.0)))
+		"Pickaxe":
+			if not owns_tool(Tuning.TOOL_PICKAXE):
+				add.call("Pickaxe", "Locked")
+			else:
+				add.call("Strike power", "%d%%" % int(round(Tuning.pickaxe_click_mult * 100.0)))
+				add.call("Reach", "%d cells" % Tuning.shovel_hit_cells(Vector2i(8, 8), Tuning.pickaxe_radius).size())
+				add.call("Hold speed", ("%.1f/s" % Tuning.pickaxe_hold_tick_rate) if _lv("pick_hold") > 0.0 else "Locked")
+				add.call("Great+ bones", "%d%%" % int(round(Tuning.great_or_better_chance() * 100.0)))
+		"Brush":
+			if not owns_tool(Tuning.TOOL_BRUSH):
+				add.call("Brush", "Locked")
+			else:
+				var per_pass: float = clampf(Tuning.brush_clean_per_pixel * (Tuning.brush_base_strength / 0.0015), 0.25, Tuning.brush_max_strength)
+				add.call("Dirt per sweep", "%.1f layers" % per_pass)
+				add.call("Extra width", "+%dpx" % int(round(Tuning.brush_reach_px)))
+				add.call("Clean bonus", "x%.1f" % (1.0 / maxf(Tuning.unbrushed_value, 0.01)))
+		"Site":
+			var layout: Vector2i = Tuning.site_layout_for_rank(Tuning.site_size_rank)
+			add.call("Shift", "%ds" % int(round(Tuning.round_seconds)))
+			add.call("Pit size", "%dx%d" % [layout.x, layout.y])
+			add.call("Extra fossils", "up to %d" % Tuning.extra_find_slots)
+			add.call("Finds pay", "x%.2f" % Tuning.money_mult)
+		"Museum":
+			add.call("Income", UiStyle.money_text(museum_income()) + "/s")
+			add.call("Visitors", str(museum_visitors()))
+			add.call("Museum fame", "x%.1f" % fame_mult())
+			add.call("Repairs/shift", str(int(_lv("workshop"))))
+	return out
+
+
 func shop_button_label(id: String) -> String:
 	var item: Dictionary = _item(id)
 	var price: String = UiStyle.money_text(cost_of(id))
