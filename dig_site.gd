@@ -5,6 +5,7 @@ const FossilDataScript := preload("res://fossil_data.gd")
 const Lucky := preload("res://lucky_strike.gd")
 const Matrix := preload("res://matrix_find.gd")
 const ArtCatalogScript := preload("res://art_catalog.gd")
+const UiStyle := preload("res://ui_style.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
@@ -1727,7 +1728,7 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 		color = Color("E8C9A0")
 		c.draw_circle(pos, 5.0, color)
 		c.draw_arc(pos, 9.0, 0.0, TAU, 16, color, 2.0)
-		c.draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), "HANDS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+		_draw_cursor_label(c, pos, "HANDS", color)
 		return
 	match current_tool:
 		Tuning.TOOL_SHOVEL:
@@ -1757,8 +1758,15 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 			var puff: float = 11.0 if boosted else 7.0
 			c.draw_circle(pos, puff, Color(0.5, 0.8, 0.9, 0.28 if boosted else 0.25))
 			c.draw_arc(pos, puff + 2.0, 0.0, TAU, 20, color, 2.5 if boosted else 2.0)
-	var label: String = Tuning.TOOL_NAMES[current_tool]
-	c.draw_string(ThemeDB.fallback_font, pos + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+	_draw_cursor_label(c, pos, Tuning.TOOL_NAMES[current_tool], color)
+
+
+func _draw_cursor_label(c: CanvasItem, pos: Vector2, label: String, color: Color) -> void:
+	## Game font with a dark outline so the tag reads on tan dirt and grey stone.
+	var font: Font = UiStyle.display_font()
+	var at: Vector2 = pos + Vector2(12, -10)
+	c.draw_string_outline(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0.1, 0.07, 0.05, 0.85))
+	c.draw_string(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
 
 
 class _FxOverlay extends Node2D:

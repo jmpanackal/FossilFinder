@@ -20,7 +20,7 @@ var well: Panel
 
 func setup(id: String) -> void:
 	item_id = id
-	custom_minimum_size = Vector2(0, 88)
+	custom_minimum_size = Vector2(0, 96)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var row := HBoxContainer.new()
@@ -55,7 +55,7 @@ func setup(id: String) -> void:
 
 	var text := VBoxContainer.new()
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text.add_theme_constant_override("separation", 2)
+	text.add_theme_constant_override("separation", 4)
 	text.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(text)
 

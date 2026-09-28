@@ -683,11 +683,11 @@ func tool_role_line(tool: int) -> String:
 		Tuning.TOOL_HANDS:
 			return "Harvest · safe on bone"
 		Tuning.TOOL_SHOVEL:
-			return "Clear dirt · damages bone"
+			return "Clear dirt · chips bone"
 		Tuning.TOOL_PICKAXE:
-			return "Clear stone · damages bone"
+			return "Break stone · chips bone"
 		Tuning.TOOL_BRUSH:
-			return "Clean fossil"
+			return "Clean bone · +value"
 		_:
 			return ""
 

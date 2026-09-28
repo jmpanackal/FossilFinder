@@ -486,13 +486,15 @@ func empty_display_rect() -> Rect2:
 func _layout_empty_display() -> void:
 	var labels: Array = [_empty_lead, _empty_mid, _empty_tail]
 	var words := ["Nothing", "on display", "yet"]
+	if GameState.has_any_pending_unveil():
+		words[2] = "yet · click a ribbon to unveil"
 	if not empty_display_visible():
 		for label in labels:
 			if label != null:
 				label.visible = false
 		return
 	var view: Vector2 = _view()
-	var gap: float = 10.0
+	var gap: float = 5.0
 	var height: float = 22.0
 	var pad: float = 18.0
 	var widths: Array[float] = []
@@ -505,7 +507,7 @@ func _layout_empty_display() -> void:
 		Ui.apply_copy(label, str(words[i]), 16, Color("C8B080"))
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var sized: Vector2 = _fit_header_label(label, height)
-		var width: float = maxf(36.0, sized.x)
+		var width: float = maxf(8.0, sized.x)
 		widths.append(width)
 		total += width
 	total += gap * float(maxi(words.size() - 1, 0))
