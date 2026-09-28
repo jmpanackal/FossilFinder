@@ -241,6 +241,15 @@ var condition_visitor_mult: PackedFloat32Array = [0.5, 0.75, 1.0, 1.5, 2.0]
 const DUST_COLS := 8
 const DUST_ROWS := 5
 var brush_radius_frac: float = 0.30
+## Layers of dirt caked on a bone, by how deep it was buried.
+var dust_layers_by_material: PackedInt32Array = [2, 2, 3, 4]
+## Dirt one brush pass lifts per layer: starter brush = half a layer.
+var brush_base_strength: float = 0.5
+var brush_max_strength: float = 1.5
+
+
+func dust_layers_for(layer: int) -> int:
+	return dust_layers_by_material[material_at_layer(layer)]
 
 
 func condition_name(condition: int) -> String:

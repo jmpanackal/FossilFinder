@@ -909,8 +909,16 @@ func brush_radius() -> float:
 
 
 func brush_strength() -> float:
-	## How much dust one pass lifts: base takes ~2 passes, upgrades reach 1.
-	return clampf(Tuning.brush_clean_per_pixel * 370.0, 0.25, 1.0)
+	## Layers of dirt one pass lifts. Starter brush = half a layer.
+	var scale: float = Tuning.brush_base_strength / 0.0015
+	return clampf(Tuning.brush_clean_per_pixel * scale, 0.25, Tuning.brush_max_strength)
+
+
+func dust_layers(cell: Vector2i) -> int:
+	var find := _find_at(cell)
+	if find.is_empty():
+		return 1
+	return Tuning.dust_layers_for(int(find.get("layer", 0)))
 
 
 func brush_stroke(from: Vector2, to: Vector2) -> void:
@@ -993,7 +1001,8 @@ func _dust_clean(cell: Vector2i) -> float:
 	var left: float = 0.0
 	for v in grid:
 		left += v
-	return clampf(1.0 - left / float(maxi(grid.size(), 1)), 0.0, 1.0)
+	var full: float = float(maxi(grid.size(), 1) * dust_layers(cell))
+	return clampf(1.0 - left / full, 0.0, 1.0)
 
 
 func _finish_cleaning(find: Dictionary) -> void:
@@ -1097,7 +1106,7 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	cleanliness[cell] = 0.0
 	var caked := PackedFloat32Array()
 	caked.resize(Tuning.DUST_COLS * Tuning.DUST_ROWS)
-	caked.fill(1.0)
+	caked.fill(float(dust_layers(cell)))
 	dust[cell] = caked
 	var layer: int = int(find["layer"])
 	if _top_layer[cell.x][cell.y] < layer:
@@ -1877,12 +1886,17 @@ func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
 	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 
 
-const DUST_DARK := Color("6A4E34")
-const DUST_LIGHT := Color("735639")
+## Dirt layers from the surface down: loose dust, caked dirt, clay, crust.
+const DUST_LAYER_COLORS: PackedColorArray = [
+	Color("9A7C58"),
+	Color("6E5236"),
+	Color("5A4230"),
+	Color("3E3024"),
+]
 
 
 func _draw_dust(rect: Rect2, cell: Vector2i) -> void:
-	## Caked dirt sits on top of the bone and disappears where the brush wipes.
+	## Dirt sits on top of the bone in layers and disappears where the brush wipes.
 	if not dust.has(cell):
 		return
 	var grid: PackedFloat32Array = dust[cell]
@@ -1895,8 +1909,10 @@ func _draw_dust(rect: Rect2, cell: Vector2i) -> void:
 			var amount: float = grid[i]
 			if amount <= 0.02:
 				continue
-			var shade: Color = DUST_DARK.lerp(DUST_LIGHT, _hash01(seed, i))
-			shade.a = 0.30 + 0.70 * amount
+			## Remaining layers pick the color; the last partial layer thins out.
+			var depth: int = clampi(int(ceil(amount)) - 1, 0, DUST_LAYER_COLORS.size() - 1)
+			var shade: Color = DUST_LAYER_COLORS[depth].lerp(Color.BLACK, 0.06 * _hash01(seed, i))
+			shade.a = 1.0 if amount >= 1.0 else 0.30 + 0.70 * amount
 			draw_rect(Rect2(rect.position.x + float(col) * cw, rect.position.y + float(row) * ch, cw + 0.5, ch + 0.5), shade)
 
 

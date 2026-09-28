@@ -420,47 +420,49 @@ func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
 	## The biggest moment in the game: louder than any single find.
 	var title_text: String = "%s complete!" % GameState.stand_title(stand_id)
 	var sub: String = "+$%d  ·  visitors x%s forever" % [bonus, GameState._mult_text(Tuning.complete_stand_mult)]
-	if toast != null and toast.has_method("show_toast"):
+	if hud != null and hud.visible and hud.has_method("celebrate"):
+		hud.celebrate(-1, title_text, sub, 5, 3)
+	elif toast != null and toast.has_method("show_toast"):
 		toast.show_toast(title_text, sub, 5)
 	Sfx.play("unveil")
 	if Tuning.shake_enabled:
 		_shake_left = Tuning.shake_time * 2.5
 	if screen == "dig" and dig_site != null and dig_site.visible:
 		var center: Vector2 = Tuning.pit_grid_rect().get_center()
-		_spawn_float(title_text.to_upper(), center + Vector2(0, -30), Color("FFE08A"), 34)
 		_spawn_float("+$%d" % bonus, center + Vector2(0, 14), Color("E4B75A"), 26)
 		_ping(center)
 
 
-const CONDITION_COLORS: PackedColorArray = [
-	Color("B8A48C"),
-	Color("D8C8A8"),
-	Color("F2E6C4"),
-	Color("9FE08A"),
-	Color("FFE08A"),
-]
+static func condition_tier(condition: int) -> int:
+	## Poor/Fair stay quiet, Good is a nod, Great glows, Perfect goes big.
+	match clampi(condition, 1, 5):
+		1, 2:
+			return 0
+		3:
+			return 1
+		4:
+			return 2
+		_:
+			return 3
 
 
-func _on_condition_revealed(_index: int, condition: int, world_pos: Vector2) -> void:
+func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> void:
 	## Discovery beat: the bone's hidden condition shows once it is fully dug out.
 	var cond: int = clampi(condition, 1, 5)
-	var excited: bool = cond >= 4
-	var text: String = "%s condition%s" % [Tuning.condition_name(cond), "!" if excited else ""]
-	_spawn_float(text, world_pos + Vector2(0, -26), CONDITION_COLORS[cond - 1], 26 if excited else 20)
-	if cond == Tuning.CONDITION_PERFECT:
+	var title_text: String = "%s condition%s" % [Tuning.condition_name(cond), "!" if cond >= 4 else ""]
+	if hud != null and hud.has_method("celebrate"):
+		hud.celebrate(index, title_text, _teach_on_reveal(), cond, condition_tier(cond))
+	if cond >= 4:
 		_ping(world_pos)
-		Sfx.play("unlock")
-	_teach_on_reveal()
 
 
-func _teach_on_reveal() -> void:
-	## Plain-language explainers, each shown once ever.
-	if toast == null or not toast.has_method("show_toast"):
-		return
+func _teach_on_reveal() -> String:
+	## Plain-language explainers, each shown once ever, as the ribbon's second line.
 	if GameState.take_hint("condition"):
-		toast.show_toast("Bone condition", "How well it survived underground. Better condition = more $ and more museum visitors.")
-	elif GameState.owns_tool(Tuning.TOOL_BRUSH) and GameState.take_hint("brush"):
-		toast.show_toast("Brush off the dirt", "Pick the Brush (4), hold the mouse and sweep over the bone. Clean bones are worth more.")
+		return "Condition = how well it survived underground. Better = more $ and more museum visitors."
+	if GameState.owns_tool(Tuning.TOOL_BRUSH) and GameState.take_hint("brush"):
+		return "Pick the Brush (4) and sweep over the bone to wipe off each layer of dirt."
+	return ""
 
 
 func _on_bone_sensed(world_pos: Vector2) -> void:
@@ -496,8 +498,9 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 	if dig_site.has_method("set_find_fate"):
 		dig_site.set_find_fate(id, _extract_fate)
 	GameState.install_find(id, fossil_name, cleanliness, clean, condition)
-	if upgrading and toast != null and toast.has_method("show_toast"):
-		toast.show_toast("Exhibit upgraded!", "%s: %s replaces %s. The old one was sold." % [fossil_name, Tuning.condition_name(condition), Tuning.condition_name(old_condition)], condition)
+	if upgrading and hud != null and hud.has_method("celebrate"):
+		var idx: int = int(dig_site.find_index_for(id)) if dig_site.has_method("find_index_for") else -1
+		hud.celebrate(idx, "Exhibit upgraded!", "%s: %s → %s (old one sold)" % [fossil_name, Tuning.condition_name(old_condition), Tuning.condition_name(condition)], condition, 3)
 	_round_fossil_pay += GameState.money - before
 	var grade := Tuning.condition_label(condition)
 	var stars := condition

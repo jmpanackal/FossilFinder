@@ -9,6 +9,7 @@ const ClockFace := preload("res://clock_face.gd")
 const ToolIcon := preload("res://tool_icon.gd")
 const ShopIcon := preload("res://shop_icon.gd")
 const FindChipScript := preload("res://find_chip.gd")
+const RewardRibbonScript := preload("res://reward_ribbon.gd")
 
 const CLOCK_SIZE := 72.0
 const CLOCK_TIME_SIZE := 32
@@ -79,6 +80,7 @@ var _equipped_tool: int = Tuning.TOOL_HANDS
 var _tool_style_key: String = ""
 var _layout_key: String = ""
 var _cards_key: String = ""
+var _ribbon: Control
 
 
 func _ready() -> void:
@@ -141,6 +143,10 @@ func _ready() -> void:
 	_find_box.add_theme_constant_override("v_separation", 4)
 	_find_box.visible = false
 	root.add_child(_find_box)
+
+	_ribbon = RewardRibbonScript.new()
+	_ribbon.name = "RewardRibbon"
+	root.add_child(_ribbon)
 
 	_set_money_text(false)
 	_highlight_tool(Tuning.TOOL_HANDS)
@@ -265,6 +271,24 @@ func catch_find(index: int) -> void:
 	var chip: Control = _chip_for_find(index)
 	if chip != null and chip.has_method("light_up"):
 		chip.call("light_up")
+
+
+## Celebrate a find on the Finds tray border, centered over its chip.
+func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0, tier: int = 1) -> void:
+	if _ribbon == null:
+		return
+	var anchor_x: float = Tuning.pit_grid_rect().get_center().x
+	var chip: Control = _chip_for_find(index) if index >= 0 else null
+	if chip != null and chip.is_visible_in_tree():
+		anchor_x = chip.global_position.x + chip.size.x * 0.5
+		if chip.has_method("light_up"):
+			chip.call("light_up")
+	var top: float = _finds_frame.position.y if _finds_frame != null else Tuning.footer_top()
+	_ribbon.call("show_reward", title, subtitle, stars, tier, Vector2(anchor_x, top))
+
+
+func ribbon() -> Control:
+	return _ribbon
 
 
 func set_bone_warning(_on: bool) -> void:

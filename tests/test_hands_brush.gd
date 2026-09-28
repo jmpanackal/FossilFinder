@@ -24,6 +24,7 @@ func _run() -> void:
 	_test_weak_bristles_need_more_passes()
 	_test_wiping_everything_cleans_and_bags_the_bone()
 	_test_brush_upgrades_widen_the_bristles()
+	_test_deeper_bones_have_more_layers()
 	_reset()
 	print("hands_brush %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -130,7 +131,9 @@ func _test_uncovered_bone_starts_caked() -> void:
 	var bone: Vector2i = _first_bone(site)
 	site.call("_reveal_fossil_cell", bone)
 	_assert(site.dust.has(bone), "uncovered bone gets a dust layer")
-	_assert(is_equal_approx(_dust_left(site, bone), float(TN.DUST_COLS * TN.DUST_ROWS)), "fresh bone is fully caked")
+	var layers: int = int(site.call("dust_layers", bone))
+	_assert(layers >= 2, "bones are caked in at least two layers of dirt")
+	_assert(is_equal_approx(_dust_left(site, bone), float(TN.DUST_COLS * TN.DUST_ROWS * layers)), "fresh bone is fully caked")
 	_assert(float(site.cleanliness[bone]) == 0.0, "fresh bone is 0% clean")
 	site.queue_free()
 
@@ -147,8 +150,8 @@ func _test_stroke_wipes_only_along_its_path() -> void:
 	var grid: PackedFloat32Array = site.dust[bone]
 	var mid_row: int = int(TN.DUST_ROWS) / 2
 	var mid_i: int = mid_row * int(TN.DUST_COLS) + int(TN.DUST_COLS) / 2
-	_assert(grid[mid_i] < 1.0, "dust under the stroke gets wiped")
-	_assert(is_equal_approx(grid[0], 1.0), "a far corner the brush never touched stays caked")
+	_assert(grid[mid_i] < float(site.call("dust_layers", bone)), "dust under the stroke gets wiped")
+	_assert(is_equal_approx(grid[0], float(site.call("dust_layers", bone))), "a far corner the brush never touched stays caked")
 	var clean: float = float(site.cleanliness[bone])
 	_assert(clean > 0.0 and clean < 1.0, "a single stroke leaves the bone partly clean")
 	site.queue_free()
@@ -159,7 +162,7 @@ func _test_weak_bristles_need_more_passes() -> void:
 	GS.levels["brush_speed"] = 1
 	GS.apply_upgrades()
 	var site := _make_site()
-	_assert(float(site.call("brush_strength")) < 1.0, "a starter brush lifts part of the dust per pass")
+	_assert(float(site.call("brush_strength")) <= 0.5, "a starter brush lifts half a layer per pass")
 	var bone: Vector2i = _first_bone(site)
 	site.call("_reveal_fossil_cell", bone)
 	_flatten(site, bone)
@@ -174,7 +177,7 @@ func _test_weak_bristles_need_more_passes() -> void:
 
 func _wipe_all(site: Node2D, cell: Vector2i) -> void:
 	var rect: Rect2 = site.call("_top_rect", cell.x, cell.y)
-	for pass_i in 6:
+	for pass_i in 16:
 		for row in int(TN.DUST_ROWS):
 			var y: float = rect.position.y + (float(row) + 0.5) * rect.size.y / float(TN.DUST_ROWS)
 			site.call("brush_stroke", Vector2(rect.position.x, y), Vector2(rect.end.x, y))
@@ -195,6 +198,11 @@ func _test_wiping_everything_cleans_and_bags_the_bone() -> void:
 	for raw in cells:
 		_assert(float(site.cleanliness[raw]) >= 1.0, "bagged bone reads 100% clean")
 	site.queue_free()
+
+
+func _test_deeper_bones_have_more_layers() -> void:
+	_assert(int(TN.dust_layers_for(0)) == 2, "soil bones have 2 layers of dirt")
+	_assert(int(TN.dust_layers_for(TN.layer_count - 1)) >= 4, "stone bones have at least 4 layers")
 
 
 func _test_brush_upgrades_widen_the_bristles() -> void:
