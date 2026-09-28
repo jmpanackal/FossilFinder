@@ -239,10 +239,11 @@ func _cards_signature(shown: Array) -> String:
 	parts.append(str(Tuning.pit_grid_size()))
 	for card in shown:
 		var c: Dictionary = card
-		parts.append("%s/%s/%s/%s/%s/%s/%s/%s/%s" % [
+		var left: float = float(c.get("crumble_in", INF))
+		parts.append("%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s" % [
 			c.get("index", -1), c.get("name", ""), c.get("status", ""), c.get("stars", 0),
 			c.get("dirt", ""), c.get("value", 0), c.get("fate", ""), c.get("progress", ""),
-			c.get("exposed", 0),
+			c.get("exposed", 0), -1 if left == INF else int(ceil(left)), c.get("cast", false),
 		])
 	return ";".join(parts)
 

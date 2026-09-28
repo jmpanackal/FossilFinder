@@ -105,3 +105,18 @@ Next:
 6. Two new T3 upgrades (Seismic Tap, Dynamite)
 7. Title/summary polish; museum zoom decision
 8. Economy retune (§5.2) last, per `PRIORITY.md`
+
+---
+
+## 10. Bone condition system (built after playtest)
+
+Replaces bone breaking, which never really happened (hold-dig skipped bone).
+
+- **Condition** (Poor / Fair / Good / Great / Perfect) is rolled when the pit is made and revealed when the bone is fully dug out. It sets value (0.5x-2x) and museum visitors (0.5x-2x). Gentle Digging / Gentle Picking improve the odds. Tools never damage bone.
+- **Brushing:** 2-4 layers of dirt (by depth) wipe away where the brush passes. A starter brush lifts half a layer per pass.
+- **Museum:** a better copy upgrades the exhibit (the old one is sold). Stands show average condition stars.
+- **Fragile bones** (~20%) and **Fool's gold bones** (~6%, worth 2.5x) crumble one condition step at a time once in open air. A countdown ring over the bone and the find card show the time left.
+- **Plaster Cast** (Hands upgrade, 3 ranks): hold Hands on a dug-out bone to wrap it, like a cast on a broken arm. It stops crumbling and is collected at once.
+- **Feedback:** reveals, upgrades and finished skeletons pop a ribbon on the Finds tray border. It's louder for better finds and never covers the dig cells. First-time explanations appear as its second line.
+
+Next (phase 3): a museum repair upgrade that restores a crumbled piece one step for money, and *Masterpiece* skeletons (complete, all Fine or better) with a gold plaque and a big bonus.

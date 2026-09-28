@@ -248,6 +248,73 @@ var brush_base_strength: float = 0.5
 var brush_max_strength: float = 1.5
 
 
+## Bone kinds. Most bones are solid; some crumble once they meet open air.
+const BONE_SOLID := 0
+const BONE_FRAGILE := 1
+const BONE_GOLD := 2
+const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Fool's gold"]
+## Plain-language one-liners shown the first time each kind turns up.
+const BONE_KIND_HINTS: PackedStringArray = [
+	"",
+	"It dries out and crumbles in open air. Dig it out and brush it fast.",
+	"Bone turned to fool's gold: worth far more, but it crumbles fast in open air.",
+]
+var bone_kind_weights: PackedFloat32Array = [74.0, 20.0, 6.0]
+## Seconds in open air before the first crumble, then between crumbles.
+var crumble_first: PackedFloat32Array = [0.0, 12.0, 6.0]
+var crumble_step: PackedFloat32Array = [0.0, 10.0, 6.0]
+var bone_kind_value: PackedFloat32Array = [1.0, 1.0, 2.5]
+## Plaster Cast: seconds of holding Hands on a dug-out bone to wrap it, by rank.
+var cast_hold_by_rank: PackedFloat32Array = [1.4, 1.0, 0.6]
+var cast_rank: int = 0
+
+
+func bone_kind_name(kind: int) -> String:
+	return BONE_KIND_NAMES[clampi(kind, 0, BONE_KIND_NAMES.size() - 1)]
+
+
+func bone_crumbles(kind: int) -> bool:
+	return kind == BONE_FRAGILE or kind == BONE_GOLD
+
+
+func roll_bone_kind(rng: RandomNumberGenerator = null) -> int:
+	var total: float = 0.0
+	for w in bone_kind_weights:
+		total += w
+	var roll: float = (rng.randf() if rng != null else randf()) * total
+	for i in bone_kind_weights.size():
+		roll -= bone_kind_weights[i]
+		if roll <= 0.0:
+			return i
+	return BONE_SOLID
+
+
+## How many crumbles a bone of this kind has taken after `seconds` in open air.
+func crumbles_after(kind: int, seconds: float) -> int:
+	if not bone_crumbles(kind) or seconds < crumble_first[kind]:
+		return 0
+	return 1 + int(floor((seconds - crumble_first[kind]) / maxf(crumble_step[kind], 0.1)))
+
+
+func seconds_to_next_crumble(kind: int, seconds: float) -> float:
+	if not bone_crumbles(kind):
+		return INF
+	if seconds < crumble_first[kind]:
+		return crumble_first[kind] - seconds
+	var into: float = fmod(seconds - crumble_first[kind], maxf(crumble_step[kind], 0.1))
+	return crumble_step[kind] - into
+
+
+func cast_owned() -> bool:
+	return cast_rank > 0
+
+
+func cast_hold_seconds() -> float:
+	if cast_rank <= 0:
+		return INF
+	return cast_hold_by_rank[clampi(cast_rank, 1, cast_hold_by_rank.size()) - 1]
+
+
 func dust_layers_for(layer: int) -> int:
 	return dust_layers_by_material[material_at_layer(layer)]
 

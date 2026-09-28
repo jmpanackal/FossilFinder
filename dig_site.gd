@@ -19,6 +19,12 @@ signal lucky_fled
 signal bone_sensed(world_pos: Vector2)
 ## A bone was fully uncovered and its hidden condition (1 Poor .. 5 Perfect) shows.
 signal condition_revealed(find_index: int, condition: int, world_pos: Vector2)
+## A fragile or fool's gold bone first meets open air.
+signal bone_kind_seen(find_index: int, kind: int, world_pos: Vector2)
+## Open air cost a crumbling bone one condition step.
+signal bone_crumbled(find_index: int, condition: int, world_pos: Vector2)
+## A bone was wrapped in a plaster cast and collected.
+signal bone_cast(find_index: int, world_pos: Vector2)
 
 var input_enabled: bool = true
 var current_tool: int = Tuning.TOOL_HANDS
@@ -73,6 +79,8 @@ var _matrix_rng: RandomNumberGenerator
 var _strike_finds: Array = []
 var _matrix_juice: Array = []
 var _pending: Array = []
+var _cast_hold: float = 0.0
+var _cast_index: int = -1
 
 const PUNCH_DIRT := 0
 const PUNCH_FIRM := 1
@@ -148,6 +156,8 @@ func start_round() -> void:
 	_hold_time = 0.0
 	_holding_dig = false
 	_brushing = false
+	_cast_hold = 0.0
+	_cast_index = -1
 	_boost_flash = 0.0
 	_boosted_tools.clear()
 	_reset_lucky()
@@ -163,6 +173,8 @@ func start_round() -> void:
 
 
 func cancel_input() -> void:
+	_cast_hold = 0.0
+	_cast_index = -1
 	_holding_dig = false
 	_brushing = false
 	_hold_time = 0.0
@@ -558,6 +570,11 @@ func _try_place_find(data: FossilDataScript) -> bool:
 			"cells": cells,
 			"integrity": 1.0,
 			"condition": Tuning.roll_condition(),
+			"kind": Tuning.roll_bone_kind(),
+			"air": 0.0,
+			"crumbled": 0,
+			"cast": false,
+			"kind_seen": false,
 			"extracted": false,
 			"extracted_clean": false,
 			"ready": false,
@@ -626,10 +643,13 @@ func _process(delta: float) -> void:
 	_tick_lucky(delta)
 	_tick_punches(delta)
 	if not input_enabled:
+		_cast_hold = 0.0
 		_redraw_grid_if_dirty()
 		return
+	tick_crumble(delta)
 	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	var aiming := _cell_at(_mouse_world())
+	_tick_cast(delta, holding, aiming)
 	if _holding_dig and holding and GameState.hold_unlocked() and _is_strike_tool():
 		if _is_exposed_fossil(aiming):
 			## Uncovered bone is safe from every tool; just pause the swing.
@@ -1116,6 +1136,10 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	_focus_find(find)
 	_grid_dirty = true
 	fossil_cell_exposed.emit(cell_center(cell), first)
+	var kind: int = int(find.get("kind", Tuning.BONE_SOLID))
+	if Tuning.bone_crumbles(kind) and not bool(find.get("kind_seen", false)):
+		find["kind_seen"] = true
+		bone_kind_seen.emit(int(fossil_cells.get(cell, -1)), kind, cell_center(cell))
 	if first:
 		Sfx.play("fossil_ping")
 	_grace_left = Tuning.fossil_grace
@@ -1125,6 +1149,90 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 		var index: int = int(fossil_cells.get(cell, -1))
 		fossil_ready_to_dust.emit(index)
 		condition_revealed.emit(index, int(find.get("condition", Tuning.CONDITION_GOOD)), _find_centroid(find))
+
+
+func _find_in_air(find: Dictionary) -> bool:
+	var cells: Dictionary = find.get("cells", {})
+	for cell in cells:
+		if exposed_cells.has(cell):
+			return true
+	return false
+
+
+func find_is_crumbling(find: Dictionary) -> bool:
+	if find.is_empty() or bool(find.get("extracted", false)) or bool(find.get("cast", false)):
+		return false
+	return Tuning.bone_crumbles(int(find.get("kind", 0))) and _find_in_air(find)
+
+
+## Seconds until this bone crumbles again (INF when it is safe).
+func crumble_in(find: Dictionary) -> float:
+	if not find_is_crumbling(find) or int(find.get("condition", 1)) <= Tuning.CONDITION_POOR:
+		return INF
+	return Tuning.seconds_to_next_crumble(int(find["kind"]), float(find.get("air", 0.0)))
+
+
+func tick_crumble(delta: float) -> void:
+	## Fragile and fool's gold bones lose condition the longer they sit in open air.
+	for i in finds.size():
+		var find: Dictionary = finds[i]
+		if not find_is_crumbling(find):
+			continue
+		find["air"] = float(find.get("air", 0.0)) + delta
+		var due: int = Tuning.crumbles_after(int(find["kind"]), float(find["air"]))
+		while int(find.get("crumbled", 0)) < due and int(find.get("condition", 1)) > Tuning.CONDITION_POOR:
+			find["condition"] = int(find["condition"]) - 1
+			find["crumbled"] = int(find.get("crumbled", 0)) + 1
+			_grid_dirty = true
+			if i == _focus_index:
+				condition = int(find["condition"])
+			Sfx.play("crack")
+			bone_crumbled.emit(i, int(find["condition"]), _find_centroid(find))
+		if int(find.get("condition", 1)) <= Tuning.CONDITION_POOR:
+			find["crumbled"] = maxi(int(find.get("crumbled", 0)), due)
+
+
+func cast_progress() -> float:
+	if _cast_index < 0 or not Tuning.cast_owned():
+		return 0.0
+	return clampf(_cast_hold / Tuning.cast_hold_seconds(), 0.0, 1.0)
+
+
+func _castable(find: Dictionary) -> bool:
+	return not find.is_empty() and not bool(find.get("extracted", false)) and not bool(find.get("cast", false)) and _find_is_fully_exposed(find)
+
+
+func _tick_cast(delta: float, holding: bool, aiming: Vector2i) -> void:
+	## Plaster Cast: hold Hands on a dug-out bone to wrap and collect it.
+	var find := _find_at(aiming) if _is_exposed_fossil(aiming) else {}
+	if not holding or not _using_hands() or not Tuning.cast_owned() or not _castable(find):
+		_cast_hold = 0.0
+		_cast_index = -1
+		return
+	var index: int = finds.find(find)
+	if index != _cast_index:
+		_cast_index = index
+		_cast_hold = 0.0
+	_cast_hold += delta
+	if _cast_hold >= Tuning.cast_hold_seconds():
+		cast_find(index)
+
+
+func cast_find(index: int) -> void:
+	if index < 0 or index >= finds.size():
+		return
+	var find: Dictionary = finds[index]
+	if not _castable(find):
+		return
+	find["cast"] = true
+	_cast_hold = 0.0
+	_cast_index = -1
+	_grid_dirty = true
+	var pos: Vector2 = _find_centroid(find)
+	_burst(pos, int(find.get("layer", 0)), true)
+	Sfx.play("buy")
+	bone_cast.emit(index, pos)
+	_extract_find(find, false)
 
 
 func _can_harm_fossil() -> bool:
@@ -1155,8 +1263,9 @@ func _find_value(find: Dictionary, data) -> int:
 	## Value = base x condition x how clean it is.
 	var clean := _find_clean(find)
 	var cond: float = Tuning.condition_value(int(find.get("condition", Tuning.CONDITION_GOOD)))
+	var kind: float = Tuning.bone_kind_value[clampi(int(find.get("kind", 0)), 0, 2)]
 	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
-	return int(round(float(data.base_value) * cond * quality * Tuning.fossil_value_mult))
+	return int(round(float(data.base_value) * cond * kind * quality * Tuning.fossil_value_mult))
 
 
 func _find_centroid(find: Dictionary) -> Vector2:
@@ -1211,6 +1320,11 @@ func _card_for_find(index: int) -> Dictionary:
 		"stars": cond if named else 0,
 		"grade": Tuning.condition_label(cond) if named else "",
 		"condition": cond if named else 0,
+		"kind": int(find.get("kind", Tuning.BONE_SOLID)),
+		"kind_name": Tuning.bone_kind_name(int(find.get("kind", Tuning.BONE_SOLID))),
+		"crumble_in": crumble_in(find),
+		"crumbled": int(find.get("crumbled", 0)),
+		"cast": bool(find.get("cast", false)),
 		"dirt": Tuning.dirt_label(clean) if exposed > 0 or bagged else "",
 		"value": _find_preview_value(find),
 		"fate": str(find.get("fate", "")),
@@ -1723,7 +1837,13 @@ func _draw_top(x: int, y: int) -> void:
 		_draw_sensed(rect)
 	if bone:
 		_draw_bone_mark(rect, cell, 1.0)
-		_draw_dust(rect, cell)
+		var host := _find_at(cell)
+		if int(host.get("kind", 0)) == Tuning.BONE_GOLD:
+			_draw_gold_glints(rect, cell)
+		if bool(host.get("cast", false)):
+			_draw_plaster(rect, cell)
+		else:
+			_draw_dust(rect, cell)
 
 
 func _draw_cell_art(layer: int, rect: Rect2) -> bool:
@@ -1836,10 +1956,21 @@ const BONE_BY_CONDITION: PackedColorArray = [
 ]
 
 
+const GOLD_BONE := Color("E2B84A")
+const CHALK_BONE := Color("D6CFC4")
+
+
 func _bone_color(cell: Vector2i) -> Color:
 	## The bone under the dust: better condition reads brighter and warmer.
-	var cond: int = int(_find_at(cell).get("condition", Tuning.CONDITION_GOOD))
-	return BONE_BY_CONDITION[clampi(cond, 1, 5) - 1]
+	var find := _find_at(cell)
+	var cond: int = int(find.get("condition", Tuning.CONDITION_GOOD))
+	var color: Color = BONE_BY_CONDITION[clampi(cond, 1, 5) - 1]
+	match int(find.get("kind", Tuning.BONE_SOLID)):
+		Tuning.BONE_GOLD:
+			color = color.lerp(GOLD_BONE, 0.55)
+		Tuning.BONE_FRAGILE:
+			color = color.lerp(CHALK_BONE, 0.45)
+	return color
 
 
 func _draw_bone_mark(rect: Rect2, cell: Vector2i, clean: float) -> void:
@@ -1886,6 +2017,30 @@ func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
 	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 
 
+func _draw_gold_glints(rect: Rect2, cell: Vector2i) -> void:
+	var seed: int = cell.x * 29 + cell.y * 61 + 3
+	for i in 3:
+		var p := rect.position + Vector2(6.0 + _hash01(seed, i * 2) * (rect.size.x - 12.0), 5.0 + _hash01(seed, i * 2 + 1) * (rect.size.y - 10.0))
+		var r: float = 2.5 + _hash01(seed, 9 + i) * 2.0
+		draw_line(p - Vector2(r, 0), p + Vector2(r, 0), Color("FFF3B0"), 1.4)
+		draw_line(p - Vector2(0, r), p + Vector2(0, r), Color("FFF3B0"), 1.4)
+
+
+const PLASTER := Color("EFEAE0")
+const PLASTER_LINE := Color("C9C0B0")
+
+
+func _draw_plaster(rect: Rect2, cell: Vector2i) -> void:
+	## A plaster cast: white wrap with bandage strips, like a cast on an arm.
+	draw_rect(rect.grow(-1.0), PLASTER)
+	var strips: int = 3
+	for i in strips:
+		var t: float = (float(i) + 0.5) / float(strips)
+		var x: float = rect.position.x + rect.size.x * t + (float(cell.y % 2) - 0.5) * 6.0
+		draw_line(Vector2(x - 8.0, rect.position.y + 2.0), Vector2(x + 8.0, rect.end.y - 2.0), PLASTER_LINE, 2.0)
+	draw_rect(rect.grow(-1.0), PLASTER_LINE, false, 1.0)
+
+
 ## Dirt layers from the surface down: loose dust, caked dirt, clay, crust.
 const DUST_LAYER_COLORS: PackedColorArray = [
 	Color("9A7C58"),
@@ -1918,7 +2073,38 @@ func _draw_dust(rect: Rect2, cell: Vector2i) -> void:
 
 func _draw_fx(c: CanvasItem) -> void:
 	_draw_boost_ring(c)
+	_draw_crumble_timers(c)
 	_draw_tool_cursor(c)
+	_draw_cast_ring(c)
+
+
+func _draw_crumble_timers(c: CanvasItem) -> void:
+	## A shrinking ring + seconds over each crumbling bone, red when it is close.
+	var font: Font = UiStyle.display_font()
+	for find in finds:
+		var left: float = crumble_in(find)
+		if left == INF:
+			continue
+		var kind: int = int(find.get("kind", 0))
+		var span: float = Tuning.crumble_step[kind] if float(find.get("air", 0.0)) >= Tuning.crumble_first[kind] else Tuning.crumble_first[kind]
+		var frac: float = clampf(left / maxf(span, 0.1), 0.0, 1.0)
+		var urgent: bool = left <= 3.0
+		var color := Color("FF6A4A") if urgent else (Color("FFD66B") if kind == Tuning.BONE_GOLD else Color("F2E6C4"))
+		var center: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 12.0)
+		c.draw_circle(center, 13.0, Color(0.1, 0.07, 0.05, 0.75))
+		c.draw_arc(center, 11.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 28, color, 3.0)
+		var text: String = "%d" % int(ceil(left))
+		var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		c.draw_string(font, center + Vector2(-w * 0.5, 4.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
+
+
+func _draw_cast_ring(c: CanvasItem) -> void:
+	var progress: float = cast_progress()
+	if progress <= 0.0:
+		return
+	var pos := _mouse_world()
+	c.draw_arc(pos, 18.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 32, PLASTER, 5.0)
+	c.draw_arc(pos, 18.0, 0.0, TAU, 32, Color(PLASTER, 0.25), 1.5)
 
 
 func _draw_boost_ring(c: CanvasItem) -> void:

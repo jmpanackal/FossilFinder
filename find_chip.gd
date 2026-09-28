@@ -222,6 +222,11 @@ func _condition_line(card: Dictionary) -> String:
 
 
 func _meter_line(card: Dictionary) -> String:
+	var left: float = float(card.get("crumble_in", INF))
+	if left != INF and not bool(card.get("extracted", false)):
+		return "%s · crumbles in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
+	if bool(card.get("cast", false)):
+		return "In a plaster cast"
 	if _status == "bagged" or bool(card.get("extracted", false)):
 		var fate: String = str(card.get("fate", "")).strip_edges()
 		if not fate.is_empty():

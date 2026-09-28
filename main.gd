@@ -52,6 +52,10 @@ func _ready() -> void:
 		dig_site.bone_sensed.connect(_on_bone_sensed)
 	if dig_site.has_signal("condition_revealed"):
 		dig_site.condition_revealed.connect(_on_condition_revealed)
+	if dig_site.has_signal("bone_kind_seen"):
+		dig_site.bone_kind_seen.connect(_on_bone_kind_seen)
+		dig_site.bone_crumbled.connect(_on_bone_crumbled)
+		dig_site.bone_cast.connect(_on_bone_cast)
 	hud.tool_selected.connect(dig_site.set_tool)
 	hud.end_shift.connect(_end_round)
 	if Settings.has_signal("end_shift_pressed"):
@@ -450,10 +454,43 @@ func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> v
 	## Discovery beat: the bone's hidden condition shows once it is fully dug out.
 	var cond: int = clampi(condition, 1, 5)
 	var title_text: String = "%s condition%s" % [Tuning.condition_name(cond), "!" if cond >= 4 else ""]
+	var sub: String = _teach_on_reveal()
+	var crumbled: int = 0
+	if index >= 0 and index < dig_site.finds.size():
+		crumbled = int(dig_site.finds[index].get("crumbled", 0))
+	if sub.is_empty() and crumbled > 0:
+		sub = "It crumbled from %s in the open air." % Tuning.condition_name(cond + crumbled)
 	if hud != null and hud.has_method("celebrate"):
-		hud.celebrate(index, title_text, _teach_on_reveal(), cond, condition_tier(cond))
+		hud.celebrate(index, title_text, sub, cond, condition_tier(cond))
 	if cond >= 4:
 		_ping(world_pos)
+
+
+func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
+	## Fool's gold is always news; fragile bones only get explained the first time.
+	var first: bool = GameState.take_hint("kind_%d" % kind)
+	if kind != Tuning.BONE_GOLD and not first:
+		return
+	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Worth far more. Get it out before it crumbles!"
+	if first and not Tuning.cast_owned():
+		sub += " A Plaster Cast (Hands upgrade) saves it."
+	elif first:
+		sub += " Hold Hands on it once dug out to wrap it in a plaster cast."
+	var title_text: String = "Fool's gold bone!" if kind == Tuning.BONE_GOLD else "Fragile bone!"
+	if hud != null and hud.has_method("celebrate"):
+		hud.celebrate(index, title_text, sub, 0, 2 if kind == Tuning.BONE_GOLD else 1)
+
+
+func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
+	## Condition stays secret until the bone is fully dug out.
+	var known: bool = index >= 0 and index < dig_site.finds.size() and dig_site._find_is_fully_exposed(dig_site.finds[index])
+	var text: String = "Crumbling! Now %s" % Tuning.condition_name(condition) if known else "Crumbling!"
+	_spawn_float(text, world_pos + Vector2(0, -20), Color("D8C8A8"), 18)
+
+
+func _on_bone_cast(_index: int, world_pos: Vector2) -> void:
+	_spawn_float("Wrapped in plaster!", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
+	_ping(world_pos)
 
 
 func _teach_on_reveal() -> String:
