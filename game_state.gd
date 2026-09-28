@@ -8,7 +8,7 @@ signal upgrades_changed
 signal hall_changed
 signal progress_reset
 signal skeleton_completed(stand_id: String, bonus: int)
-## Complete stand where every bone is Great or better.
+## Complete stand where every bone is Perfect.
 signal masterpiece_completed(stand_id: String, bonus: int)
 
 const STAND_T_REX := "t_rex"
@@ -1210,7 +1210,7 @@ func fame_line() -> String:
 	return "Museum fame: finds pay x%s" % (("%.1f" % mult) if mult < 10.0 else str(int(round(mult))))
 
 
-## Masterpiece: complete, and every piece Great (4 stars) or better.
+## Masterpiece: complete, and every piece Perfect (5 stars).
 func stand_is_masterpiece(stand_id: String) -> bool:
 	if stand_id.is_empty() or not stand_is_complete(stand_id):
 		return false

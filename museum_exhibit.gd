@@ -1386,16 +1386,22 @@ func stand_at_stars(hall_pos: Vector2) -> String:
 	return ""
 
 
-## Data for the hover card (StarTip): stars, word, bones under 4 stars.
+## Data for the hover card (StarTip): overall stars, each bone's stars, and
+## the average that makes the overall rating.
 func stand_condition_info(stand_id: String) -> Dictionary:
 	var stars: int = stand_condition_stars(stand_id)
 	var below: int = 0
 	var total: int = 0
+	var sum: float = 0.0
+	var bones: Array = []
+	var title: String = GameState.stand_title(stand_id)
 	for piece_id in GameState.stand_piece_ids(stand_id):
 		var cond: int = int(GameState.piece_condition(str(piece_id)))
+		bones.append({"name": _short_bone_name(str(piece_id), title), "cond": cond})
 		if cond <= 0:
 			continue
 		total += 1
+		sum += float(cond)
 		if cond < Tuning.masterpiece_min_condition:
 			below += 1
 	return {
@@ -1403,9 +1409,30 @@ func stand_condition_info(stand_id: String) -> Dictionary:
 		"word": Tuning.condition_name(maxi(stars, 1)),
 		"below": below,
 		"total": total,
+		"avg": sum / float(total) if total > 0 else 0.0,
+		"bones": _found_first(bones),
+		"master_stars": Tuning.masterpiece_min_condition,
 		"complete": GameState.stand_is_complete(stand_id),
 		"master": GameState.stand_is_masterpiece(stand_id),
 	}
+
+
+func _found_first(bones: Array) -> Array:
+	## Mounted bones lead the list; missing ones trail as "not found".
+	var found: Array = []
+	var missing: Array = []
+	for b in bones:
+		(found if int(b["cond"]) > 0 else missing).append(b)
+	return found + missing
+
+
+## "Velociraptor Claw" on the Velociraptor stand reads as just "Claw".
+func _short_bone_name(piece_id: String, stand_title: String) -> String:
+	var data: FossilData = GameState.fossil_data_for(piece_id)
+	var name: String = data.name if data != null else piece_id.capitalize()
+	if not stand_title.is_empty() and name.begins_with(stand_title + " "):
+		name = name.substr(stand_title.length() + 1)
+	return name
 
 
 ## Plain-language explanation of a stand's stars, shown on hover.
@@ -1427,11 +1454,11 @@ func stand_condition_tip(stand_id: String) -> String:
 		if cond < Tuning.masterpiece_min_condition:
 			below += 1
 	if GameState.stand_is_masterpiece(stand_id):
-		lines.append("Masterpiece! Every bone is 4 stars or better.")
+		lines.append("Masterpiece! Every bone is 5 stars.")
 	elif below > 0:
-		lines.append("%d of %d bones have under 4 stars." % [below, total])
+		lines.append("%d of %d bones have under 5 stars." % [below, total])
 		lines.append("Better copies from digs, or the Repair Workshop, raise them.")
-		lines.append("Complete + every bone 4 stars = Masterpiece (more visitors).")
+		lines.append("Complete + every bone 5 stars = Masterpiece (more visitors).")
 	return "\n".join(lines)
 
 
@@ -1444,11 +1471,11 @@ func stand_condition_note(stand_id: String) -> String:
 			below += 1
 	if below <= 0:
 		return ""
-	return "%d bone%s below Great" % [below, "" if below == 1 else "s"]
+	return "%d bone%s below Perfect" % [below, "" if below == 1 else "s"]
 
 
 func _draw_masterpiece_frame(stand_id: String, _chip: Rect2) -> void:
-	## Gold frame + "Masterpiece" tag: a finished stand where every bone is Great+.
+	## Gold frame + "Masterpiece" tag: a finished stand where every bone is Perfect.
 	var stand: Rect2 = stand_rect(stand_id)
 	draw_rect(stand.grow(4.0), Color("FFD66B"), false, 4.0)
 	draw_rect(stand.grow(9.0), Color(1.0, 0.84, 0.42, 0.35), false, 3.0)

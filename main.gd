@@ -439,7 +439,7 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 
 func _on_masterpiece_completed(stand_id: String, bonus: int) -> void:
 	var title_text: String = "%s Masterpiece!" % GameState.stand_title(stand_id)
-	var sub: String = "Every bone Great or better: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
+	var sub: String = "Every bone Perfect: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
 	if hud != null and hud.visible and hud.has_method("celebrate"):
 		hud.celebrate(-1, title_text, sub, 5, 3)
 	elif toast != null and toast.has_method("show_toast"):

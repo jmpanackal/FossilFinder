@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## Repair Workshop fixes bones on display after shifts (up to Great);
-## a complete stand with every bone Great+ becomes a Masterpiece.
+## a complete stand with every bone Perfect becomes a Masterpiece.
 ## Run: godot --headless --path <project> -s res://tests/test_masterpiece.gd
 
 var _failed: int = 0
@@ -101,27 +101,40 @@ func _test_masterpiece_needs_complete_and_great() -> void:
 	for id in GS.stand_piece_ids("velociraptor"):
 		GS.install_find(id, id, 1.0, true, 5)
 	await process_frame
-	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Great+ makes a Masterpiece")
+	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect makes a Masterpiece")
 	_assert(_masters.size() == 1 and str(_masters[0][0]) == "velociraptor", "the Masterpiece is celebrated once")
 	_assert(int(_masters[0][1]) > 0 if not _masters.is_empty() else false, "it pays a bonus")
 	_assert(int(GS.stand_visitors("velociraptor")) > plain * 2, "a Masterpiece of Perfect bones draws far more")
 
 
 func _test_workshop_can_finish_a_masterpiece() -> void:
+	## Masterpieces need every bone Perfect; the workshop tops out at Great,
+	## so it can't finish one on its own.
 	_reset()
-	_fill_stand("velociraptor", 4)
+	_fill_stand("velociraptor", 5)
 	await process_frame
+	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect bones make a Masterpiece")
 	_masters.clear()
 	var ids: PackedStringArray = GS.stand_piece_ids("velociraptor")
 	var piece: Dictionary = GS.pieces[ids[0]]
-	piece["condition"] = 3
+	piece["condition"] = 4
 	GS.pieces[ids[0]] = piece
-	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "one Good bone blocks the Masterpiece")
+	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "one Great bone blocks the Masterpiece")
 	GS.levels["workshop"] = 1
 	GS.apply_upgrades()
 	GS.run_workshop()
-	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the workshop repair completes the Masterpiece")
-	_assert(_masters.size() == 1, "and it is celebrated")
+	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "the workshop cannot make a bone Perfect")
+	var info: Dictionary = _exhibit_info("velociraptor")
+	if not info.is_empty():
+		_assert((info["bones"] as Array).size() == ids.size(), "the star card lists every bone")
+		_assert(absf(float(info["avg"]) - (5.0 * float(ids.size() - 1) + 4.0) / float(ids.size())) < 0.01, "the star card shows the average")
+
+
+func _exhibit_info(stand_id: String) -> Dictionary:
+	var ex: Node = load("res://museum_exhibit.gd").new()
+	var info: Dictionary = ex.call("stand_condition_info", stand_id)
+	ex.free()
+	return info
 
 
 func _test_region_condition_is_the_weakest_bone() -> void:
@@ -140,7 +153,7 @@ func _test_region_condition_is_the_weakest_bone() -> void:
 	root.add_child(exhibit)
 	_reset()
 	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 2)
-	_assert(str(exhibit.call("stand_condition_note", "t_rex")).contains("below Great"), "the stand says how many bones are below Great")
+	_assert(str(exhibit.call("stand_condition_note", "t_rex")).contains("below Perfect"), "the stand says how many bones are below Perfect")
 	exhibit.queue_free()
 
 

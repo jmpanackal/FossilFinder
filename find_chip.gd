@@ -236,35 +236,47 @@ func _layout() -> void:
 		_layout_condensed(w, body_h)
 		queue_redraw()
 		return
+	## [icon] | name / stars + condition / status, all on one center line | [price]
+	## The price gets its own right column, mirroring the icon on the left, so
+	## every text row shares the same center axis.
 	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var left: float = _icon.position.x + icon_s + 6.0
-	var right: float = w - PAD
-	var col_w: float = maxf(right - left, 20.0)
-	var lines: int = _fit_name(col_w)
-	var name_line: float = float(_name_label.get_theme_font_size("font_size")) + 2.0
-	var name_h: float = name_line * float(lines) + 2.0
-	var line_h: float = float(_meta_size) + 5.0
-	var total: float = name_h
-	if _grade_row.visible or _price_label.visible:
-		total += line_h
-	if _status_label.visible:
-		total += line_h
-	var y: float = maxf(1.0, (body_h - total) * 0.5)
-	_name_label.position = Vector2(left, y)
-	_name_label.size = Vector2(col_w, name_h)
-	y += name_h
-	## Price shares the stars row, right-aligned, so the name gets the full width.
 	var price_w: float = 0.0
 	if _price_label.visible:
 		var font: Font = Ui.display_font()
 		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 4.0
-	_price_label.position = Vector2(right - price_w, y - 1.0)
-	_price_label.size = Vector2(price_w, line_h + 2.0)
-	if _grade_row.visible or _price_label.visible:
+	var left: float = _icon.position.x + icon_s + 6.0
+	var right: float = w - PAD - (price_w + 6.0 if price_w > 0.0 else 0.0)
+	var col_w: float = maxf(right - left, 20.0)
+	var lines: int = _fit_name(col_w)
+	## _fit_name may shrink the price font; re-measure so the column stays true.
+	if _price_label.visible:
+		var font2: Font = Ui.display_font()
+		var pw2: float = font2.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 4.0
+		if pw2 < price_w:
+			price_w = pw2
+	var name_line: float = float(_name_label.get_theme_font_size("font_size")) + 2.0
+	var name_h: float = name_line * float(lines) + 2.0
+	var line_h: float = float(_meta_size) + 5.0
+	var total: float = name_h
+	if _grade_row.visible:
+		total += line_h
+	if _status_label.visible:
+		total += line_h
+	var y: float = maxf(1.0, (body_h - total) * 0.5)
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_label.position = Vector2(left, y)
+	_name_label.size = Vector2(col_w, name_h)
+	y += name_h
+	var price_h: float = float(_price_label.get_theme_font_size("font_size")) + 6.0
+	_price_label.position = Vector2(w - PAD - price_w, (body_h - price_h) * 0.5)
+	_price_label.size = Vector2(price_w, price_h)
+	if _grade_row.visible:
+		_grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
 		_grade_row.position = Vector2(left, y)
-		_grade_row.size = Vector2(maxf(col_w - price_w - 4.0, 10.0), line_h)
+		_grade_row.size = Vector2(col_w, line_h)
 		y += line_h
 	if _status_label.visible:
+		_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_status_label.position = Vector2(left, y)
 		_status_label.size = Vector2(col_w, line_h)
 	_grade_row.custom_minimum_size = Vector2(0, 0)

@@ -207,11 +207,11 @@ var set_complete_sale_mult: float = 2.0
 ## Finishing every piece of a stand: permanent visitor multiplier + lump sum.
 var complete_stand_mult: float = 2.0
 var skeleton_bonus_mult: float = 2.0
-## Masterpiece: complete stand, every piece at least this condition (4 = Great).
+## Masterpiece: complete stand, every piece at least this condition (5 = Perfect).
 ## Museum fame: bone sale value x (1 + museum $/sec x this), so finds keep
 ## pace with the museum. Explained in-game as "collectors pay more".
 var fame_per_income: float = 0.5
-var masterpiece_min_condition: int = 4
+var masterpiece_min_condition: int = 5
 var masterpiece_mult: float = 1.5
 var masterpiece_bonus_mult: float = 2.0
 ## Repair Workshop never repairs past this condition (Perfect only comes from the ground).
