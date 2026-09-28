@@ -1328,7 +1328,7 @@ func _test_menu_and_back_stay_top_right() -> void:
 	var menu: Control = settings.get("_menu_btn") as Control
 	var back: Control = settings.get("_back_btn") as Control
 	var end_btn: Control = settings.get("_end_btn") as Control
-	_assert(_is_drawn(menu) and _is_drawn(back) and _is_drawn(end_btn), "the live pit keeps Menu, Back, and End shift")
+	_assert(_is_drawn(menu) and not _is_drawn(back) and _is_drawn(end_btn), "the live pit keeps Menu and End shift, no Back")
 	_assert(menu.position.y <= 16.0 and back.position.y <= 16.0 and end_btn.position.y <= 16.0, "the cluster stays top-right on the pit")
 	_assert(menu.global_position.x > back.global_position.x, "Menu stays the rightmost button")
 	var hud: Node = main.get_node_or_null("HUD")
@@ -1824,7 +1824,10 @@ func _assert_dig_header_hidden(hud: Node, where: String) -> void:
 		_assert(not _is_drawn(museum), "museum does not show Museum")
 		_assert(not _is_drawn(end_btn), "End shift hides on museum")
 		return
-	_assert(_is_drawn(back), "Back stays available on %s" % where)
+	if where == "shift-over":
+		_assert(_is_drawn(back), "Back stays available on %s" % where)
+	else:
+		_assert(not _is_drawn(back), "the dig screen has no Back (%s)" % where)
 	if where == "shift-over":
 		_assert(not _is_drawn(end_btn), "End shift hides on shift-over")
 		_assert(not _is_drawn(dig), "shift-over header has no Dig")
@@ -1836,7 +1839,7 @@ func _assert_dig_header_shown(hud: Node, where: String) -> void:
 	_assert(hud.get("_menu_btn") == null, "the dig HUD does not keep its own Menu after %s" % where)
 	var settings: Node = root.get_node_or_null("Settings")
 	_assert(_is_drawn(settings.get("_menu_btn") as CanvasItem), "header Menu is visible again after %s" % where)
-	_assert(_is_drawn(settings.get("_back_btn") as CanvasItem), "header Back is visible again after %s" % where)
+	_assert(not _is_drawn(settings.get("_back_btn") as CanvasItem), "the dig header has no Back after %s" % where)
 	_assert(_is_drawn(settings.get("_end_btn") as CanvasItem), "End shift is visible again after %s" % where)
 	_assert(not _is_drawn(settings.get("_dig_btn") as CanvasItem), "live pit header has no Dig after %s" % where)
 	_assert(not _is_drawn(settings.get("_museum_btn") as CanvasItem), "live pit header has no Museum after %s" % where)

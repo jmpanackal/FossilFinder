@@ -12,15 +12,9 @@ const ArtCatalogScript := preload("res://art_catalog.gd")
 const FossilDataScript := preload("res://fossil_data.gd")
 const StarRating := preload("res://star_rating.gd")
 
-## Shared with the pit so card N and bone N wear the same color.
-const FIND_COLORS: PackedColorArray = [
-	Color("FF8A65"),
-	Color("4DD0C8"),
-	Color("B39DDB"),
-	Color("AED581"),
-	Color("FFD54F"),
-	Color("64B5F6"),
-]
+## Shared with the pit so card N and bone N wear the same marker. One calm
+## gold (the number does the matching) instead of a rainbow.
+const FIND_COLORS: PackedColorArray = [Color("E4B75A")]
 const PAD := 8.0
 const BAR_H := 6.0
 
@@ -67,8 +61,12 @@ func _init() -> void:
 	_marker.draw.connect(_draw_marker)
 	add_child(_marker)
 	_name_label = _make_label(HORIZONTAL_ALIGNMENT_CENTER)
-	## Names shrink to fit instead of trimming with "...".
+	## Long names wrap to two lines (and shrink if needed) instead of "...".
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_name_label.max_lines_visible = 2
+	_name_label.clip_text = false
+	_name_label.add_theme_constant_override("line_spacing", -3)
 	_grade_row = HBoxContainer.new()
 	_grade_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -193,61 +191,89 @@ func catch_pos() -> Vector2:
 
 
 func _layout() -> void:
-	## Explicit rects: icon | text column | price, with the bar underneath.
+	## [icon] | name (1-2 lines, full width)
+	##        | stars + condition .......... price
+	##        | status
+	## [brushing bar across the bottom]
 	var w: float = maxf(size.x, custom_minimum_size.x)
 	var h: float = maxf(size.y, custom_minimum_size.y)
 	var body_h: float = h - BAR_H
-	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 40.0)
+	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 36.0)
 	if _tight:
 		icon_s = 22.0
 	_icon.position = Vector2(PAD, (body_h - icon_s) * 0.5)
 	_icon.size = Vector2(icon_s, icon_s)
 	_marker.position = Vector2(2.0, 2.0)
-	_marker.size = Vector2(18.0, 18.0)
-	var price_w: float = 0.0
-	if _price_label.visible and not _price_label.text.is_empty():
-		var font: Font = Ui.display_font()
-		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 6.0
-	var right: float = w - PAD - price_w
+	_marker.size = Vector2(16.0, 16.0)
 	var left: float = _icon.position.x + icon_s + 6.0
-	var col_w: float = maxf(right - left - 4.0, 20.0)
-	_price_label.position = Vector2(right, 0.0)
-	_price_label.size = Vector2(price_w, body_h)
+	var right: float = w - PAD
+	var col_w: float = maxf(right - left, 20.0)
+	var lines: int = _fit_name(col_w)
+	var name_line: float = float(_name_label.get_theme_font_size("font_size")) + 2.0
+	var name_h: float = name_line * float(lines) + 2.0
 	var line_h: float = float(_meta_size) + 5.0
-	var name_h: float = float(_name_size) + 5.0
-	var rows: Array = [_name_label]
-	if _grade_row.visible:
-		rows.append(_grade_row)
+	var total: float = name_h
+	if _grade_row.visible or _price_label.visible:
+		total += line_h
 	if _status_label.visible:
-		rows.append(_status_label)
-	if _note_label.visible and not _tight:
-		rows.append(_note_label)
-	_fit_name(col_w)
-	var total: float = 0.0
-	for row in rows:
-		total += name_h if row == _name_label else line_h
-	var y: float = maxf(2.0, (body_h - total) * 0.5)
-	for row in rows:
-		var rh: float = name_h if row == _name_label else line_h
-		var ctrl: Control = row
-		ctrl.position = Vector2(left, y)
-		ctrl.size = Vector2(col_w, rh)
-		y += rh
+		total += line_h
+	var y: float = maxf(1.0, (body_h - total) * 0.5)
+	_name_label.position = Vector2(left, y)
+	_name_label.size = Vector2(col_w, name_h)
+	y += name_h
+	## Price shares the stars row, right-aligned, so the name gets the full width.
+	var price_w: float = 0.0
+	if _price_label.visible:
+		var font: Font = Ui.display_font()
+		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 4.0
+	_price_label.position = Vector2(right - price_w, y - 1.0)
+	_price_label.size = Vector2(price_w, line_h + 2.0)
+	if _grade_row.visible or _price_label.visible:
+		_grade_row.position = Vector2(left, y)
+		_grade_row.size = Vector2(maxf(col_w - price_w - 4.0, 10.0), line_h)
+		y += line_h
+	if _status_label.visible:
+		_status_label.position = Vector2(left, y)
+		_status_label.size = Vector2(col_w, line_h)
 	_grade_row.custom_minimum_size = Vector2(0, 0)
 	_bar.position = Vector2(0.0, h - BAR_H)
 	_bar.size = Vector2(w, BAR_H)
 
 
-func _fit_name(room: float) -> void:
+func _fit_name(room: float) -> int:
+	## One line if it fits; otherwise two lines, shrinking until both fit.
 	var font: Font = Ui.display_font()
+	var text: String = _name_label.text
 	var fs: int = _name_size
-	while fs > 9 and font.get_string_size(_name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+	var lines: int = 1
+	while fs > 9:
+		if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= room:
+			lines = 1
+			break
+		if _two_line_width(text, font, fs) <= room and not _tight:
+			lines = 2
+			break
 		fs -= 1
 	if _name_label.get_theme_font_size("font_size") != fs:
 		_name_label.add_theme_font_size_override("font_size", fs)
 	var price_px: int = _price_label.get_theme_font_size("font_size")
 	if price_px >= fs:
 		_price_label.add_theme_font_size_override("font_size", maxi(9, fs - 1))
+	return lines
+
+
+func _two_line_width(text: String, font: Font, fs: int) -> float:
+	## Widest line when the words are split as evenly as possible in two.
+	var words: PackedStringArray = text.split(" ", false)
+	if words.size() < 2:
+		return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var best: float = INF
+	for cut in range(1, words.size()):
+		var a: String = " ".join(words.slice(0, cut))
+		var b: String = " ".join(words.slice(cut))
+		var widest: float = maxf(font.get_string_size(a, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, font.get_string_size(b, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+		best = minf(best, widest)
+	return best
 
 
 func _apply_stat_lines() -> void:
@@ -255,9 +281,9 @@ func _apply_stat_lines() -> void:
 		_stars.custom_minimum_size = Vector2(46, 8)
 	_grade_label.text = _condition_line(_card)
 	_status_label.text = _meter_line(_card)
-	var note: String = _note_line(_card)
-	_note_label.text = note
-	_note_label.visible = not note.is_empty()
+	## Plaster shows as a band on the icon; no extra line to crowd the card.
+	_note_label.text = ""
+	_note_label.visible = false
 	_price_label.text = _price_text(_card)
 	var stars: int = int(_card.get("stars", 0))
 	var show_stars: bool = stars > 0 and _status != "underground"
@@ -300,6 +326,8 @@ func _meter_line(card: Dictionary) -> String:
 	var left: float = float(card.get("crumble_in", INF))
 	if left != INF and not bool(card.get("extracted", false)):
 		return "%s · -1 star in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
+	if bool(card.get("cast", false)) and not bool(card.get("extracted", false)):
+		return "Plastered · stars safe"
 	if _status == "bagged" or bool(card.get("extracted", false)):
 		var fate: String = str(card.get("fate", "")).strip_edges()
 		if not fate.is_empty():
@@ -328,6 +356,8 @@ func _status_color(line: String) -> Color:
 		return Ui.GOLD
 	if line.contains("-1 star"):
 		return Color("FF9A7A")
+	if line.begins_with("Plastered"):
+		return Color("F4F0E6")
 	return Ui.MUTED
 
 

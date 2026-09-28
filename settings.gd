@@ -779,7 +779,8 @@ func _nav_chrome_on() -> bool:
 
 
 func _back_nav_on() -> bool:
-	return _nav_chrome_on() and (_nav_context == "dig" or _nav_context == "summary")
+	## The live dig has End shift and Menu; Back there only risked quitting a shift.
+	return _nav_chrome_on() and _nav_context == "summary"
 
 
 func _dig_nav_on() -> bool:

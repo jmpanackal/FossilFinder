@@ -269,6 +269,8 @@ func _input(event: InputEvent) -> void:
 func _on_hall_gui_input(event: InputEvent) -> void:
 	if Settings.is_open():
 		return
+	if event is InputEventMouseMotion:
+		_update_star_tip((event as InputEventMouseMotion).position)
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -292,6 +294,38 @@ func _on_hall_gui_input(event: InputEvent) -> void:
 		else:
 			_finish_press()
 			_pad.accept_event()
+
+
+var _star_tip: PanelContainer
+var _star_tip_label: Label
+
+
+func _update_star_tip(pad_pos: Vector2) -> void:
+	## Hovering a stand's stars explains them in plain words.
+	var stand_id: String = ""
+	if _canvas.has_method("stand_at_stars"):
+		stand_id = str(_canvas.call("stand_at_stars", _pad_to_hall(pad_pos)))
+	if stand_id.is_empty():
+		if _star_tip != null:
+			_star_tip.visible = false
+		return
+	if _star_tip == null:
+		_star_tip = PanelContainer.new()
+		_star_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_star_tip.add_theme_stylebox_override("panel", Ui.tooltip_box())
+		_star_tip_label = Label.new()
+		_star_tip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		Ui.apply_label(_star_tip_label, 14, Ui.INK)
+		_star_tip.add_child(_star_tip_label)
+		add_child(_star_tip)
+	_star_tip_label.text = str(_canvas.call("stand_condition_tip", stand_id))
+	_star_tip.size = _star_tip.get_combined_minimum_size()
+	var at: Vector2 = pad_pos + Vector2(18.0, HEADER_H + 18.0)
+	var view: Vector2 = _view()
+	at.x = minf(at.x, view.x - _star_tip.size.x - 8.0)
+	at.y = minf(at.y, view.y - _star_tip.size.y - 8.0)
+	_star_tip.position = at
+	_star_tip.visible = true
 
 
 func _finish_press() -> void:

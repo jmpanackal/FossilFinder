@@ -965,7 +965,7 @@ func brush_stroke(from: Vector2, to: Vector2) -> void:
 			if not dust.has(cell):
 				continue
 			var find := _find_at(cell)
-			if find.is_empty() or bool(find.get("extracted", false)):
+			if find.is_empty() or bool(find.get("extracted", false)) or bool(find.get("cast", false)):
 				continue
 			var rect := _top_rect(cell.x, cell.y)
 			if _distance_to_rect(p, rect) > radius:
@@ -1208,7 +1208,10 @@ func cast_progress() -> float:
 
 
 func _castable(find: Dictionary) -> bool:
-	return not find.is_empty() and not bool(find.get("extracted", false)) and not bool(find.get("cast", false)) and _find_is_fully_exposed(find)
+	## Only bones that crumble can be plastered; it protects, it doesn't collect.
+	if find.is_empty() or bool(find.get("extracted", false)) or bool(find.get("cast", false)):
+		return false
+	return Tuning.bone_crumbles(int(find.get("kind", 0))) and _find_is_fully_exposed(find)
 
 
 func _tick_cast(delta: float, holding: bool, aiming: Vector2i) -> void:
@@ -1240,8 +1243,9 @@ func cast_find(index: int) -> void:
 	var pos: Vector2 = _find_centroid(find)
 	_burst(pos, int(find.get("layer", 0)), true)
 	Sfx.play("buy")
+	## Wrapped bones stay in the pit, safe from crumbling, and are collected
+	## (still dirty) when the shift ends. They can no longer be brushed.
 	bone_cast.emit(index, pos)
-	_extract_find(find, false)
 
 
 func _can_harm_fossil() -> bool:
@@ -2183,7 +2187,7 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		x += star_w + 4.0
 		c.draw_string(font, Vector2(x, anchor.y + 4.5), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 		if Tuning.cast_owned() and _castable(find):
-			var tip := "Hold Hands: plaster cast"
+			var tip := "Hold Hands: plaster (keeps stars, stays dirty)"
 			var tw: float = font.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 			var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.end.y + 3.0), Vector2(tw + 12.0, 18.0))
 			c.draw_rect(tip_rect, Color(PLASTER, 0.92))

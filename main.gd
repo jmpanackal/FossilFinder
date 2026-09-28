@@ -515,7 +515,7 @@ func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
 	if first and not Tuning.cast_owned():
 		sub += " A Plaster Cast (Hands upgrade) saves it."
 	elif first:
-		sub += " Hold Hands on it once dug out to wrap it in a plaster cast."
+		sub += " Or plaster it (hold Hands) to keep its stars."
 	var title_text: String = "Opal bone!" if kind == Tuning.BONE_OPAL else "Fragile bone!"
 	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
@@ -530,7 +530,7 @@ func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
 
 
 func _on_bone_cast(_index: int, world_pos: Vector2) -> void:
-	_spawn_float("Wrapped in plaster!", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
+	_spawn_float("Plastered: stars are safe", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
 	_ping(world_pos)
 
 
@@ -654,7 +654,7 @@ func _arm_upgrade_notices() -> void:
 		dig_site.set_boosted_tools(_boosted_tools)
 	if site_titles.is_empty():
 		return
-	toast.show_toast(site_titles[0], ", ".join(site_subs))
+	_notify("Upgraded: %s" % " & ".join(site_titles), " · ".join(site_subs))
 	for raw in notices:
 		var notice: Dictionary = raw
 		if str(notice.get("id", "")) != "round_time":
@@ -664,12 +664,21 @@ func _arm_upgrade_notices() -> void:
 		break
 
 
+## Short news during a dig rides the same ribbon as find celebrations (on the
+## Finds tray edge, off the dig cells). Other screens use the toast plate.
+func _notify(title_text: String, subtitle: String = "", stars: int = 0, tier: int = 1) -> void:
+	if hud != null and hud.visible and hud.has_method("celebrate"):
+		hud.celebrate(-1, title_text, subtitle, stars, tier)
+	elif toast != null and toast.has_method("show_toast"):
+		toast.show_toast(title_text, subtitle, stars)
+
+
 func _on_lucky_struck(amount: int, world_pos: Vector2) -> void:
 	GameState.add_money(amount)
 	_round_finds_pay += amount
 	_spawn_float(Lucky.float_text(amount), world_pos, Color("FFE08A"), 28)
 	_spawn_loot_fly(Lucky.icon_kind(), world_pos, 0.0, 2)
-	toast.show_toast(Lucky.toast_title(), Lucky.float_text(amount))
+	_notify(Lucky.toast_title(), Lucky.float_text(amount), 0, 2)
 	Sfx.play("unlock")
 
 
@@ -687,8 +696,8 @@ func _on_tool_used(tool: int) -> void:
 	var title: String = lines[0]
 	var subtitle: String = ""
 	if lines.size() > 1:
-		subtitle = ", ".join(lines.slice(1))
-	toast.show_toast(title, subtitle)
+		subtitle = " · ".join(lines.slice(1))
+	_notify(title, subtitle)
 	var pit_top := Tuning.grid_origin + Vector2(float(Tuning.grid_w) * Tuning.cell_w * 0.5, -8.0)
 	_spawn_float(title, pit_top, Color("FFE08A"), 26)
 	if hud.has_method("flash_upgraded_tools"):

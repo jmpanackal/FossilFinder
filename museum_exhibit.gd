@@ -1364,12 +1364,53 @@ func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:
 	var x0: float = chip.end.x - gap * 4.0 - r - 2.0
 	for i in 5:
 		_draw_star(Vector2(x0 + gap * float(i), y), r, i < stars)
-	var note: String = stand_condition_note(stand_id)
-	if not note.is_empty() and not GameState.stand_is_masterpiece(stand_id):
-		var font: Font = Ui.display_font()
-		var size: int = label_font_size(11)
-		var w: float = font.get_string_size(note, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		draw_string(font, Vector2(chip.end.x - w, y + r + float(size) + 4.0), note, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(Ui.GOLD, 0.85))
+
+
+## Hall rect of a stand's condition stars (hover it for an explanation).
+func stand_stars_rect(stand_id: String) -> Rect2:
+	if stand_condition_stars(stand_id) <= 0:
+		return Rect2()
+	var chip: Rect2 = stand_rate_rect(stand_id)
+	if chip.size == Vector2.ZERO:
+		return Rect2()
+	var r: float = 8.0
+	var gap: float = 18.0
+	var x0: float = chip.end.x - gap * 4.0 - r - 2.0
+	return Rect2(Vector2(x0 - r - 4.0, chip.end.y + 3.0), Vector2(gap * 4.0 + r * 2.0 + 8.0, r * 2.0 + 6.0))
+
+
+func stand_at_stars(hall_pos: Vector2) -> String:
+	for stand_id in STAND_LAYOUT.keys():
+		if stand_stars_rect(str(stand_id)).has_point(hall_pos):
+			return str(stand_id)
+	return ""
+
+
+## Plain-language explanation of a stand's stars, shown on hover.
+func stand_condition_tip(stand_id: String) -> String:
+	var stars: int = stand_condition_stars(stand_id)
+	if stars <= 0:
+		return ""
+	var lines: PackedStringArray = []
+	lines.append("%s: %d of 5 stars (%s)" % [GameState.stand_title(stand_id), stars, Tuning.condition_name(stars)])
+	lines.append("Stars = how well its bones survived underground.")
+	lines.append("1 Poor · 2 Fair · 3 Good · 4 Great · 5 Perfect")
+	var below: int = 0
+	var total: int = 0
+	for piece_id in GameState.stand_piece_ids(stand_id):
+		var cond: int = int(GameState.piece_condition(str(piece_id)))
+		if cond <= 0:
+			continue
+		total += 1
+		if cond < Tuning.masterpiece_min_condition:
+			below += 1
+	if GameState.stand_is_masterpiece(stand_id):
+		lines.append("Masterpiece! Every bone is 4 stars or better.")
+	elif below > 0:
+		lines.append("%d of %d bones have under 4 stars." % [below, total])
+		lines.append("Better copies from digs, or the Repair Workshop, raise them.")
+		lines.append("Complete + every bone 4 stars = Masterpiece (more visitors).")
+	return "\n".join(lines)
 
 
 ## Why the stars are what they are: how many bones hold the stand back.

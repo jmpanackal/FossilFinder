@@ -8,10 +8,17 @@ var _title: Label
 var _subtitle: Label
 var _stars
 var _life: float = 0.0
+## Brass plate behind the text so it reads on any background.
+var _plate: Panel
 
 
 func _ready() -> void:
 	layer = 9
+	_plate = Panel.new()
+	_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_panel(_plate, Color("2A1D12"))
+	_plate.modulate.a = 0.0
+	add_child(_plate)
 	_box = VBoxContainer.new()
 	_box.add_theme_constant_override("separation", 2)
 	_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -70,6 +77,15 @@ func _layout_footer() -> void:
 	top = minf(top, Tuning.footer_top() - toast_h - 4.0)
 	_box.position = Vector2(80.0, top)
 	_box.size = Vector2(Tuning.view_w - 160.0, toast_h)
+	if _plate != null and _title != null:
+		var font: Font = Ui.display_font()
+		var w: float = font.get_string_size(_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _title.get_theme_font_size("font_size")).x
+		if _subtitle != null and _subtitle.visible:
+			w = maxf(w, font.get_string_size(_subtitle.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _subtitle.get_theme_font_size("font_size")).x)
+		var pw: float = minf(w + 48.0, _box.size.x)
+		_plate.position = Vector2(_box.position.x + (_box.size.x - pw) * 0.5, _box.position.y - 4.0)
+		_plate.size = Vector2(pw, toast_h + 8.0)
+		_plate.modulate.a = _box.modulate.a
 
 
 func _process(delta: float) -> void:

@@ -126,7 +126,7 @@ func _test_menu_stays_available_after_start() -> void:
 		_assert(bool(settings_menu.visible), "Menu stays available after Start")
 		_assert(str(settings_menu.text) == "Menu", "in-game chrome is still Menu")
 	var settings_back: Variant = settings.get("_back_btn")
-	_assert(settings_back is Button and bool(settings_back.visible), "Back stays available after Start")
+	_assert(settings_back is Button and not bool(settings_back.visible), "the dig after Start has no Back button")
 	main.free()
 
 
