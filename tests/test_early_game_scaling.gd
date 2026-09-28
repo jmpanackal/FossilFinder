@@ -1212,11 +1212,9 @@ func _test_hands_stay_the_careful_one_cell_tool() -> void:
 	_assert(TN.has_method("integrity_hit_for"), "Tuning exposes per-tool bone cost")
 	if not TN.has_method("integrity_hit_for"):
 		return
-	_assert(float(TN.integrity_hit_for(TN.TOOL_HANDS)) < float(TN.integrity_hit_for(TN.TOOL_SHOVEL)), "hands are safer on bone than the shovel")
-	_assert(is_zero_approx(float(TN.integrity_hit_for(TN.TOOL_HANDS))), "hands do not chip integrity")
-	_assert(is_zero_approx(float(TN.integrity_hit_for(TN.TOOL_BRUSH))), "brush never harms bone")
-	_assert(float(TN.integrity_hit_for(TN.TOOL_SHOVEL)) > 0.0, "shovel always costs integrity on bone")
-	_assert(float(TN.integrity_hit_for(TN.TOOL_PICKAXE)) > 0.0, "pick always costs integrity on bone")
+	## Bone condition comes from the ground now; no tool ever damages bone.
+	for tool in [TN.TOOL_HANDS, TN.TOOL_SHOVEL, TN.TOOL_PICKAXE, TN.TOOL_BRUSH]:
+		_assert(is_zero_approx(float(TN.integrity_hit_for(tool))), "tool %d never damages bone" % tool)
 	_assert(TN.shovel_hit_cells(Vector2i(2, 2), 0.0).size() == 1, "hands stay a one-cell scrape")
 
 

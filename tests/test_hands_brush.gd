@@ -19,9 +19,11 @@ func _run() -> void:
 	_test_sense_radius_scales_with_hands_upgrades()
 	_test_hands_sense_marks_nearby_bone_only()
 	_test_shovel_does_not_sense()
-	_test_scrub_reversals_build_combo()
-	_test_combo_speeds_cleaning()
-	_test_bristle_reach_cleans_neighbors()
+	_test_uncovered_bone_starts_caked()
+	_test_stroke_wipes_only_along_its_path()
+	_test_weak_bristles_need_more_passes()
+	_test_wiping_everything_cleans_and_bags_the_bone()
+	_test_brush_upgrades_widen_the_bristles()
 	_reset()
 	print("hands_brush %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -114,70 +116,99 @@ func _test_shovel_does_not_sense() -> void:
 	site.queue_free()
 
 
-func _test_scrub_reversals_build_combo() -> void:
+func _dust_left(site: Node2D, cell: Vector2i) -> float:
+	var grid: PackedFloat32Array = site.dust[cell]
+	var total: float = 0.0
+	for v in grid:
+		total += v
+	return total
+
+
+func _test_uncovered_bone_starts_caked() -> void:
 	_reset()
 	var site := _make_site()
 	var bone: Vector2i = _first_bone(site)
 	site.call("_reveal_fossil_cell", bone)
-	_assert(int(site.call("brush_combo_level")) == 0, "combo starts at zero")
-	for i in 3:
-		site.call("_track_scrub", Vector2(20, 0))
-		site.call("_track_scrub", Vector2(-20, 0))
-	_assert(int(site.call("brush_combo_level")) >= 3, "back-and-forth strokes build a combo")
-	var cap: int = int(TN.brush_combo_max)
-	for i in 20:
-		site.call("_track_scrub", Vector2(20, 0))
-		site.call("_track_scrub", Vector2(-20, 0))
-	_assert(int(site.call("brush_combo_level")) == cap, "combo caps at brush_combo_max")
-	_assert(float(site.call("brush_scrub_mult")) > 1.5, "a full combo cleans much faster")
-	site.call("_tick_brush_combo", 2.0)
-	_assert(int(site.call("brush_combo_level")) == 0, "stopping the scrub lets the combo fade")
+	_assert(site.dust.has(bone), "uncovered bone gets a dust layer")
+	_assert(is_equal_approx(_dust_left(site, bone), float(TN.DUST_COLS * TN.DUST_ROWS)), "fresh bone is fully caked")
+	_assert(float(site.cleanliness[bone]) == 0.0, "fresh bone is 0% clean")
 	site.queue_free()
 
 
-func _test_combo_speeds_cleaning() -> void:
+func _test_stroke_wipes_only_along_its_path() -> void:
 	_reset()
 	var site := _make_site()
 	var bone: Vector2i = _first_bone(site)
 	site.call("_reveal_fossil_cell", bone)
 	_flatten(site, bone)
-	var center: Vector2 = site.call("cell_center", bone)
-	site.call("_apply_brush", center, 10.0)
-	var slow: float = float(site.cleanliness.get(bone, 0.0))
-	site.cleanliness[bone] = 0.0
-	for i in 4:
-		site.call("_track_scrub", Vector2(20, 0))
-		site.call("_track_scrub", Vector2(-20, 0))
-	site.call("_apply_brush", center, 10.0)
-	var fast: float = float(site.cleanliness.get(bone, 0.0))
-	_assert(slow > 0.0, "a brush stroke cleans the bone")
-	_assert(fast > slow * 1.5, "a scrub combo cleans faster than a single stroke")
+	var rect: Rect2 = site.call("_top_rect", bone.x, bone.y)
+	var mid_y: float = rect.get_center().y
+	site.call("brush_stroke", Vector2(rect.position.x + 2.0, mid_y), Vector2(rect.end.x - 2.0, mid_y))
+	var grid: PackedFloat32Array = site.dust[bone]
+	var mid_row: int = int(TN.DUST_ROWS) / 2
+	var mid_i: int = mid_row * int(TN.DUST_COLS) + int(TN.DUST_COLS) / 2
+	_assert(grid[mid_i] < 1.0, "dust under the stroke gets wiped")
+	_assert(is_equal_approx(grid[0], 1.0), "a far corner the brush never touched stays caked")
+	var clean: float = float(site.cleanliness[bone])
+	_assert(clean > 0.0 and clean < 1.0, "a single stroke leaves the bone partly clean")
 	site.queue_free()
 
 
-func _test_bristle_reach_cleans_neighbors() -> void:
+func _test_weak_bristles_need_more_passes() -> void:
 	_reset()
-	var site := _make_site()
-	var bone: Vector2i = _first_bone(site)
-	var neighbor := bone + Vector2i(1, 0)
-	if neighbor.x >= int(TN.grid_w):
-		neighbor = bone - Vector2i(1, 0)
-	site.fossil_cells[neighbor] = site.fossil_cells[bone]
-	site.exposed_cells[bone] = true
-	site.exposed_cells[neighbor] = true
-	site.cleanliness[bone] = 0.0
-	site.cleanliness[neighbor] = 0.0
-	_flatten(site, bone)
-	var center: Vector2 = site.call("cell_center", bone)
-	TN.brush_reach_px = 0.0
-	site.call("_apply_brush", center, 10.0)
-	_assert(float(site.cleanliness[neighbor]) == 0.0, "base bristles clean one cell")
-	GS.levels["brush_speed"] = 3
+	GS.levels["brush_speed"] = 1
 	GS.apply_upgrades()
-	var edge := center.lerp(site.call("cell_center", neighbor), 0.45)
-	TN.brush_reach_px = maxf(float(TN.brush_reach_px), 40.0)
-	site.call("_apply_brush", edge, 10.0)
-	_assert(float(site.cleanliness[neighbor]) > 0.0, "upgraded bristles reach the next bone cell")
+	var site := _make_site()
+	_assert(float(site.call("brush_strength")) < 1.0, "a starter brush lifts part of the dust per pass")
+	var bone: Vector2i = _first_bone(site)
+	site.call("_reveal_fossil_cell", bone)
+	_flatten(site, bone)
+	var c: Vector2 = site.call("cell_center", bone)
+	site.call("brush_stroke", c, c)
+	var once: float = _dust_left(site, bone)
+	site.call("brush_stroke", c, c)
+	var twice: float = _dust_left(site, bone)
+	_assert(twice < once, "a second pass lifts more dust")
+	site.queue_free()
+
+
+func _wipe_all(site: Node2D, cell: Vector2i) -> void:
+	var rect: Rect2 = site.call("_top_rect", cell.x, cell.y)
+	for pass_i in 6:
+		for row in int(TN.DUST_ROWS):
+			var y: float = rect.position.y + (float(row) + 0.5) * rect.size.y / float(TN.DUST_ROWS)
+			site.call("brush_stroke", Vector2(rect.position.x, y), Vector2(rect.end.x, y))
+
+
+func _test_wiping_everything_cleans_and_bags_the_bone() -> void:
+	_reset()
+	var site := _make_site()
+	var find: Dictionary = site.finds[0]
+	var cells: Dictionary = find["cells"]
+	for raw in cells:
+		site.call("_reveal_fossil_cell", raw)
+	var first: Vector2i = cells.keys()[0]
+	_flatten(site, first)
+	for raw in cells:
+		_wipe_all(site, raw)
+	_assert(bool(find.get("extracted", false)), "a fully wiped bone is bagged")
+	for raw in cells:
+		_assert(float(site.cleanliness[raw]) >= 1.0, "bagged bone reads 100% clean")
+	site.queue_free()
+
+
+func _test_brush_upgrades_widen_the_bristles() -> void:
+	_reset()
+	GS.levels["brush_speed"] = 1
+	GS.apply_upgrades()
+	var site := _make_site()
+	var base_r: float = float(site.call("brush_radius"))
+	var base_s: float = float(site.call("brush_strength"))
+	GS.levels["brush_speed"] = 5
+	GS.levels["brush_master"] = 6
+	GS.apply_upgrades()
+	_assert(float(site.call("brush_radius")) > base_r, "brush upgrades widen the bristles")
+	_assert(float(site.call("brush_strength")) > base_s, "brush upgrades lift more dust per pass")
 	site.queue_free()
 
 

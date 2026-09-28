@@ -105,10 +105,10 @@ func _test_tool_role_lines_are_short() -> void:
 	_assert(GS.has_method("tool_role_line"), "GameState names each tool's job")
 	if not GS.has_method("tool_role_line"):
 		return
-	_assert(str(GS.tool_role_line(TN.TOOL_HANDS)) == "Harvest · safe on bone", "hands are the harvest tool")
-	_assert(str(GS.tool_role_line(TN.TOOL_SHOVEL)) == "Clear dirt · chips bone", "shovel clears dirt")
-	_assert(str(GS.tool_role_line(TN.TOOL_PICKAXE)) == "Break stone · chips bone", "pickaxe clears stone")
-	_assert(str(GS.tool_role_line(TN.TOOL_BRUSH)) == "Clean bone · +value", "brush is for the fossil")
+	_assert(str(GS.tool_role_line(TN.TOOL_HANDS)) == "Pick up small finds", "hands are the harvest tool")
+	_assert(str(GS.tool_role_line(TN.TOOL_SHOVEL)) == "Clear dirt fast", "shovel clears dirt")
+	_assert(str(GS.tool_role_line(TN.TOOL_PICKAXE)) == "Break clay and stone", "pickaxe clears stone")
+	_assert(str(GS.tool_role_line(TN.TOOL_BRUSH)) == "Wipe dirt off bones", "brush is for the fossil")
 
 
 func _test_hud_shows_tool_role_always() -> void:
@@ -122,10 +122,10 @@ func _test_hud_shows_tool_role_always() -> void:
 		return
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
 	var expected := {
-		TN.TOOL_HANDS: "Harvest · safe on bone",
-		TN.TOOL_SHOVEL: "Clear dirt · chips bone",
-		TN.TOOL_PICKAXE: "Break stone · chips bone",
-		TN.TOOL_BRUSH: "Clean bone · +value",
+		TN.TOOL_HANDS: "Pick up small finds",
+		TN.TOOL_SHOVEL: "Clear dirt fast",
+		TN.TOOL_PICKAXE: "Break clay and stone",
+		TN.TOOL_BRUSH: "Wipe dirt off bones",
 	}
 	var heights_hands: PackedFloat32Array = _visible_slot_heights(hud)
 	_assert(heights_hands.size() == 4, "all four owned tools have a row")
@@ -145,9 +145,9 @@ func _test_hud_shows_tool_role_always() -> void:
 	var heights_pick: PackedFloat32Array = _visible_slot_heights(hud)
 	_assert(_arrays_match(heights_hands, heights_pick), "selecting pickaxe does not change row heights")
 	var pick_role: Label = _role_for(hud, TN.TOOL_PICKAXE)
-	_assert(pick_role != null and pick_role.visible, "selected pickaxe still shows Break stone · chips bone")
+	_assert(pick_role != null and pick_role.visible, "selected pickaxe still shows Break clay and stone")
 	if pick_role != null:
-		_assert(str(pick_role.text) == "Break stone · chips bone", "pickaxe role stays Break stone · chips bone")
+		_assert(str(pick_role.text) == "Break clay and stone", "pickaxe role stays Break clay and stone")
 	var hands_role: Label = _role_for(hud, TN.TOOL_HANDS)
 	var shovel_role: Label = _role_for(hud, TN.TOOL_SHOVEL)
 	_assert(hands_role != null and hands_role.visible, "hands role stays on without hover")
@@ -159,7 +159,7 @@ func _test_hud_shows_tool_role_always() -> void:
 	_hover_tool(hud, TN.TOOL_PICKAXE, false)
 	_assert(pick_role != null and pick_role.visible, "leaving the rail keeps the role visible")
 	if hands_role != null:
-		_assert(str(hands_role.text) == "Harvest · safe on bone", "hands stay Harvest · safe on bone")
+		_assert(str(hands_role.text) == "Pick up small finds", "hands stay Pick up small finds")
 		_assert(int(hands_role.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "hands role is centered")
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true)
 	_assert(_arrays_match(heights_hands, _visible_slot_heights(hud)), "selecting brush does not change row heights")
@@ -190,7 +190,7 @@ func _test_tool_card_icon_stack_layout() -> void:
 	var role: Label = _role_for(hud, TN.TOOL_SHOVEL)
 	_assert(role != null and role.visible, "shovel role stays visible")
 	if role != null:
-		_assert(str(role.text) == "Clear dirt · chips bone", "shovel keeps Clear dirt · chips bone")
+		_assert(str(role.text) == "Clear dirt fast", "shovel keeps Clear dirt fast")
 		_assert(str(role.text).find(" ") >= 0, "Clear dirt keeps its space")
 		_assert(not role.clip_text, "role does not clip the space out of Clear dirt")
 		_assert(int(role.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "role copy is centered")
@@ -321,7 +321,7 @@ func _test_selected_tool_chrome_is_unmistakable() -> void:
 	var idle_size: Vector2 = _card_size(neighbor)
 	_assert(is_equal_approx(sel_size.y, idle_size.y), "selected chrome does not grow the card")
 	var role: Label = _role_for(hud, TN.TOOL_SHOVEL)
-	_assert(role != null and str(role.text) == "Clear dirt · chips bone", "shovel still owns Clear dirt · chips bone")
+	_assert(role != null and str(role.text) == "Clear dirt fast", "shovel still owns Clear dirt fast")
 	_assert(role != null and role.visible, "selected chrome keeps the stacked role visible")
 	_assert_role_inside_card(hud, role, TN.TOOL_SHOVEL)
 	var hud_src: String = FileAccess.get_file_as_string("res://hud.gd")
@@ -402,7 +402,7 @@ func _test_hud_has_no_fine_button() -> void:
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
 	var hands_role: Label = _role_for(hud, TN.TOOL_HANDS)
 	if hands_role != null:
-		_assert(str(hands_role.text) == "Harvest · safe on bone", "hands stay Harvest · safe on bone")
+		_assert(str(hands_role.text) == "Pick up small finds", "hands stay Pick up small finds")
 		_assert(str(hands_role.text).find("Fine") < 0, "leftover Fine ranks do not change the hands role")
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_PICKAXE, true)
 	_assert(hud.get("_precision") == null, "leftover Fine ranks do not add a Fine button")

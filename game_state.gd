@@ -25,6 +25,8 @@ var pending_notices: Array = []
 var last_unlock_title: String = ""
 var last_unlocked_ids: Array[String] = []
 var featured_stand_id: String = ""
+## One-time explainer hints the player has already seen (saved).
+var hints_seen: Dictionary = {}
 var pending_unveils: Dictionary = {}
 var unveil_spike_left: float = 0.0
 var unveil_rush_stacks: int = 0
@@ -44,18 +46,18 @@ var catalog: Array[Dictionary] = [
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 75, "scale": 2.0, "max": 5, "requires": "shovel_click"},
 	{"id": "shovel_radius", "cat": "Shovel", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The shovel covers more than one cell.", "unlock_action": "Unlock", "cost": 120, "scale": 2.05, "max": 4, "requires": "shovel_click"},
 	{"id": "shovel_super", "cat": "Shovel", "tier": 2, "name": "Super Shovel", "desc": "A heavier class of shovel. Hits harder and covers more.", "cost": 4000, "scale": 1.95, "max": 6},
-	{"id": "shovel_soft", "cat": "Shovel", "tier": 2, "name": "Soft Edge", "desc": "Takes more hits to crack bone.", "cost": 2200, "scale": 1.95, "max": 5},
+	{"id": "shovel_soft", "cat": "Shovel", "tier": 2, "name": "Gentle Digging", "desc": "Digging gently means more bones come up in great shape.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "shovel_titan", "cat": "Shovel", "tier": 3, "name": "Titan Shovel", "desc": "The heaviest shovel. Hits harder and covers more.", "cost": 80000, "scale": 1.7, "max": 6},
 	{"id": "pick_click", "cat": "Pickaxe", "tier": 1, "name": "Sharp Strikes", "desc": "Clicks hit clay and rock harder.", "unlock_name": "Pickaxe", "unlock_desc": "Needed for clay and stone. Weak on dirt.", "cost": 145, "scale": 1.8, "max": 6, "requires": "shovel_click"},
 	{"id": "pick_hold", "cat": "Pickaxe", "tier": 1, "name": "Relentless Picking", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep striking.", "unlock_action": "Unlock", "cost": 175, "scale": 1.8, "max": 5, "requires": "pick_click"},
 	{"id": "pick_radius", "cat": "Pickaxe", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The pickaxe cracks a wider patch of stone.", "unlock_action": "Unlock", "cost": 150, "scale": 1.9, "max": 4, "requires": "pick_click"},
 	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 4500, "scale": 1.95, "max": 6},
-	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Blunted Point", "desc": "Takes more hits to crack bone.", "cost": 2200, "scale": 1.95, "max": 5},
+	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Gentle Picking", "desc": "Careful strikes mean more bones come up in great shape.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "pick_titan", "cat": "Pickaxe", "tier": 3, "name": "Titan Pick", "desc": "The heaviest pick. Clay and rock give faster.", "cost": 80000, "scale": 1.7, "max": 6},
 	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting goes faster and the bristles reach the next bone cell.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "pick_click"},
 	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Faster dusting and a much wider sweep.", "cost": 3500, "scale": 1.95, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
-	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Matrix finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
+	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Small finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 100, "scale": 2.1, "max": 3},
 	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Fossils", "desc": "More fossils can hide in the pit.", "unlock_name": "Scattered Fossils", "unlock_desc": "A second small fossil can hide in the pit.", "unlock_action": "Unlock", "cost": 160, "scale": 2.0, "max": 2},
 	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra fossils too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 1400, "scale": 1.9, "max": 3},
@@ -131,6 +133,14 @@ func _process(delta: float) -> void:
 		if unveil_spike_left <= 0.0:
 			_clear_unveil_rush()
 			hall_changed.emit()
+
+
+## True the first time a hint id is asked for; marks it seen.
+func take_hint(id: String) -> bool:
+	if hints_seen.has(id):
+		return false
+	hints_seen[id] = true
+	return true
 
 
 func add_money(amount: int) -> void:
@@ -417,6 +427,7 @@ func _tuning_snapshot() -> Dictionary:
 		"matrix_dirt_chance": Tuning.matrix_dirt_chance,
 		"matrix_stone_chance": Tuning.matrix_stone_chance,
 		"hands_sense_radius": Tuning.hands_sense_radius,
+		"condition_luck": Tuning.condition_luck,
 	}
 
 
@@ -451,7 +462,7 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 				_radius_delta_line(zero, at, "shovel_radius"),
 			]))
 		"shovel_soft", "pick_soft":
-			return _integrity_line(float(zero["integrity_hit_cost"]), float(at["integrity_hit_cost"]))
+			return _condition_odds_line(float(zero["condition_luck"]), float(at["condition_luck"]))
 		"pick_click":
 			if is_equal_approx(float(zero["pickaxe_click_mult"]), float(at["pickaxe_click_mult"])):
 				return "Unlocks the pickaxe"
@@ -528,6 +539,12 @@ func _pct_delta_line(template: String, before: float, after: float) -> String:
 	if absf(delta) < 0.0001:
 		return ""
 	return template % int(round(delta * 100.0))
+
+
+func _condition_odds_line(before: float, after: float) -> String:
+	var a: int = int(round(Tuning.great_or_better_chance(before) * 100.0))
+	var b: int = int(round(Tuning.great_or_better_chance(after) * 100.0))
+	return "Great or Perfect bones: %d%% -> %d%%" % [a, b]
 
 
 func _integrity_line(before: float, after: float) -> String:
@@ -690,13 +707,13 @@ func tool_display_name(tool: int) -> String:
 func tool_role_line(tool: int) -> String:
 	match tool:
 		Tuning.TOOL_HANDS:
-			return "Harvest · safe on bone"
+			return "Pick up small finds"
 		Tuning.TOOL_SHOVEL:
-			return "Clear dirt · chips bone"
+			return "Clear dirt fast"
 		Tuning.TOOL_PICKAXE:
-			return "Break stone · chips bone"
+			return "Break clay and stone"
 		Tuning.TOOL_BRUSH:
-			return "Clean bone · +value"
+			return "Wipe dirt off bones"
 		_:
 			return ""
 
@@ -998,7 +1015,8 @@ func apply_upgrades() -> void:
 	Tuning.extra_find_chance = 0.28 + 0.12 * _lv("scrap_bed") + 0.16 * _lv("rich_bed") + 0.16 * _lv("prime_bed")
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
 	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
-	Tuning.integrity_hit_cost = maxf(0.035, float(_bases["integrity_hit_cost"]) - 0.018 * (_lv("shovel_soft") + _lv("pick_soft")))
+	Tuning.integrity_hit_cost = 0.0
+	Tuning.condition_luck = 0.12 * (_lv("shovel_soft") + _lv("pick_soft"))
 	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time") + 6.0 * _lv("blockbuster_hours")
 	Tuning.unveil_rush_strength = float(_bases["unveil_rush_strength"]) + 0.25 * _lv("unveil_crowd")
 	Tuning.spotlight_mult = float(_bases["spotlight_mult"]) + _lv("spotlight") + _lv("blockbuster_feature")
@@ -1033,8 +1051,28 @@ func uncover_status_line(piece_id: String) -> String:
 	return collection_status_line(piece_id)
 
 
-func hall_fate_line(piece_id: String) -> String:
+func hall_fate_line(piece_id: String, condition: int = 0) -> String:
+	if condition > 0 and has_piece(piece_id) and piece_count(piece_id) >= piece_need(piece_id) and condition > piece_condition(piece_id):
+		return "Upgrade · %s" % Tuning.condition_name(condition)
 	return collection_status_line(piece_id)
+
+
+func piece_condition(piece_id: String) -> int:
+	if not has_piece(piece_id):
+		return 0
+	return int((pieces[piece_id] as Dictionary).get("condition", Tuning.CONDITION_GOOD))
+
+
+## Average condition of what is mounted on a stand (0 if nothing is).
+func stand_condition(stand_id: String) -> float:
+	var total: float = 0.0
+	var n: int = 0
+	for piece_id in pieces:
+		if stand_for_piece(str(piece_id)) != stand_id:
+			continue
+		total += float(piece_condition(str(piece_id)))
+		n += 1
+	return total / float(n) if n > 0 else 0.0
 
 
 func collection_status_line(piece_id: String) -> String:
@@ -1045,8 +1083,8 @@ func collection_status_line(piece_id: String) -> String:
 	return "New · %d/%d" % [count + 1, need]
 
 
-func _duplicate_sale(cleanliness: float, set_bonus: bool) -> int:
-	var bonus: float = 100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult
+func _duplicate_sale(cleanliness: float, set_bonus: bool, condition: int = Tuning.CONDITION_GOOD) -> int:
+	var bonus: float = 100.0 * Tuning.duplicate_cash * (0.5 + cleanliness * 0.5) * Tuning.fossil_value_mult * Tuning.condition_value(condition)
 	if set_bonus:
 		bonus *= Tuning.set_complete_sale_mult
 	return int(round(bonus))
@@ -1069,10 +1107,10 @@ func _matrix_hall_piece(find: Dictionary) -> String:
 	return ""
 
 
-func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
+func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool, condition: int = Tuning.CONDITION_GOOD) -> String:
 	var stand_id: String = stand_for_piece(piece_id)
 	var was_complete: bool = stand_id != "" and stand_is_complete(stand_id)
-	var note: String = _install_piece(piece_id, display_name, cleanliness, clean)
+	var note: String = _install_piece(piece_id, display_name, cleanliness, clean, clampi(condition, 1, 5))
 	if stand_id != "" and not was_complete and stand_is_complete(stand_id):
 		var bonus: int = skeleton_bonus(stand_id)
 		add_money(bonus)
@@ -1097,12 +1135,26 @@ func _mult_text(mult: float) -> String:
 	return "%.1f" % mult
 
 
-func _install_piece(piece_id: String, display_name: String, cleanliness: float, clean: bool) -> String:
+func _install_piece(piece_id: String, display_name: String, cleanliness: float, clean: bool, condition: int = Tuning.CONDITION_GOOD) -> String:
 	var need: int = piece_need(piece_id)
 	var count: int = piece_count(piece_id)
 	if pieces.has(piece_id) and count >= need:
 		var set_bonus: bool = need > 1
-		var bonus: int = _duplicate_sale(cleanliness, set_bonus)
+		var held: Dictionary = pieces[piece_id]
+		var old_condition: int = int(held.get("condition", Tuning.CONDITION_GOOD))
+		if condition > old_condition:
+			## A better copy replaces the one on display; the old one is sold.
+			var old_sale: int = _duplicate_sale(float(held.get("cleanliness", 0.0)), set_bonus, old_condition)
+			held["condition"] = condition
+			held["name"] = display_name
+			held["cleanliness"] = cleanliness
+			held["clean"] = clean
+			pieces[piece_id] = held
+			add_money(old_sale)
+			collection_changed.emit()
+			hall_changed.emit()
+			return "Exhibit upgraded: %s is now in %s. Old copy sold for $%d." % [display_name, Tuning.condition_label(condition).to_lower(), old_sale]
+		var bonus: int = _duplicate_sale(cleanliness, set_bonus, condition)
 		add_money(bonus)
 		collection_changed.emit()
 		if set_bonus:
@@ -1111,6 +1163,7 @@ func _install_piece(piece_id: String, display_name: String, cleanliness: float, 
 	if pieces.has(piece_id):
 		var piece: Dictionary = pieces[piece_id]
 		piece["count"] = count + 1
+		piece["condition"] = maxi(int(piece.get("condition", Tuning.CONDITION_GOOD)), condition)
 		if cleanliness >= float(piece.get("cleanliness", 0.0)):
 			piece["name"] = display_name
 			piece["cleanliness"] = cleanliness
@@ -1124,6 +1177,7 @@ func _install_piece(piece_id: String, display_name: String, cleanliness: float, 
 		"cleanliness": cleanliness,
 		"clean": clean,
 		"count": 1,
+		"condition": condition,
 	}
 	if stand_for_piece(piece_id) != "":
 		pending_unveils[piece_id] = true
@@ -1454,7 +1508,9 @@ func piece_visitors(piece_id: String) -> int:
 	var clean_draw: int = Tuning.visitor_draw_exhibit_clean if exhibit else Tuning.visitor_draw_scrap_clean
 	var dirty_draw: int = Tuning.visitor_draw_exhibit_dirty if exhibit else Tuning.visitor_draw_scrap_dirty
 	var draw: int = clean_draw if clean else clampi(int(round(float(dirty_draw) * Tuning.dirty_income_factor)), dirty_draw, clean_draw)
-	return draw * count
+	## Better-condition bones draw more visitors (Good = 1x).
+	var cond_mult: float = Tuning.condition_visitors(int(piece.get("condition", Tuning.CONDITION_GOOD)))
+	return int(round(float(draw * count) * cond_mult))
 
 
 func stand_visitors(stand_id: String) -> int:
@@ -1599,6 +1655,7 @@ func _item(id: String) -> Dictionary:
 func reset_progress(path: String = SAVE_PATH) -> void:
 	money = 0
 	pieces.clear()
+	hints_seen.clear()
 	featured_stand_id = ""
 	pending_unveils.clear()
 	pending_notices.clear()
@@ -1630,6 +1687,7 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"money": money,
 		"levels": levels.duplicate(),
 		"pieces": pieces.duplicate(true),
+		"hints_seen": hints_seen.duplicate(),
 		"precision_on": precision_on,
 		"featured_stand_id": featured_stand_id,
 		"pending_unveils": pending_unveils.duplicate(),
@@ -1672,7 +1730,13 @@ func load_game(path: String = SAVE_PATH) -> bool:
 			"cleanliness": float(piece.get("cleanliness", 0.0)),
 			"clean": bool(piece.get("clean", false)),
 			"count": maxi(1, int(piece.get("count", 1))),
+			"condition": clampi(int(piece.get("condition", Tuning.CONDITION_GOOD)), 1, 5),
 		}
+	hints_seen.clear()
+	var raw_hints: Variant = data.get("hints_seen", {})
+	if raw_hints is Dictionary:
+		for raw_id in raw_hints:
+			hints_seen[str(raw_id)] = true
 	precision_on = bool(data.get("precision_on", false))
 	featured_stand_id = str(data.get("featured_stand_id", ""))
 	pending_unveils.clear()

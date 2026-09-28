@@ -1344,6 +1344,36 @@ func _draw_stand_rate(stand_id: String) -> void:
 	var font: Font = Ui.display_font()
 	var font_size: int = label_font_size(11)
 	draw_string(font, Vector2(rect.position.x + 8.0, rect.position.y + float(font_size) + 2.0), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Ui.GOLD)
+	_draw_stand_condition(stand_id, rect)
+
+
+func stand_condition_stars(stand_id: String) -> int:
+	## Average condition of what is on the stand, as 0-5 stars (0 = empty).
+	return int(round(GameState.stand_condition(stand_id)))
+
+
+func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:
+	var stars: int = stand_condition_stars(stand_id)
+	if stars <= 0:
+		return
+	var r: float = 8.0
+	var gap: float = 18.0
+	var y: float = chip.end.y + 13.0
+	var x0: float = chip.end.x - gap * 4.0 - r - 2.0
+	for i in 5:
+		_draw_star(Vector2(x0 + gap * float(i), y), r, i < stars)
+
+
+func _draw_star(center: Vector2, r: float, filled: bool) -> void:
+	var pts := PackedVector2Array()
+	for k in 10:
+		var ang: float = -PI * 0.5 + float(k) * PI / 5.0
+		var rad: float = r if k % 2 == 0 else r * 0.45
+		pts.append(center + Vector2(cos(ang), sin(ang)) * rad)
+	if filled:
+		draw_colored_polygon(pts, Ui.GOLD)
+	pts.append(pts[0])
+	draw_polyline(pts, Color("2C2118") if filled else Color(Ui.GOLD, 0.55), 1.0)
 
 
 func spotlight_beam_scale() -> float:

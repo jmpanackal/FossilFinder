@@ -9,7 +9,7 @@ const UiStyle := preload("res://ui_style.gd")
 
 signal layer_cleared(amount: int, world_pos: Vector2)
 signal fossil_cell_exposed(world_pos: Vector2, first: bool)
-signal fossil_extracted(fossil_name: String, value: int, integrity: float, cleanliness: float, clean: bool, piece_id: String)
+signal fossil_extracted(fossil_name: String, value: int, condition: int, cleanliness: float, clean: bool, piece_id: String)
 signal pickaxe_struck
 signal fossil_hit
 signal fossil_ready_to_dust(find_index: int)
@@ -17,12 +17,16 @@ signal tool_used(tool: int)
 signal lucky_struck(amount: int, world_pos: Vector2)
 signal lucky_fled
 signal bone_sensed(world_pos: Vector2)
-signal brush_combo_changed(level: int)
+## A bone was fully uncovered and its hidden condition (1 Poor .. 5 Perfect) shows.
+signal condition_revealed(find_index: int, condition: int, world_pos: Vector2)
 
 var input_enabled: bool = true
 var current_tool: int = Tuning.TOOL_HANDS
 var deepest_layer: int = 0
+## Tools never damage bone; kept for callers that still read it.
 var integrity: float = 1.0
+## Condition (1 Poor .. 5 Perfect) of the focused find.
+var condition: int = Tuning.CONDITION_GOOD
 var extracted: bool = false
 var extracted_clean: bool = false
 var fossil: FossilDataScript
@@ -31,6 +35,8 @@ var fossil_layer: int = 0
 var fossil_cells: Dictionary = {}
 var exposed_cells: Dictionary = {}
 var cleanliness: Dictionary = {}
+## Per exposed bone cell: a DUST_COLS x DUST_ROWS grid of dust (1 = caked, 0 = wiped).
+var dust: Dictionary = {}
 var sensed_cells: Dictionary = {}
 var finds: Array = []
 var _focus_index: int = 0
@@ -41,9 +47,6 @@ var _hold_time: float = 0.0
 var _holding_dig: bool = false
 var _brush_last := Vector2.ZERO
 var _brushing: bool = false
-var _brush_dir := Vector2.ZERO
-var _brush_combo: float = 0.0
-var _brush_idle: float = 0.0
 var _signaled_ready_to_dust: bool = false
 var _bone_pulse: float = 0.0
 var _grace_left: float = 0.0
@@ -133,6 +136,7 @@ func start_round() -> void:
 	extracted_clean = false
 	exposed_cells.clear()
 	cleanliness.clear()
+	dust.clear()
 	sensed_cells.clear()
 	finds.clear()
 	_focus_index = 0
@@ -144,7 +148,6 @@ func start_round() -> void:
 	_hold_time = 0.0
 	_holding_dig = false
 	_brushing = false
-	_reset_brush_combo()
 	_boost_flash = 0.0
 	_boosted_tools.clear()
 	_reset_lucky()
@@ -554,6 +557,7 @@ func _try_place_find(data: FossilDataScript) -> bool:
 			"layer": layer,
 			"cells": cells,
 			"integrity": 1.0,
+			"condition": Tuning.roll_condition(),
 			"extracted": false,
 			"extracted_clean": false,
 			"ready": false,
@@ -605,7 +609,8 @@ func _focus_find(find: Dictionary) -> void:
 	if find.is_empty():
 		return
 	_focus_index = finds.find(find)
-	integrity = float(find.get("integrity", 1.0))
+	integrity = 1.0
+	condition = int(find.get("condition", Tuning.CONDITION_GOOD))
 	fossil = find.get("data", fossil)
 	fossil_layer = int(find.get("layer", fossil_layer))
 	fossil_origin = find.get("origin", fossil_origin)
@@ -627,15 +632,8 @@ func _process(delta: float) -> void:
 	var aiming := _cell_at(_mouse_world())
 	if _holding_dig and holding and GameState.hold_unlocked() and _is_strike_tool():
 		if _is_exposed_fossil(aiming):
+			## Uncovered bone is safe from every tool; just pause the swing.
 			_hold_time = 0.0
-			if _can_harm_fossil():
-				_fossil_hold += delta
-				var gap := Tuning.hold_interval(Tuning.fossil_hold_tick_rate)
-				if _fossil_hold >= gap:
-					_fossil_hold = minf(_fossil_hold - gap, gap * 0.5)
-					_hit_fossil(aiming)
-			else:
-				_fossil_hold = 0.0
 		else:
 			_fossil_hold = 0.0
 			_hold_time += delta
@@ -647,15 +645,10 @@ func _process(delta: float) -> void:
 		_holding_dig = false
 		_hold_time = 0.0
 		_fossil_hold = 0.0
-	_tick_brush_combo(delta)
 	if current_tool == Tuning.TOOL_BRUSH and holding:
 		var mouse := _mouse_world()
-		if _brushing:
-			var move := mouse - _brush_last
-			var travel := move.length()
-			if travel > 0.15:
-				_track_scrub(move)
-				_apply_brush(mouse, travel)
+		if _brushing and mouse.distance_to(_brush_last) > 0.15:
+			brush_stroke(_brush_last, mouse)
 		_brush_last = mouse
 		_brushing = true
 	else:
@@ -681,6 +674,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif current_tool == Tuning.TOOL_BRUSH:
 				_brush_last = _mouse_world()
 				_brushing = true
+				brush_stroke(_brush_last, _brush_last)
 
 
 func _mouse_world() -> Vector2:
@@ -835,8 +829,6 @@ func _apply_shovel(center: Vector2i, style_mult: float, is_click: bool) -> void:
 		if not _in_bounds(cell):
 			continue
 		if _is_exposed_fossil(cell):
-			if is_click and cell == center and _can_harm_fossil():
-				_hit_fossil(cell)
 			continue
 		var layer: int = _top_layer[cell.x][cell.y]
 		var damage := Tuning.damage_for(Tuning.TOOL_SHOVEL, layer) * style_mult
@@ -893,8 +885,6 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 		if not _in_bounds(cell):
 			continue
 		if _is_exposed_fossil(cell):
-			if is_click and cell == center and _can_harm_fossil():
-				_hit_fossil(cell)
 			continue
 		var splash := cell != center
 		var layer: int = _top_layer[cell.x][cell.y]
@@ -914,44 +904,108 @@ func _apply_pickaxe(center: Vector2i, style_mult: float, is_click: bool) -> void
 	_mark_tool_used(Tuning.TOOL_PICKAXE, cell_center(center))
 
 
-func _apply_brush(world: Vector2, travel: float) -> void:
-	var aim := _cell_at(world)
-	var gain: float = travel * Tuning.brush_clean_per_pixel * brush_scrub_mult()
-	var touched: Array[Vector2i] = []
-	if _is_exposed_fossil(aim):
-		touched.append(aim)
-	if Tuning.brush_reach_px > 0.0:
+func brush_radius() -> float:
+	return maxf(4.0, Tuning.cell_h * Tuning.brush_radius_frac) + Tuning.brush_reach_px
+
+
+func brush_strength() -> float:
+	## How much dust one pass lifts: base takes ~2 passes, upgrades reach 1.
+	return clampf(Tuning.brush_clean_per_pixel * 370.0, 0.25, 1.0)
+
+
+func brush_stroke(from: Vector2, to: Vector2) -> void:
+	## Wipe dust along the stroke. Each dust patch is cleaned at most once per
+	## stroke, so scrubbing speed is about coverage, not wiggling in place.
+	if exposed_cells.is_empty():
+		return
+	var radius: float = brush_radius()
+	var strength: float = brush_strength()
+	var steps: int = maxi(1, int(ceil(from.distance_to(to) / maxf(radius * 0.5, 1.0))))
+	var hit: Dictionary = {}
+	var touched: Dictionary = {}
+	var lifted: float = 0.0
+	for step in steps + 1:
+		var p: Vector2 = from.lerp(to, float(step) / float(steps))
 		for raw in exposed_cells:
 			var cell: Vector2i = raw
-			if cell == aim:
+			if not dust.has(cell):
 				continue
-			if _distance_to_rect(world, _top_rect(cell.x, cell.y)) <= Tuning.brush_reach_px:
-				touched.append(cell)
-	var cleaned: float = 0.0
-	var ready: Array = []
-	for cell in touched:
-		var before: float = float(cleanliness.get(cell, 0.0))
-		if before >= 1.0:
-			continue
-		var share: float = gain if cell == aim else gain * Tuning.brush_splash
-		var after := clampf(before + share, 0.0, 1.0)
-		cleanliness[cell] = after
-		cleaned = maxf(cleaned, after - before)
-		var find := _find_at(cell)
-		if not find.is_empty() and not ready.has(find):
-			ready.append(find)
-	if touched.is_empty() or cleaned <= 0.0:
+			var find := _find_at(cell)
+			if find.is_empty() or bool(find.get("extracted", false)):
+				continue
+			var rect := _top_rect(cell.x, cell.y)
+			if _distance_to_rect(p, rect) > radius:
+				continue
+			lifted += _wipe_cell(cell, rect, p, radius, strength, hit)
+			touched[cell] = true
+	if touched.is_empty():
 		return
+	var ready: Array = []
+	for raw in touched:
+		var cell: Vector2i = raw
+		cleanliness[cell] = _dust_clean(cell)
+		var find := _find_at(cell)
+		if not ready.has(find):
+			ready.append(find)
 	_grid_dirty = true
-	_puff_dust(world if not _in_bounds(aim) else cell_center(touched[0]), cleaned)
-	_mark_tool_used(Tuning.TOOL_BRUSH, cell_center(touched[0]))
-	if travel > 4.0:
-		Sfx.play("dust", 1.0 + 0.08 * brush_combo_level())
-	_focus_find(_find_at(touched[0]))
+	if lifted > 0.0:
+		_puff_dust(to, clampf(lifted * 0.05, 0.0, 1.0))
+		if from.distance_to(to) > 4.0:
+			Sfx.play("dust")
+	var first: Vector2i = touched.keys()[0]
+	_mark_tool_used(Tuning.TOOL_BRUSH, cell_center(first))
+	_focus_find(_find_at(first))
 	for raw in ready:
 		var find: Dictionary = raw
 		if _find_is_fully_exposed(find) and _find_clean(find) >= Tuning.clean_extract_threshold:
+			_finish_cleaning(find)
 			_extract_find(find, true)
+
+
+func _wipe_cell(cell: Vector2i, rect: Rect2, p: Vector2, radius: float, strength: float, hit: Dictionary) -> float:
+	var grid: PackedFloat32Array = dust[cell]
+	var cw: float = rect.size.x / float(Tuning.DUST_COLS)
+	var ch: float = rect.size.y / float(Tuning.DUST_ROWS)
+	var lifted: float = 0.0
+	for row in Tuning.DUST_ROWS:
+		for col in Tuning.DUST_COLS:
+			var center := rect.position + Vector2((float(col) + 0.5) * cw, (float(row) + 0.5) * ch)
+			if center.distance_to(p) > radius:
+				continue
+			var i: int = row * Tuning.DUST_COLS + col
+			var key := Vector3i(cell.x, cell.y, i)
+			if hit.has(key):
+				continue
+			hit[key] = true
+			var before: float = grid[i]
+			if before <= 0.0:
+				continue
+			grid[i] = maxf(0.0, before - strength)
+			lifted += before - grid[i]
+	dust[cell] = grid
+	return lifted
+
+
+func _dust_clean(cell: Vector2i) -> float:
+	if not dust.has(cell):
+		return float(cleanliness.get(cell, 0.0))
+	var grid: PackedFloat32Array = dust[cell]
+	var left: float = 0.0
+	for v in grid:
+		left += v
+	return clampf(1.0 - left / float(maxi(grid.size(), 1)), 0.0, 1.0)
+
+
+func _finish_cleaning(find: Dictionary) -> void:
+	## Past the threshold the last flecks fall away on their own.
+	var cells: Dictionary = find.get("cells", {})
+	for raw in cells:
+		var cell: Vector2i = raw
+		if dust.has(cell):
+			var grid: PackedFloat32Array = dust[cell]
+			grid.fill(0.0)
+			dust[cell] = grid
+		cleanliness[cell] = 1.0
 
 
 static func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
@@ -960,46 +1014,6 @@ static func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
 		clampf(point.y, rect.position.y, rect.end.y)
 	)
 	return point.distance_to(nearest)
-
-
-func brush_combo_level() -> int:
-	return int(floor(_brush_combo))
-
-
-func brush_scrub_mult() -> float:
-	return 1.0 + Tuning.brush_combo_step * float(brush_combo_level())
-
-
-func _track_scrub(move: Vector2) -> void:
-	## A reversal (back-and-forth stroke) raises the combo; long strokes do not.
-	if move.length() < 2.0:
-		return
-	var dir := move.normalized()
-	if _brush_dir != Vector2.ZERO and dir.dot(_brush_dir) < -0.3 and has_visible_find():
-		var before: int = brush_combo_level()
-		_brush_combo = minf(_brush_combo + 1.0, float(Tuning.brush_combo_max))
-		_brush_idle = 0.0
-		if brush_combo_level() != before:
-			brush_combo_changed.emit(brush_combo_level())
-	_brush_dir = dir
-
-
-func _tick_brush_combo(delta: float) -> void:
-	if _brush_combo <= 0.0:
-		return
-	_brush_idle += delta
-	if _brush_idle <= Tuning.brush_combo_hold:
-		return
-	var before: int = brush_combo_level()
-	_brush_combo = maxf(0.0, _brush_combo - delta * 6.0)
-	if brush_combo_level() != before:
-		brush_combo_changed.emit(brush_combo_level())
-
-
-func _reset_brush_combo() -> void:
-	_brush_combo = 0.0
-	_brush_idle = 0.0
-	_brush_dir = Vector2.ZERO
 
 
 func _damage_cell(cell: Vector2i, tool: int, override_damage: float = -1.0) -> int:
@@ -1081,6 +1095,10 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	var first := exposed_cells.is_empty()
 	exposed_cells[cell] = true
 	cleanliness[cell] = 0.0
+	var caked := PackedFloat32Array()
+	caked.resize(Tuning.DUST_COLS * Tuning.DUST_ROWS)
+	caked.fill(1.0)
+	dust[cell] = caked
 	var layer: int = int(find["layer"])
 	if _top_layer[cell.x][cell.y] < layer:
 		_top_layer[cell.x][cell.y] = layer
@@ -1095,14 +1113,14 @@ func _reveal_fossil_cell(cell: Vector2i) -> void:
 	if _find_is_fully_exposed(find) and not bool(find.get("ready", false)):
 		find["ready"] = true
 		pulse_bones()
-		fossil_ready_to_dust.emit(int(fossil_cells.get(cell, -1)))
+		var index: int = int(fossil_cells.get(cell, -1))
+		fossil_ready_to_dust.emit(index)
+		condition_revealed.emit(index, int(find.get("condition", Tuning.CONDITION_GOOD)), _find_centroid(find))
 
 
 func _can_harm_fossil() -> bool:
-	if _grace_left > 0.0:
-		return false
-	var find := _find_at(_cell_at(_mouse_world()))
-	return not find.is_empty() and not bool(find.get("extracted", false))
+	## Tools never damage bone.
+	return false
 
 
 func pulse_bones() -> void:
@@ -1121,10 +1139,15 @@ func _find_preview_value(find: Dictionary) -> int:
 	var data = find.get("data", null)
 	if data == null:
 		return 0
+	return _find_value(find, data)
+
+
+func _find_value(find: Dictionary, data) -> int:
+	## Value = base x condition x how clean it is.
 	var clean := _find_clean(find)
-	var intact: float = float(find.get("integrity", 1.0))
+	var cond: float = Tuning.condition_value(int(find.get("condition", Tuning.CONDITION_GOOD)))
 	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
-	return int(round(float(data.base_value) * intact * quality * Tuning.fossil_value_mult))
+	return int(round(float(data.base_value) * cond * quality * Tuning.fossil_value_mult))
 
 
 func _find_centroid(find: Dictionary) -> Vector2:
@@ -1164,7 +1187,7 @@ func _card_for_find(index: int) -> Dictionary:
 		status = "brush"
 	elif exposed > 0:
 		status = "uncovering"
-	var intact: float = float(find.get("integrity", 1.0))
+	var cond: int = int(find.get("condition", Tuning.CONDITION_GOOD))
 	var clean: float = _find_clean(find)
 	var piece_id: String = str(find.get("piece_id", ""))
 	var named: bool = bagged or fully
@@ -1176,13 +1199,14 @@ func _card_for_find(index: int) -> Dictionary:
 		"name": find_name if named else "Bone",
 		"piece_id": piece_id,
 		"status": status,
-		"stars": Tuning.preservation_stars(intact, clean),
-		"grade": Tuning.preservation_grade(intact, clean),
+		"stars": cond if named else 0,
+		"grade": Tuning.condition_label(cond) if named else "",
+		"condition": cond if named else 0,
 		"dirt": Tuning.dirt_label(clean) if exposed > 0 or bagged else "",
 		"value": _find_preview_value(find),
 		"fate": str(find.get("fate", "")),
 		"progress": progress,
-		"integrity": intact,
+		"integrity": 1.0,
 		"clean": clean,
 		"exposed": exposed,
 		"needed": needed,
@@ -1206,22 +1230,9 @@ func find_index_for(piece_id: String) -> int:
 	return -1
 
 
-func _hit_fossil(cell: Vector2i) -> void:
-	var find := _find_at(cell)
-	if find.is_empty() or bool(find.get("extracted", false)):
-		return
-	var cost: float = Tuning.integrity_hit_for(current_tool)
-	if cost <= 0.0:
-		return
-	find["integrity"] = maxf(Tuning.integrity_floor, float(find["integrity"]) - cost)
-	_focus_find(find)
-	_begin_punch(cell, PUNCH_BONE)
-	_bone_pulse = maxf(_bone_pulse, 0.7)
-	_burst(cell_center(cell), int(find["layer"]))
-	Sfx.play("crack")
-	fossil_hit.emit()
-	_grid_dirty = true
-	queue_redraw()
+func _hit_fossil(_cell: Vector2i) -> void:
+	## Bone breaking was removed: condition comes from the ground, not the tool.
+	pass
 
 
 func extract_now(require_clean: bool) -> void:
@@ -1241,19 +1252,18 @@ func _extract_find(find: Dictionary, _require_clean: bool) -> void:
 	if not _find_is_fully_exposed(find):
 		return
 	var clean := _find_clean(find)
-	var intact: float = float(find.get("integrity", 1.0))
+	var cond: int = int(find.get("condition", Tuning.CONDITION_GOOD))
 	find["extracted"] = true
 	find["extracted_clean"] = clean >= Tuning.clean_extract_threshold
 	_focus_find(find)
 	var data: FossilDataScript = find["data"]
-	var quality := lerpf(Tuning.unbrushed_value, 1.0, clean)
-	var value := int(round(float(data.base_value) * intact * quality * Tuning.fossil_value_mult))
+	var value: int = _find_value(find, data)
 	extracted = true
 	extracted_clean = bool(find["extracted_clean"])
 	fossil = data
-	integrity = intact
+	condition = cond
 	Sfx.play("extract")
-	fossil_extracted.emit(data.name, value, intact, clean, bool(find["extracted_clean"]), str(find.get("piece_id", "")))
+	fossil_extracted.emit(data.name, value, cond, clean, bool(find["extracted_clean"]), str(find.get("piece_id", "")))
 
 
 func _play_hit(layer: int) -> void:
@@ -1703,8 +1713,8 @@ func _draw_top(x: int, y: int) -> void:
 	if not bone and sensed_cells.has(cell):
 		_draw_sensed(rect)
 	if bone:
-		_draw_bone_mark(rect, cell, float(cleanliness.get(cell, 0.0)))
-		_draw_dust_specks(rect, cell, float(cleanliness.get(cell, 0.0)))
+		_draw_bone_mark(rect, cell, 1.0)
+		_draw_dust(rect, cell)
 
 
 func _draw_cell_art(layer: int, rect: Rect2) -> bool:
@@ -1775,7 +1785,9 @@ func _draw_cracks(rect: Rect2, cell: Vector2i, layer: int) -> void:
 	var crack_count := 0
 	var crack_color := Color(0.12, 0.08, 0.05, 0.7)
 	if _is_exposed_fossil(cell):
-		crack_count = int(round((1.0 - integrity) / 0.18))
+		## Old wear from the ground: poorer bones show more cracks once wiped.
+		var cond: int = int(_find_at(cell).get("condition", Tuning.CONDITION_GOOD))
+		crack_count = maxi(0, 4 - cond)
 		crack_color = Color(0.25, 0.16, 0.1, 0.85)
 	elif layer < Tuning.layer_count:
 		var hp: float = float(_hp[cell.x][cell.y])
@@ -1806,15 +1818,19 @@ static func _hash01(seed: int, i: int) -> float:
 	return float(h & 0xFFFF) / 65535.0
 
 
+const BONE_BY_CONDITION: PackedColorArray = [
+	Color("9C8A74"),
+	Color("BFA888"),
+	Color("D9C29C"),
+	Color("EEDDB6"),
+	Color("FBF1D6"),
+]
+
+
 func _bone_color(cell: Vector2i) -> Color:
-	var clean: float = float(cleanliness.get(cell, 0.0))
-	var dusty := Color("5A4330")
-	var dull := Color("C2A27C")
-	var ivory := Color("F7E9C6")
-	var color := dusty.lerp(dull, clampf(clean * 1.35, 0.0, 1.0))
-	if clean > 0.45:
-		color = color.lerp(ivory, clampf((clean - 0.45) / 0.55, 0.0, 1.0))
-	return color.lerp(Color("8A6A3E"), (1.0 - integrity) * 0.4)
+	## The bone under the dust: better condition reads brighter and warmer.
+	var cond: int = int(_find_at(cell).get("condition", Tuning.CONDITION_GOOD))
+	return BONE_BY_CONDITION[clampi(cond, 1, 5) - 1]
 
 
 func _draw_bone_mark(rect: Rect2, cell: Vector2i, clean: float) -> void:
@@ -1861,14 +1877,27 @@ func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
 	Matrix.draw_icon(self, kind, pos, radius, 0.42 + strength * 0.38, rarity)
 
 
-func _draw_dust_specks(rect: Rect2, cell: Vector2i, clean: float) -> void:
-	var specks := int(round((1.0 - clean) * 10.0))
-	if specks <= 0:
+const DUST_DARK := Color("6A4E34")
+const DUST_LIGHT := Color("735639")
+
+
+func _draw_dust(rect: Rect2, cell: Vector2i) -> void:
+	## Caked dirt sits on top of the bone and disappears where the brush wipes.
+	if not dust.has(cell):
 		return
-	var seed: int = int(cell.x * 41 + cell.y * 73 + 11)
-	for i in specks:
-		var pos := rect.position + Vector2(6.0 + _hash01(seed, i * 2) * (rect.size.x - 12.0), 6.0 + _hash01(seed, i * 2 + 1) * (rect.size.y - 12.0))
-		draw_circle(pos, 1.6, Color(0.28, 0.2, 0.12, 0.55))
+	var grid: PackedFloat32Array = dust[cell]
+	var cw: float = rect.size.x / float(Tuning.DUST_COLS)
+	var ch: float = rect.size.y / float(Tuning.DUST_ROWS)
+	var seed: int = cell.x * 41 + cell.y * 73 + 11
+	for row in Tuning.DUST_ROWS:
+		for col in Tuning.DUST_COLS:
+			var i: int = row * Tuning.DUST_COLS + col
+			var amount: float = grid[i]
+			if amount <= 0.02:
+				continue
+			var shade: Color = DUST_DARK.lerp(DUST_LIGHT, _hash01(seed, i))
+			shade.a = 0.30 + 0.70 * amount
+			draw_rect(Rect2(rect.position.x + float(col) * cw, rect.position.y + float(row) * ch, cw + 0.5, ch + 0.5), shade)
 
 
 func _draw_fx(c: CanvasItem) -> void:
@@ -1884,16 +1913,9 @@ func _draw_boost_ring(c: CanvasItem) -> void:
 	c.draw_arc(_boost_pos, radius * 0.62, 0.0, TAU, 28, Color("FFF4D2", _boost_flash * 0.45), 2.0)
 
 
-func aiming_spoils_bone(world: Vector2 = Vector2.INF) -> bool:
-	if current_tool != Tuning.TOOL_SHOVEL and current_tool != Tuning.TOOL_PICKAXE:
-		return false
-	var pos: Vector2 = _mouse_world() if world.x == INF else world
-	if not _tool_cursor_visible_at(pos):
-		return false
-	var cell := _cell_at(pos)
-	if not _in_bounds(cell):
-		return false
-	return fossil_cells.has(cell) or not _find_at(cell).is_empty()
+func aiming_spoils_bone(_world: Vector2 = Vector2.INF) -> bool:
+	## Tools can no longer damage bone, so there is nothing to warn about.
+	return false
 
 
 func _draw_tool_cursor(c: CanvasItem) -> void:
@@ -1934,19 +1956,10 @@ func _draw_tool_cursor(c: CanvasItem) -> void:
 				c.draw_line(pos + Vector2(0, -8), pos + Vector2(0, 8), color, 3.0)
 		Tuning.TOOL_BRUSH:
 			color = Color("A6E4F5") if boosted else Color("7EC8E3")
-			var puff: float = 11.0 if boosted else 7.0
-			c.draw_circle(pos, puff, Color(0.5, 0.8, 0.9, 0.28 if boosted else 0.25))
-			c.draw_arc(pos, puff + 2.0, 0.0, TAU, 20, color, 2.5 if boosted else 2.0)
-			if Tuning.brush_reach_px > 0.0:
-				c.draw_arc(pos, puff + 2.0 + Tuning.brush_reach_px, 0.0, TAU, 28, Color(color, 0.35), 1.5)
-			var combo: int = brush_combo_level()
-			if combo > 0:
-				var hot := Color("FFE08A").lerp(Color("FF9A3C"), float(combo) / float(maxi(Tuning.brush_combo_max, 1)))
-				var font: Font = UiStyle.display_font()
-				var tag := "SCRUB x%.1f" % brush_scrub_mult()
-				var at := pos + Vector2(12, 14)
-				c.draw_string_outline(font, at, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0.1, 0.07, 0.05, 0.85))
-				c.draw_string(font, at, tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, hot)
+			## The ring is the real bristle width: dust inside it gets wiped.
+			var bristles: float = brush_radius()
+			c.draw_circle(pos, bristles, Color(0.5, 0.8, 0.9, 0.16 if boosted else 0.12))
+			c.draw_arc(pos, bristles, 0.0, TAU, 28, color, 2.5 if boosted else 2.0)
 	_draw_cursor_label(c, pos, Tuning.TOOL_NAMES[current_tool], color)
 
 

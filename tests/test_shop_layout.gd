@@ -341,8 +341,8 @@ func _test_blunted_point_keeps_a_description() -> void:
 	_reset()
 	var line: String = str(GS.shop_effect_line("pick_soft"))
 	_assert(not line.is_empty(), "Blunted Point has a this-buy line")
-	_assert(line.contains("Hits cost") and line.contains("less integrity"), "unbought Blunted Point matches Soft Edge")
-	_assert(str(GS.shop_effect_line("shovel_soft")) == line, "Soft Edge uses the same integrity this-buy")
+	_assert(line.contains("Great or Perfect"), "unbought Gentle Picking states the better-bone odds")
+	_assert(str(GS.shop_effect_line("shovel_soft")) == line, "Gentle Digging uses the same odds this-buy")
 	GS.levels["shovel_soft"] = 5
 	GS.apply_upgrades()
 	var floored: String = str(GS.shop_effect_line("pick_soft"))

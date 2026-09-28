@@ -203,7 +203,7 @@ func _test_tools_are_a_left_owned_list() -> void:
 			_assert(is_equal_approx(h, row_h), "owned rows keep one shared height")
 	if roles.size() >= 1:
 		var hands_role: Label = roles[0] as Label
-		_assert(hands_role != null and str(hands_role.text) == "Harvest · safe on bone", "hands keep the harvest role")
+		_assert(hands_role != null and str(hands_role.text) == "Pick up small finds", "hands keep the harvest role")
 		_assert(hands_role != null and hands_role.visible, "role stays visible in the stacked card")
 		var buttons: Array = hud.get("_tool_buttons") as Array
 		if hands_role != null and buttons.size() > 0:
@@ -663,14 +663,14 @@ func _test_integrity_plate_keeps_word_spaces() -> void:
 		hud.queue_free()
 		return
 	var shop_id: String = str(GS.next_shop_id(TN.TOOL_PICKAXE))
-	_assert(shop_id == "pick_soft", "pick next is the integrity buy")
+	_assert(shop_id == "pick_soft", "pick next is the Gentle Picking buy")
 	var effect: String = str(GS.shop_effect_line(shop_id))
-	_assert(effect.contains("Hits cost"), "integrity line is Hits cost N% less integrity")
-	_assert(effect.contains("less integrity"), "integrity line keeps less integrity")
+	_assert(effect.contains("Great or Perfect"), "odds line names Great or Perfect bones")
+	_assert(effect.contains("->"), "odds line shows before -> after")
 	var caption: String = _chip_caption(plate)
 	_assert(_caption_has_effect(caption, effect), "integrity plate shows the full Hits cost line")
-	_assert(not caption.contains("Hitscost"), "Hits cost keeps its space")
-	_assert(not caption.contains("lessintegrit"), "less integrity is not cut off mid-word")
+	_assert(not caption.contains("GreatorPerfect"), "odds line keeps its spaces")
+	_assert(not caption.contains("Perfectbones"), "Perfect bones is not cut off mid-word")
 	_assert(caption.contains("$"), "integrity plate still shows the wallet price")
 	_assert(_plate_words_stay_apart(plate), "integrity plate wraps instead of clipping")
 	hud.queue_free()
@@ -1704,7 +1704,7 @@ func _plate_words_stay_apart(plate: Button) -> bool:
 		var text: String = str(label.text)
 		if text.contains("  "):
 			return false
-		if text.contains("Hits cost") or text.contains("less integrity") or text.contains("Next"):
+		if text.contains("Great or Perfect") or text.contains("Next"):
 			if text.contains("Hitscost") or text.contains("lessintegrit") or text.contains("Nextupgrade"):
 				return false
 	return true

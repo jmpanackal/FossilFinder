@@ -50,6 +50,8 @@ func _ready() -> void:
 	dig_site.lucky_struck.connect(_on_lucky_struck)
 	if dig_site.has_signal("bone_sensed"):
 		dig_site.bone_sensed.connect(_on_bone_sensed)
+	if dig_site.has_signal("condition_revealed"):
+		dig_site.condition_revealed.connect(_on_condition_revealed)
 	hud.tool_selected.connect(dig_site.set_tool)
 	hud.end_shift.connect(_end_round)
 	if Settings.has_signal("end_shift_pressed"):
@@ -329,8 +331,8 @@ func _process(delta: float) -> void:
 		hud.set_find_cards(cards)
 	var found: bool = not cards.is_empty()
 	var clean: float = float(dig_site.fossil_cleanliness())
-	var grade: String = Tuning.preservation_grade(float(dig_site.integrity), clean) if found else ""
-	var stars: int = Tuning.preservation_stars(float(dig_site.integrity), clean) if found else 0
+	var grade: String = Tuning.condition_label(int(dig_site.condition)) if found else ""
+	var stars: int = int(dig_site.condition) if found else 0
 	var value: int = int(dig_site.preview_value()) if found else 0
 	hud.refresh(time_left, Tuning.round_seconds, dig_site.current_tool, round_active and screen == "dig", found, stars, grade, clean, value)
 	if hud.has_method("set_bone_warning") and dig_site.has_method("aiming_spoils_bone"):
@@ -430,6 +432,37 @@ func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
 		_ping(center)
 
 
+const CONDITION_COLORS: PackedColorArray = [
+	Color("B8A48C"),
+	Color("D8C8A8"),
+	Color("F2E6C4"),
+	Color("9FE08A"),
+	Color("FFE08A"),
+]
+
+
+func _on_condition_revealed(_index: int, condition: int, world_pos: Vector2) -> void:
+	## Discovery beat: the bone's hidden condition shows once it is fully dug out.
+	var cond: int = clampi(condition, 1, 5)
+	var excited: bool = cond >= 4
+	var text: String = "%s condition%s" % [Tuning.condition_name(cond), "!" if excited else ""]
+	_spawn_float(text, world_pos + Vector2(0, -26), CONDITION_COLORS[cond - 1], 26 if excited else 20)
+	if cond == Tuning.CONDITION_PERFECT:
+		_ping(world_pos)
+		Sfx.play("unlock")
+	_teach_on_reveal()
+
+
+func _teach_on_reveal() -> void:
+	## Plain-language explainers, each shown once ever.
+	if toast == null or not toast.has_method("show_toast"):
+		return
+	if GameState.take_hint("condition"):
+		toast.show_toast("Bone condition", "How well it survived underground. Better condition = more $ and more museum visitors.")
+	elif GameState.owns_tool(Tuning.TOOL_BRUSH) and GameState.take_hint("brush"):
+		toast.show_toast("Brush off the dirt", "Pick the Brush (4), hold the mouse and sweep over the bone. Clean bones are worth more.")
+
+
 func _on_bone_sensed(world_pos: Vector2) -> void:
 	_spawn_float("Bone below!", world_pos + Vector2(0, -18), Color("FFF1C4"), 18)
 
@@ -453,17 +486,21 @@ func _on_ready_to_dust(find_index: int = -1) -> void:
 	_spawn_fossil_fly(find_index, origin)
 
 
-func _on_fossil_extracted(fossil_name: String, value: int, integrity: float, cleanliness: float, clean: bool, piece_id: String) -> void:
+func _on_fossil_extracted(fossil_name: String, value: int, condition: int, cleanliness: float, clean: bool, piece_id: String) -> void:
 	var before: int = GameState.money
 	GameState.add_money(value)
 	var id := piece_id if piece_id != "" else "find"
-	_extract_fate = GameState.hall_fate_line(id)
+	_extract_fate = GameState.hall_fate_line(id, condition)
+	var upgrading: bool = _extract_fate.begins_with("Upgrade")
+	var old_condition: int = GameState.piece_condition(id)
 	if dig_site.has_method("set_find_fate"):
 		dig_site.set_find_fate(id, _extract_fate)
-	GameState.install_find(id, fossil_name, cleanliness, clean)
+	GameState.install_find(id, fossil_name, cleanliness, clean, condition)
+	if upgrading and toast != null and toast.has_method("show_toast"):
+		toast.show_toast("Exhibit upgraded!", "%s: %s replaces %s. The old one was sold." % [fossil_name, Tuning.condition_name(condition), Tuning.condition_name(old_condition)], condition)
 	_round_fossil_pay += GameState.money - before
-	var grade := Tuning.preservation_grade(integrity)
-	var stars := Tuning.preservation_stars(integrity)
+	var grade := Tuning.condition_label(condition)
+	var stars := condition
 	var owns_brush: bool = GameState.owns_tool(Tuning.TOOL_BRUSH)
 	var dirt := Tuning.summary_dirt_line(cleanliness, owns_brush)
 	_round_finds.append({

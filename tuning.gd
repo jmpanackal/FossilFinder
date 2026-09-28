@@ -149,10 +149,6 @@ var damage_matrix := [
 
 var shovel_radius: float = 0.0
 var brush_clean_per_pixel: float = 0.0015
-## Scrubbing back and forth builds a combo; each reversal adds one step.
-var brush_combo_max: int = 5
-var brush_combo_step: float = 0.2
-var brush_combo_hold: float = 0.45
 ## Bristle reach in pixels past the aimed cell. 0 = one cell.
 var brush_reach_px: float = 0.0
 var brush_splash: float = 0.6
@@ -175,11 +171,13 @@ var pickaxe_radius: float = 1.0
 var hold_min_interval: float = 0.065
 
 var round_seconds: float = 40.0
-var integrity_hit_cost: float = 0.10
+## Tools never break bone. Kept at 0 so old callers read "no damage".
+var integrity_hit_cost: float = 0.0
 var hands_integrity_mult: float = 0.0
 var integrity_floor: float = 0.25
 var unbrushed_value: float = 0.5
-var clean_extract_threshold: float = 0.999
+## Wiping dust: a bone counts as clean once this much of it is uncovered.
+var clean_extract_threshold: float = 0.96
 
 var shake_enabled: bool = true
 var shake_strength: float = 8.0
@@ -226,31 +224,77 @@ var unveil_spike_mult: float = 2.0
 var unveil_rush_stack_cap: int = 5
 var unveil_rush_strength: float = 1.0
 
-## Break grades only. Dirt is tracked separately.
-const PRESERVATION_GRADES: PackedStringArray = [
-	"Well preserved",
-	"Mostly intact",
-	"Weathered",
-	"Broken",
-	"Crushed",
-]
+## Condition: how well a bone survived in the ground. Rolled when the pit is
+## made, hidden until the bone is fully uncovered. 1 = Poor ... 5 = Perfect.
+const CONDITION_POOR := 1
+const CONDITION_GOOD := 3
+const CONDITION_PERFECT := 5
+const CONDITION_NAMES: PackedStringArray = ["Poor", "Fair", "Good", "Great", "Perfect"]
+## Plain-language explanation shown in hints, so no one needs the jargon.
+const CONDITION_HINT := "Condition is how well a bone survived in the ground. Better condition sells for more and draws more museum visitors."
+var condition_weights: PackedFloat32Array = [14.0, 26.0, 32.0, 20.0, 8.0]
+## Each point shifts the odds toward better-condition bones.
+var condition_luck: float = 0.0
+var condition_value_mult: PackedFloat32Array = [0.5, 0.75, 1.0, 1.4, 2.0]
+var condition_visitor_mult: PackedFloat32Array = [0.5, 0.75, 1.0, 1.5, 2.0]
+## Brush: dust on each bone cell is a small grid wiped where the brush passes.
+const DUST_COLS := 8
+const DUST_ROWS := 5
+var brush_radius_frac: float = 0.30
 
 
-func preservation_stars(integrity: float, _cleanliness: float = 1.0) -> int:
-	var intact := clampf(integrity, 0.0, 1.0)
-	if intact >= 0.95:
-		return 5
-	if intact >= 0.80:
-		return 4
-	if intact >= 0.60:
-		return 3
-	if intact >= 0.40:
-		return 2
-	return 1
+func condition_name(condition: int) -> String:
+	return CONDITION_NAMES[clampi(condition, 1, 5) - 1]
 
 
-func preservation_grade(integrity: float, _cleanliness: float = 1.0) -> String:
-	return PRESERVATION_GRADES[5 - preservation_stars(integrity)]
+func condition_label(condition: int) -> String:
+	return "%s condition" % condition_name(condition)
+
+
+func condition_value(condition: int) -> float:
+	return condition_value_mult[clampi(condition, 1, 5) - 1]
+
+
+func condition_visitors(condition: int) -> float:
+	return condition_visitor_mult[clampi(condition, 1, 5) - 1]
+
+
+func condition_odds(luck: float = -1.0) -> PackedFloat32Array:
+	## Luck tilts weight from Poor/Fair toward Great/Perfect.
+	var l: float = condition_luck if luck < 0.0 else luck
+	var odds := PackedFloat32Array()
+	var total: float = 0.0
+	for i in condition_weights.size():
+		var w: float = condition_weights[i] * pow(1.0 + l, float(i - 2))
+		odds.append(w)
+		total += w
+	for i in odds.size():
+		odds[i] = odds[i] / maxf(total, 0.001)
+	return odds
+
+
+func roll_condition(rng: RandomNumberGenerator = null) -> int:
+	var roll: float = rng.randf() if rng != null else randf()
+	var odds := condition_odds()
+	for i in odds.size():
+		roll -= odds[i]
+		if roll <= 0.0:
+			return i + 1
+	return CONDITION_PERFECT
+
+
+func great_or_better_chance(luck: float = -1.0) -> float:
+	var odds := condition_odds(luck)
+	return odds[3] + odds[4]
+
+
+## Stars and grade text come from condition (1..5).
+func preservation_stars(condition: float, _cleanliness: float = 1.0) -> int:
+	return clampi(int(round(condition)), 1, 5)
+
+
+func preservation_grade(condition: float, _cleanliness: float = 1.0) -> String:
+	return condition_label(preservation_stars(condition))
 
 
 func dirt_label(cleanliness: float) -> String:
@@ -514,12 +558,9 @@ func footer_find_top() -> float:
 	return footer_top() + footer_find_gap()
 
 
-func integrity_hit_for(tool: int) -> float:
-	if tool == TOOL_HANDS:
-		return integrity_hit_cost * hands_integrity_mult
-	if tool == TOOL_BRUSH:
-		return 0.0
-	return integrity_hit_cost
+func integrity_hit_for(_tool: int) -> float:
+	## Tools never damage bone; condition is set by the ground, not by you.
+	return 0.0
 
 
 func chunk_top_color() -> Color:
