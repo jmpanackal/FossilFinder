@@ -666,7 +666,7 @@ func _test_integrity_plate_keeps_word_spaces() -> void:
 	_assert(shop_id == "pick_soft", "pick next is the Gentle Picking buy")
 	var effect: String = str(GS.shop_effect_line(shop_id))
 	_assert(effect.contains("Great or Perfect"), "odds line names Great or Perfect bones")
-	_assert(effect.contains("->"), "odds line shows before -> after")
+	_assert(effect.contains("→"), "odds line shows before → after")
 	var caption: String = _chip_caption(plate)
 	_assert(_caption_has_effect(caption, effect), "integrity plate shows the full Hits cost line")
 	_assert(not caption.contains("GreatorPerfect"), "odds line keeps its spaces")

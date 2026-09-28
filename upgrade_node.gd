@@ -17,6 +17,12 @@ var lock: Label
 var rank: Label
 var well: Panel
 var _state_key: String = ""
+var afford: AffordBar
+var _held: bool = false
+var _hold_t: float = 0.0
+var _last_level: int = -1
+const HOLD_DELAY := 0.35
+const HOLD_STEP := 0.16
 
 
 func setup(id: String) -> void:
@@ -96,7 +102,15 @@ func setup(id: String) -> void:
 	button.offset_bottom = 24
 	Ui.apply_button(button, true)
 	button.pressed.connect(func() -> void: buy_pressed.emit(item_id))
+	## Hold the button to keep buying ranks.
+	button.button_down.connect(func() -> void:
+		_held = true
+		_hold_t = -HOLD_DELAY)
+	button.button_up.connect(func() -> void: _held = false)
 	action.add_child(button)
+	afford = AffordBar.new()
+	afford.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	button.add_child(afford)
 
 	lock = Label.new()
 	lock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -131,7 +145,9 @@ func refresh() -> void:
 	var offer: bool = GameState.is_unlock_offer(item_id)
 	## Money ticks refresh the shop constantly. Rebuilding copy (which re-runs
 	## the upgrade math) and restyling is ~1ms per row, so skip unchanged rows.
-	var key: String = "%d|%s|%s|%s|%s|%s" % [level, heat, offer, GameState.can_buy(item_id), GameState.cost_of(item_id), _juicing()]
+	var cost: int = GameState.cost_of(item_id)
+	var ratio: float = clampf(float(GameState.money) / float(maxi(cost, 1)), 0.0, 1.0)
+	var key: String = "%d|%s|%s|%s|%s|%s|%d" % [level, heat, offer, GameState.can_buy(item_id), cost, _juicing(), int(ratio * 40.0)]
 	if key == _state_key:
 		return
 	_state_key = key
@@ -154,6 +170,12 @@ func refresh() -> void:
 	button.visible = can_purchase
 	button.text = GameState.shop_button_label(item_id)
 	button.disabled = not GameState.can_buy(item_id)
+	## Saving-up bar: how close the wallet is to this price.
+	if afford != null:
+		afford.set_ratio(ratio if can_purchase and heat != "locked" else 1.0)
+	if _last_level >= 0 and level > _last_level:
+		_flash_bought()
+	_last_level = level
 	Ui.apply_button(button, heat == "glow")
 
 	lock.visible = heat == "locked"
@@ -174,6 +196,29 @@ func refresh() -> void:
 
 func _get_tooltip(_at_position: Vector2) -> String:
 	return ""
+
+
+func _process(delta: float) -> void:
+	if not _held:
+		return
+	if button == null or not button.is_pressed() or not is_visible_in_tree():
+		_held = false
+		return
+	_hold_t += delta
+	if _hold_t >= HOLD_STEP:
+		_hold_t -= HOLD_STEP
+		if GameState.can_buy(item_id):
+			buy_pressed.emit(item_id)
+
+
+func _flash_bought() -> void:
+	## The new rank pip flashes and the effect line glows with its new value.
+	if pips != null and pips.has_method("flash_last"):
+		pips.call("flash_last")
+	if desc != null:
+		desc.modulate = Color("FFE08A")
+		var tw := create_tween()
+		tw.tween_property(desc, "modulate", Color.WHITE, 0.6)
 
 
 ## Force the next refresh() to rebuild even if the row state looks the same.
@@ -200,10 +245,46 @@ class TipButton extends Button:
 		return ""
 
 
+class AffordBar extends Control:
+	## Thin bar along the bottom of a Buy button showing savings toward it.
+	var ratio: float = 1.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_ratio(value: float) -> void:
+		if is_equal_approx(value, ratio):
+			return
+		ratio = value
+		queue_redraw()
+
+	func _draw() -> void:
+		if ratio >= 1.0 or ratio <= 0.0:
+			return
+		var bar := Rect2(6.0, size.y - 8.0, (size.x - 12.0), 4.0)
+		draw_rect(bar, Color(0, 0, 0, 0.45))
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), Color("E4B75A"))
+		var font := Ui.display_font()
+		var pct: String = "%d%%" % int(floor(ratio * 100.0))
+		draw_string(font, Vector2(size.x - 34.0, 13.0), pct, HORIZONTAL_ALIGNMENT_RIGHT, 28, 10, Color(Ui.GOLD, 0.8))
+
+
 class PipBar extends Control:
 	var level: int = 0
 	var max_level: int = 1
 	var heat: String = "dim"
+	var _flash: float = 0.0
+
+	func flash_last() -> void:
+		_flash = 1.0
+		set_process(true)
+
+	func _process(delta: float) -> void:
+		if _flash <= 0.0:
+			set_process(false)
+			return
+		_flash = maxf(0.0, _flash - delta * 1.6)
+		queue_redraw()
 
 
 	func _ready() -> void:
@@ -229,6 +310,9 @@ class PipBar extends Control:
 			var fill := Color("E4B75A") if filled else Color("3F342A")
 			if filled and heat == "maxed":
 				fill = Color("F0D48A")
+			if filled and i == level - 1 and _flash > 0.0:
+				fill = fill.lerp(Color.WHITE, _flash)
+				draw_rect(box.grow(2.0 * _flash), Color(1, 0.9, 0.5, 0.6 * _flash), false, 2.0)
 			draw_rect(box, fill)
 			draw_rect(box, Color("8A6A40") if filled else Color("6A523C"), false, 1.0)
 

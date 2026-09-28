@@ -252,42 +252,69 @@ func _add_chapter(page: VBoxContainer, cat: String, tier: int) -> void:
 
 
 func _add_gate(page: VBoxContainer, cat: String, tier: int) -> void:
+	## A slim locked bar (not a big empty box): chest, name, what unlocks it,
+	## and a bar of how far along the previous tier you are.
 	if tier <= 1:
 		return
 	var key: String = _chapter_key(cat, tier)
 	var gate := PanelContainer.new()
-	gate.custom_minimum_size = Vector2(0, 168)
+	gate.custom_minimum_size = Vector2(0, 64)
 	gate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gate.add_theme_stylebox_override("panel", Ui.gate_box())
 	page.add_child(gate)
 
-	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 6)
-	gate.add_child(col)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	gate.add_child(row)
 
 	var icon: Control = ShopIcon.new()
-	icon.custom_minimum_size = Vector2(72, 56)
+	icon.custom_minimum_size = Vector2(44, 36)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(icon)
+	row.add_child(icon)
 	if icon.has_method("setup"):
 		icon.setup("chest", Color("A88858"))
 
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 3)
+	row.add_child(col)
+
 	var title := Label.new()
 	title.text = GameState.tier_title(cat, tier)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Ui.apply_section(title)
+	Ui.apply_label(title, 18, Ui.GOLD)
 	col.add_child(title)
 
 	var reason := Label.new()
-	reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	reason.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	reason.custom_minimum_size.x = 240
 	Ui.apply_caption(reason)
 	col.add_child(reason)
 
-	_gates[key] = {"wrap": gate, "title": title, "reason": reason, "icon": icon}
+	var bar := TierBar.new()
+	bar.custom_minimum_size = Vector2(0, 6)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(bar)
+
+	_gates[key] = {"wrap": gate, "title": title, "reason": reason, "icon": icon, "bar": bar}
+
+
+class TierBar extends Control:
+	var ratio: float = 0.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_ratio(value: float) -> void:
+		ratio = clampf(value, 0.0, 1.0)
+		queue_redraw()
+
+	func _draw() -> void:
+		var rect := Rect2(Vector2.ZERO, size)
+		draw_rect(rect, Color("1B1410"))
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x * ratio, rect.size.y)), Color("E4B75A"))
 
 
 func _add_row(item: Dictionary, cat: String, tier: int) -> void:
@@ -451,6 +478,17 @@ func _refresh_tiers(cat: String) -> void:
 				if gate["icon"].has_method("setup"):
 					var close: bool = left <= 2
 					gate["icon"].setup("chest", Color("E4B75A") if close else Color("A88858"), not close)
+				if gate.has("bar"):
+					var prev_total: int = _ranks_total(cat, tier - 1)
+					gate["bar"].set_ratio(1.0 - float(left) / float(maxi(prev_total, 1)))
+
+
+func _ranks_total(cat: String, tier: int) -> int:
+	var total: int = 0
+	for item in GameState.catalog:
+		if str(item.get("cat", "")) == cat and int(item.get("tier", 1)) == tier:
+			total += int(item.get("max", 1))
+	return total
 
 
 func _first_ready_cat() -> String:
@@ -573,6 +611,7 @@ func _celebrate_buy(id: String, cost: int) -> void:
 	if item_name.is_empty():
 		item_name = str(item.get("name", id))
 	_pulse_card(id, Color("FFE08A"))
+	_burst_from_button(id)
 	_slam_rank(id, "+ %s" % item_name)
 	_flash_spend(cost)
 	var unlock_title: String = GameState.last_unlock_title
@@ -582,6 +621,33 @@ func _celebrate_buy(id: String, cost: int) -> void:
 		_pulse_chapter(unlock_title)
 	for unlocked_id in GameState.last_unlocked_ids:
 		_pulse_card(str(unlocked_id), Color("FFF4D2"))
+
+
+func _burst_from_button(id: String) -> void:
+	## Gold sparks fly off the Buy button so every purchase feels like a win.
+	if not _buttons.has(id):
+		return
+	var card: Panel = _buttons[id]
+	var btn: Button = card.get("button") as Button
+	if btn == null:
+		return
+	var sparks := CPUParticles2D.new()
+	sparks.one_shot = true
+	sparks.explosiveness = 1.0
+	sparks.amount = 26
+	sparks.lifetime = 0.6
+	sparks.spread = 180.0
+	sparks.direction = Vector2(0, -1)
+	sparks.gravity = Vector2(0, 260)
+	sparks.initial_velocity_min = 90.0
+	sparks.initial_velocity_max = 220.0
+	sparks.scale_amount_min = 2.0
+	sparks.scale_amount_max = 4.0
+	sparks.color = Color("FFD66B")
+	sparks.position = btn.global_position - card.global_position + btn.size * 0.5
+	card.add_child(sparks)
+	sparks.emitting = true
+	get_tree().create_timer(1.0).timeout.connect(sparks.queue_free)
 
 
 func _pulse_chapter(title: String) -> void:

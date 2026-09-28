@@ -1,6 +1,8 @@
 extends Node
 
 signal money_changed
+
+const UiStyle := preload("res://ui_style.gd")
 signal collection_changed
 signal upgrades_changed
 signal hall_changed
@@ -448,12 +450,12 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			var after: int = int(at["cast_rank"])
 			if before <= 0:
 				return "Wrap a bone in %.1fs" % Tuning.cast_hold_by_rank[clampi(after, 1, 3) - 1]
-			return "Wrap time %.1fs -> %.1fs" % [Tuning.cast_hold_by_rank[clampi(before, 1, 3) - 1], Tuning.cast_hold_by_rank[clampi(after, 1, 3) - 1]]
+			return "Wrap time %.1fs → %.1fs" % [Tuning.cast_hold_by_rank[clampi(before, 1, 3) - 1], Tuning.cast_hold_by_rank[clampi(after, 1, 3) - 1]]
 		"hands_sense":
 			var reach: float = float(at["hands_sense_radius"])
 			if float(zero["hands_sense_radius"]) <= 0.0 and reach > 0.0:
 				return "Feel bone %.1f cells away" % reach
-			return "Feel bone %.1f -> %.1f cells away" % [float(zero["hands_sense_radius"]), reach]
+			return "Feel bone %.1f → %.1f cells away" % [float(zero["hands_sense_radius"]), reach]
 		"hands_craft":
 			return _join_effects(PackedStringArray([
 				"+%d%% harvest quality" % int(round((float(at["matrix_hands_quality"]) - float(zero["matrix_hands_quality"])) * 100.0)),
@@ -559,7 +561,7 @@ func _pct_delta_line(template: String, before: float, after: float) -> String:
 func _condition_odds_line(before: float, after: float) -> String:
 	var a: int = int(round(Tuning.great_or_better_chance(before) * 100.0))
 	var b: int = int(round(Tuning.great_or_better_chance(after) * 100.0))
-	return "Great or Perfect bones: %d%% -> %d%%" % [a, b]
+	return "Great or Perfect bones: %d%% → %d%%" % [a, b]
 
 
 func _integrity_line(before: float, after: float) -> String:
@@ -669,12 +671,13 @@ func shop_row_title(id: String) -> String:
 
 func shop_button_label(id: String) -> String:
 	var item: Dictionary = _item(id)
+	var price: String = UiStyle.money_text(cost_of(id))
 	if is_unlock_offer(id):
 		var action: String = str(item.get("unlock_action", "Buy"))
 		if action == "Unlock":
-			return "Unlock  $%d" % cost_of(id)
-		return "Buy %s  $%d" % [str(item["unlock_name"]), cost_of(id)]
-	return "Buy  $%d" % cost_of(id)
+			return "Unlock  %s" % price
+		return "Buy %s  %s" % [str(item["unlock_name"]), price]
+	return "Buy  %s" % price
 
 
 func shop_row_heat(id: String) -> String:
