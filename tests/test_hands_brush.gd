@@ -42,6 +42,14 @@ func _make_site() -> Node2D:
 	return site
 
 
+func _flatten(site: Node2D, bone: Vector2i) -> void:
+	## Sunk bone cells sit behind the row in front; level the pit so aim is exact.
+	var layer: int = int(site.finds[int(site.fossil_cells[bone])]["layer"])
+	for x in int(TN.grid_w):
+		for y in int(TN.grid_h):
+			site._top_layer[x][y] = layer
+
+
 func _first_bone(site: Node2D) -> Vector2i:
 	for raw in site.fossil_cells:
 		return raw
@@ -119,6 +127,7 @@ func _test_combo_speeds_cleaning() -> void:
 	var site := _make_site()
 	var bone: Vector2i = _first_bone(site)
 	site.call("_reveal_fossil_cell", bone)
+	_flatten(site, bone)
 	var center: Vector2 = site.call("cell_center", bone)
 	site.call("_apply_brush", center, 10.0)
 	var slow: float = float(site.cleanliness.get(bone, 0.0))
@@ -145,6 +154,7 @@ func _test_bristle_reach_cleans_neighbors() -> void:
 	site.exposed_cells[neighbor] = true
 	site.cleanliness[bone] = 0.0
 	site.cleanliness[neighbor] = 0.0
+	_flatten(site, bone)
 	var center: Vector2 = site.call("cell_center", bone)
 	TN.brush_reach_px = 0.0
 	site.call("_apply_brush", center, 10.0)

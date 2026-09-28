@@ -70,6 +70,9 @@ func _ready() -> void:
 	apply_volume()
 	if GameState != null and not GameState.money_changed.is_connected(refresh_wallet):
 		GameState.money_changed.connect(func() -> void: refresh_wallet(true))
+		## The $/s line depends on the hall, not just the bank; keep it current.
+		GameState.collection_changed.connect(func() -> void: refresh_wallet(false))
+		GameState.hall_changed.connect(func() -> void: refresh_wallet(false))
 	refresh_wallet(false)
 	if get_tree() != null:
 		get_tree().auto_accept_quit = false
