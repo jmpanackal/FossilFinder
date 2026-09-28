@@ -24,6 +24,11 @@ var _scroll: ScrollContainer
 var _pages_host: VBoxContainer
 var _fitting_pages: bool = false
 var _fit_queued: bool = false
+## Money ticks every frame once the hall earns. Rebuilding every row is ~30ms,
+## so hidden shops only mark dirty and a visible shop refreshes at most REFRESH_GAP.
+const REFRESH_GAP := 0.12
+var _dirty: bool = false
+var _refresh_cooldown: float = 0.0
 
 
 func _init() -> void:
@@ -112,8 +117,9 @@ func _ready() -> void:
 	Ui.apply_label(_banner, 34, Ui.GOLD)
 	add_child(_banner)
 
-	GameState.money_changed.connect(refresh)
-	GameState.upgrades_changed.connect(refresh)
+	GameState.money_changed.connect(_on_money_changed)
+	GameState.upgrades_changed.connect(_on_upgrades_changed)
+	visibility_changed.connect(_on_visibility_changed)
 	_select_cat("Hands")
 	refresh()
 	_fit_pages()
@@ -310,7 +316,25 @@ func _on_buy(id: String) -> void:
 	_celebrate_buy(id, cost)
 
 
+func _on_money_changed() -> void:
+	_dirty = true
+
+
+func _on_upgrades_changed() -> void:
+	if visible:
+		refresh()
+	else:
+		_dirty = true
+
+
+func _on_visibility_changed() -> void:
+	if visible and _dirty:
+		refresh()
+
+
 func refresh() -> void:
+	_dirty = false
+	_refresh_cooldown = REFRESH_GAP
 	if not _user_picked_tab:
 		var ready_cat: String = _first_ready_cat()
 		if not ready_cat.is_empty():
@@ -469,6 +493,9 @@ func _card_juicing(card: Panel) -> bool:
 
 func _process(delta: float) -> void:
 	if visible:
+		_refresh_cooldown = maxf(0.0, _refresh_cooldown - delta)
+		if _dirty and _refresh_cooldown <= 0.0:
+			refresh()
 		var pulse: float = 0.78 + 0.22 * absf(sin(float(Time.get_ticks_msec()) * 0.007))
 		for item in GameState.catalog:
 			var id: String = str(item["id"])

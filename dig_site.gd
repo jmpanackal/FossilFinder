@@ -1372,7 +1372,13 @@ func east_face_rect() -> Rect2:
 	return Rect2(top.end.x - Tuning.chunk_pad, top.position.y, Tuning.chunk_pad, top.size.y + Tuning.chunk_front)
 
 
+const STRATA_TEXELS := 8
+static var _strata_tex: Dictionary = {}
+
+
 func _draw_strata_stack(rect: Rect2, start_layer: int, in_shadow: bool = true) -> void:
+	## One textured rect per wall instead of two draw calls per layer; the
+	## pit walls alone used to be ~900 canvas commands at the 16x10 claim.
 	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 		return
 	var from_layer: int = clampi(start_layer, 0, Tuning.layer_count)
@@ -1380,16 +1386,24 @@ func _draw_strata_stack(rect: Rect2, start_layer: int, in_shadow: bool = true) -
 	if remaining <= 0:
 		draw_rect(rect, Color("1A1410"))
 		return
-	var band_h: float = rect.size.y / float(remaining)
-	for i in remaining:
-		var layer: int = from_layer + i
-		var y0: float = rect.position.y + band_h * float(i)
-		var h: float = band_h if i < remaining - 1 else maxf(rect.end.y - y0, 0.0)
-		var band := Rect2(rect.position.x, y0, rect.size.x, h)
+	var tex: Texture2D = _strata_texture(in_shadow)
+	var src := Rect2(0.0, float(from_layer * STRATA_TEXELS), 1.0, float(remaining * STRATA_TEXELS))
+	draw_texture_rect_region(tex, rect, src)
+
+
+static func _strata_texture(in_shadow: bool) -> Texture2D:
+	if _strata_tex.has(in_shadow):
+		return _strata_tex[in_shadow]
+	var layers: int = Tuning.layer_count
+	var image := Image.create(1, layers * STRATA_TEXELS, false, Image.FORMAT_RGBA8)
+	for layer in layers:
 		var dirt: Color = Tuning.shaft_interior_color(layer) if in_shadow else Tuning.color_for_layer(layer).darkened(0.28)
-		draw_rect(band, dirt)
-		if i > 0:
-			draw_line(Vector2(band.position.x, band.position.y), Vector2(band.end.x, band.position.y), dirt.darkened(0.14), 1.0)
+		for t in STRATA_TEXELS:
+			var line: bool = t == 0 and layer > 0
+			image.set_pixel(0, layer * STRATA_TEXELS + t, dirt.darkened(0.14) if line else dirt)
+	var tex := ImageTexture.create_from_image(image)
+	_strata_tex[in_shadow] = tex
+	return tex
 
 
 func _column_start_layer(x: int, y: int) -> int:
@@ -1599,13 +1613,20 @@ func _draw_cracks(rect: Rect2, cell: Vector2i, layer: int) -> void:
 func _stroke_cracks(rect: Rect2, count: int, color: Color) -> void:
 	if count <= 0:
 		return
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(rect.position.x * 17 + rect.position.y * 31 + count * 9)
+	var seed: int = int(rect.position.x * 17 + rect.position.y * 31 + count * 9)
 	var width: float = _crack_stroke_width()
 	for i in count:
-		var a := rect.position + Vector2(rng.randf() * rect.size.x, rng.randf() * rect.size.y)
-		var b := rect.position + Vector2(rng.randf() * rect.size.x, rng.randf() * rect.size.y)
+		var a := rect.position + Vector2(_hash01(seed, i * 4) * rect.size.x, _hash01(seed, i * 4 + 1) * rect.size.y)
+		var b := rect.position + Vector2(_hash01(seed, i * 4 + 2) * rect.size.x, _hash01(seed, i * 4 + 3) * rect.size.y)
 		draw_line(a, b, color, width)
+
+
+## Cheap stable noise for per-frame draw code (no RandomNumberGenerator allocs).
+static func _hash01(seed: int, i: int) -> float:
+	var h: int = (seed * 73856093) ^ ((i + 1) * 19349663)
+	h = (h ^ (h >> 13)) * 1274126177
+	h = h ^ (h >> 16)
+	return float(h & 0xFFFF) / 65535.0
 
 
 func _bone_color(cell: Vector2i) -> Color:
@@ -1639,16 +1660,18 @@ func _draw_bone_mark(rect: Rect2, cell: Vector2i, clean: float) -> void:
 
 
 func _draw_inclusion(rect: Rect2, cell: Vector2i) -> void:
-	var find: Dictionary = pending_find(cell)
-	if find.is_empty():
+	if _pending.is_empty() or not _in_bounds(cell):
 		return
+	var raw: Variant = _pending[cell.x][cell.y]
+	if not (raw is Dictionary) or (raw as Dictionary).is_empty():
+		return
+	var find: Dictionary = raw
 	var rarity: int = int(find.get("rarity", 0))
 	var strength: float = Matrix.tell_strength(rarity)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(cell.x * 91 + cell.y * 53 + rarity * 17 + int(find.get("amount", 0)))
+	var seed: int = int(cell.x * 91 + cell.y * 53 + rarity * 17 + int(find.get("amount", 0)))
 	var pos := rect.position + Vector2(
-		5.0 + rng.randf() * maxf(6.0, rect.size.x - 10.0),
-		5.0 + rng.randf() * maxf(6.0, rect.size.y - 10.0)
+		5.0 + _hash01(seed, 0) * maxf(6.0, rect.size.x - 10.0),
+		5.0 + _hash01(seed, 1) * maxf(6.0, rect.size.y - 10.0)
 	)
 	if rarity <= Matrix.RARITY_COMMON:
 		draw_circle(pos, 1.35, Color(0.22, 0.15, 0.1, 0.38 + strength * 0.2))
@@ -1662,10 +1685,9 @@ func _draw_dust_specks(rect: Rect2, cell: Vector2i, clean: float) -> void:
 	var specks := int(round((1.0 - clean) * 10.0))
 	if specks <= 0:
 		return
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(cell.x * 41 + cell.y * 73 + 11)
+	var seed: int = int(cell.x * 41 + cell.y * 73 + 11)
 	for i in specks:
-		var pos := rect.position + Vector2(6.0 + rng.randf() * (rect.size.x - 12.0), 6.0 + rng.randf() * (rect.size.y - 12.0))
+		var pos := rect.position + Vector2(6.0 + _hash01(seed, i * 2) * (rect.size.x - 12.0), 6.0 + _hash01(seed, i * 2 + 1) * (rect.size.y - 12.0))
 		draw_circle(pos, 1.6, Color(0.28, 0.2, 0.12, 0.55))
 
 

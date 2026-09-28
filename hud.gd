@@ -74,6 +74,11 @@ var _tool_colors := [
 var _tool_flash: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 var _clock_flash: float = 0.0
 var _equipped_tool: int = Tuning.TOOL_HANDS
+## refresh() runs every frame. Restyling buttons and re-laying out the rail each
+## frame cost several ms, so both only happen when their inputs change.
+var _tool_style_key: String = ""
+var _layout_key: String = ""
+var _cards_key: String = ""
 
 
 func _ready() -> void:
@@ -156,6 +161,32 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 	_highlight_tool(tool)
 	_apply_tool_flashes()
 	_find_box.visible = show_find or not _chips.is_empty()
+	_layout_if_changed()
+
+
+func _current_layout_key() -> String:
+	var nav := Rect2()
+	if Settings != null and Settings.has_method("nav_rect"):
+		nav = Settings.nav_rect()
+	var wallet_w: float = _wallet.size.x if _wallet != null else 0.0
+	var clock_len: int = _clock_time.text.length() if _clock_time != null else 0
+	return "%s|%s|%s|%s|%d|%s|%s|%d" % [
+		Vector2(Tuning.view_w, Tuning.view_h),
+		Tuning.pit_grid_rect(),
+		Tuning.chunk_front,
+		nav,
+		clock_len,
+		wallet_w,
+		_find_box.visible if _find_box != null else false,
+		_visible_tool_count(),
+	]
+
+
+func _layout_if_changed() -> void:
+	var key: String = _current_layout_key()
+	if key == _layout_key:
+		return
+	_layout_key = key
 	_layout_chrome()
 
 
@@ -164,6 +195,10 @@ func set_find_cards(cards: Array) -> void:
 	for raw in cards:
 		if raw is Dictionary and _card_is_uncovered(raw):
 			shown.append(raw)
+	var key: String = _cards_signature(shown)
+	if key == _cards_key and _chips.size() == shown.size():
+		return
+	_cards_key = key
 	while _chips.size() > shown.size():
 		var extra: Node = _chips.pop_back()
 		if extra != null:
@@ -187,9 +222,23 @@ func set_find_cards(cards: Array) -> void:
 			chip.call("fit_tray", each, crowded)
 	_apply_headline_to_chips()
 	_find_box.visible = not shown.is_empty()
-	_layout_chrome()
+	_layout_key = ""
+	_layout_if_changed()
 	if _find_box != null:
 		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
+
+
+func _cards_signature(shown: Array) -> String:
+	var parts: PackedStringArray = []
+	parts.append(str(Tuning.pit_grid_size()))
+	for card in shown:
+		var c: Dictionary = card
+		parts.append("%s/%s/%s/%s/%s/%s/%s/%s/%s" % [
+			c.get("index", -1), c.get("name", ""), c.get("status", ""), c.get("stars", 0),
+			c.get("dirt", ""), c.get("value", 0), c.get("fate", ""), c.get("progress", ""),
+			c.get("exposed", 0),
+		])
+	return ";".join(parts)
 
 
 func _chip_width_for_count(n: int, tray_w: float) -> float:
@@ -636,6 +685,12 @@ func _on_tool_pressed(tool: int) -> void:
 
 
 func _highlight_tool(tool: int) -> void:
+	var key: String = str(tool)
+	for i in _tool_buttons.size():
+		key += "1" if GameState.owns_tool(_slot_tools[i]) else "0"
+	if key == _tool_style_key:
+		return
+	_tool_style_key = key
 	for i in _tool_buttons.size():
 		var id: int = _slot_tools[i]
 		var owned: bool = GameState.owns_tool(id)
@@ -647,17 +702,22 @@ func _highlight_tool(tool: int) -> void:
 		Ui.apply_tool_button(_tool_buttons[i], on)
 		_tool_buttons[i].modulate = Color.WHITE
 	_sync_tool_roles()
+	_layout_key = ""
 	_layout_chrome()
 
 
 func _apply_tool_flashes() -> void:
 	for i in _tool_buttons.size():
 		var id: int = _slot_tools[i]
-		if not _tool_slots[i].visible or id >= _tool_flash.size() or _tool_flash[id] <= 0.0:
+		if not _tool_slots[i].visible:
+			continue
+		if id >= _tool_flash.size() or _tool_flash[id] <= 0.0:
+			if _tool_buttons[i].modulate != Color.WHITE:
+				_tool_buttons[i].modulate = Color.WHITE
 			continue
 		var glow: float = _tool_flash[id]
 		var pulse: float = 0.55 + 0.45 * absf(sin(glow * TAU * 2.2))
-		_tool_buttons[i].modulate = Color("FFE08A").lerp(_tool_buttons[i].modulate, 1.0 - glow * pulse)
+		_tool_buttons[i].modulate = Color("FFE08A").lerp(Color.WHITE, 1.0 - glow * pulse)
 
 
 func _layout_chrome() -> void:

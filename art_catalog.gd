@@ -13,10 +13,14 @@ const TOOL_PX := Vector2i(32, 32)
 const SCRAP_PX := Vector2i(16, 16)
 
 static var final_root: String = DEFAULT_FINAL_ROOT
+## Draw code asks for textures per cell per frame. Resolving hits the disk and
+## scans pixels, so shipped art under the default root is looked up once.
+static var _texture_cache: Dictionary = {}
 
 
 static func reset_roots() -> void:
 	final_root = DEFAULT_FINAL_ROOT
+	_texture_cache.clear()
 
 
 static func rel_path(kind: String, id: String) -> String:
@@ -71,6 +75,17 @@ static func resolve(kind: String, id: String) -> String:
 
 
 static func texture(kind: String, id: String) -> Texture2D:
+	if final_root != DEFAULT_FINAL_ROOT:
+		return _load_texture(kind, id)
+	var key: String = "%s/%s" % [kind, id]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var tex: Texture2D = _load_texture(kind, id)
+	_texture_cache[key] = tex
+	return tex
+
+
+static func _load_texture(kind: String, id: String) -> Texture2D:
 	var path: String = resolve(kind, id)
 	if path.is_empty():
 		return null

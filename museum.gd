@@ -89,7 +89,8 @@ func _ready() -> void:
 	_apply_pan()
 
 	GameState.collection_changed.connect(_refresh)
-	GameState.money_changed.connect(_refresh)
+	GameState.money_changed.connect(_on_money_changed)
+	visibility_changed.connect(_on_money_changed)
 	GameState.hall_changed.connect(_refresh)
 	Settings.menu_toggled.connect(_on_settings_toggled)
 	get_viewport().size_changed.connect(_on_view_resized)
@@ -415,6 +416,12 @@ func _clamp_pan(p: Vector2) -> Vector2:
 		min_y = (view.y - scaled.y) * 0.5
 		max_y = min_y
 	return Vector2(clampf(p.x, min_x, max_x), clampf(p.y, min_y, max_y))
+
+
+func _on_money_changed() -> void:
+	## The hall header is the only money-driven chrome; skip it while hidden.
+	if visible:
+		_refresh()
 
 
 func _refresh() -> void:
