@@ -314,7 +314,9 @@ func _test_plain_names_and_hints() -> void:
 	for entry in GS.catalog:
 		if str(entry["id"]) == "hands_cast":
 			item = entry
-	_assert(str(item.get("unlock_desc", "")).contains("GAINS a star") and str(item.get("unlock_desc", "")).contains("Hold"), "Plaster Cast says: hold to plaster, quick plaster gains a star")
+	var desc: String = str(item.get("unlock_desc", ""))
+	_assert(desc.contains("gains a star") and desc.contains("Hold"), "Plaster Cast says: hold to plaster, quick plaster gains a star")
+	_assert(desc.length() <= 110 and not desc.contains("Opal"), "Plaster Cast copy stays short")
 
 
 func _assert(ok: bool, label: String) -> void:

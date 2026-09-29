@@ -45,7 +45,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
 	{"id": "hands_sense", "cat": "Hands", "tier": 1, "name": "Bone Sense", "desc": "Feel for buried bone farther away.", "unlock_name": "Bone Sense", "unlock_desc": "Digging by hand marks buried bone in nearby cells.", "unlock_action": "Unlock", "cost": 60, "scale": 1.9, "max": 4},
-	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Plaster faster: a quicker hold means you catch the +1★ window more often.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a dug-out Fragile or Opal bone to plaster it. Plaster quickly and it GAINS a star. Wait and it only keeps what is left, or less.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
+	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Plaster faster: a quicker hold means you catch the +1★ window more often.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a crumbling bone to plaster it. Quick plaster gains a star; late plaster only keeps it.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
 	{"id": "hands_burlap", "cat": "Hands", "tier": 2, "name": "Wet Burlap", "desc": "Keeps dug-out Fragile and Opal bones damp: more time before each lost star.", "unlock_name": "Wet Burlap", "unlock_desc": "Drape damp cloth over crumbling bones: they take longer to lose each star, so you have more time to brush and plaster.", "unlock_action": "Unlock", "cost": 2200, "scale": 1.9, "max": 4, "requires": "hands_cast"},
 	{"id": "hands_consolidant", "cat": "Hands", "tier": 3, "name": "Consolidant", "desc": "Quick plaster gains +2 stars instead of +1.", "unlock_name": "Consolidant", "unlock_desc": "A hardening resin soaked in before the plaster: quick plaster now gains +2 stars (then +1, then keeps, as it dries).", "unlock_action": "Unlock", "cost": 60000, "scale": 1.0, "max": 1, "requires": "hands_burlap"},
 	{"id": "hands_resin", "cat": "Hands", "tier": 4, "name": "Museum Resin", "desc": "Quick plaster gains +3 stars.", "unlock_name": "Museum Resin", "unlock_desc": "Lab-grade resin: quick plaster now gains +3 stars, turning even a Fair bone Perfect if you are fast.", "unlock_action": "Unlock", "cost": 900000, "scale": 1.0, "max": 1, "requires": "hands_consolidant"},
@@ -1715,11 +1715,36 @@ func piece_visitors(piece_id: String, force_clean: bool = false) -> int:
 	var exhibit: bool = stand_uses_exhibit_rate(stand_for_piece(piece_id))
 	var clean_draw: int = Tuning.visitor_draw_exhibit_clean if exhibit else Tuning.visitor_draw_scrap_clean
 	var dirty_draw: int = Tuning.visitor_draw_exhibit_dirty if exhibit else Tuning.visitor_draw_scrap_dirty
-	var draw: int = clean_draw if clean else clampi(int(round(float(dirty_draw) * Tuning.dirty_income_factor)), dirty_draw, clean_draw)
+	## How dirty it is matters, not just clean-or-not: income slides from the
+	## dirty floor (fully caked) up to full as the bone gets cleaner.
+	var cleanliness: float = 1.0 if clean else clampf(float(piece.get("cleanliness", 0.0)), 0.0, 1.0)
+	var floor_draw: float = minf(float(dirty_draw) * Tuning.dirty_income_factor, float(clean_draw))
+	var draw: float = lerpf(floor_draw, float(clean_draw), cleanliness)
 	## Better-condition bones draw more visitors (Good = 1x).
 	var cond_mult: float = Tuning.condition_visitors(int(piece.get("condition", Tuning.CONDITION_GOOD)))
 	var scale: float = stand_size_scale(stand_for_piece(piece_id)) if exhibit else 1.0
-	return int(round(float(draw * count) * cond_mult * scale))
+	return int(round(draw * float(count) * cond_mult * scale))
+
+
+## How clean a displayed bone is, 0..1 (1 = fully clean).
+func piece_cleanliness(piece_id: String) -> float:
+	if not has_piece(piece_id):
+		return 0.0
+	var piece: Dictionary = pieces[piece_id]
+	return 1.0 if bool(piece.get("clean", false)) else clampf(float(piece.get("cleanliness", 0.0)), 0.0, 1.0)
+
+
+## A displayed bone's own share of its stand's $/sec (stars, dirt and the
+## stand's complete/Masterpiece/Featured boosts all included).
+func piece_stand_income(piece_id: String) -> float:
+	var stand_id: String = stand_for_piece(piece_id)
+	var raw: int = 0
+	for other in pieces:
+		if stand_for_piece(str(other)) == stand_id:
+			raw += piece_visitors(str(other))
+	if raw <= 0:
+		return 0.0
+	return float(piece_visitors(piece_id)) / float(raw) * stand_income(stand_id)
 
 
 ## Dino skeletons need different bone counts (Velociraptor 6, T. rex 11).
@@ -1825,41 +1850,6 @@ func piece_income(piece_id: String) -> float:
 func stand_income(stand_id: String) -> float:
 	return float(stand_visitors(stand_id)) * museum_donation()
 
-
-## What a dirty bone earns next to a clean one (e.g. 0.4 = 40%).
-func dirty_income_share() -> float:
-	var clean_draw: float = float(Tuning.visitor_draw_exhibit_clean)
-	var dirty_draw: float = clampf(roundf(float(Tuning.visitor_draw_exhibit_dirty) * Tuning.dirty_income_factor), float(Tuning.visitor_draw_exhibit_dirty), clean_draw)
-	return dirty_draw / maxf(clean_draw, 1.0)
-
-
-## Everything the $/sec hover card explains: where a stand's income comes
-## from, and what dirty bones are costing it.
-func stand_income_breakdown(stand_id: String) -> Dictionary:
-	var clean: int = 0
-	var dirty: int = 0
-	for piece_id in pieces:
-		var id: String = str(piece_id)
-		if stand_for_piece(id) != stand_id:
-			continue
-		if piece_is_clean(id):
-			clean += 1
-		else:
-			dirty += 1
-	var income: float = stand_income(stand_id)
-	var if_clean: float = float(stand_visitors(stand_id, true)) * museum_donation()
-	return {
-		"income": income,
-		"visitors": stand_visitors(stand_id),
-		"each": museum_donation(),
-		"clean": clean,
-		"dirty": dirty,
-		"dirty_share": dirty_income_share(),
-		"clean_gain": maxf(if_clean - income, 0.0),
-		"complete": stand_is_complete(stand_id),
-		"master": stand_is_masterpiece(stand_id),
-		"featured": stand_id == featured_stand_id,
-	}
 
 
 func unveil_stand(stand_id: String) -> int:

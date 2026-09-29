@@ -2286,37 +2286,38 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		var anchor: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 16.0)
 		var owned: bool = Tuning.cast_owned()
 		var castable: bool = owned and _castable(find)
-		var lead: String = "Crumbling: -1"
-		var tail: String = "in %ds" % int(ceil(left))
+		## Words say what plastering NOW does; the draining bar under them is
+		## the time left in this window (no numbers to read mid-dig).
+		var lead: String = "Crumbling: losing stars"
+		var show_star: bool = false
 		var color := Color("FF6A4A") if urgent else (Color("9FE3F0") if kind == Tuning.BONE_OPAL else Color("F2E6C4"))
 		if castable:
-			## Plaster windows: what plastering NOW gives, and how long it lasts.
 			var delta: int = plaster_delta(find)
 			if delta > 0:
-				lead = "Plaster now: +%d" % delta
+				lead = "Plaster now to gain +%d" % delta
+				show_star = true
 				color = Color("FFD66B")
 			elif delta == 0:
-				lead = "Plaster now: keeps"
+				lead = "Plaster now to keep its stars"
 				color = Color("F2E6C4")
 			else:
-				lead = "Plaster now: %d" % delta
+				lead = "Plaster now: loses %d" % -delta
+				show_star = true
 				color = Color("FF6A4A")
-			tail = "· %ds" % int(ceil(left))
 		var fs: int = 13
 		var lead_w: float = font.get_string_size(lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var tail_w: float = font.get_string_size(tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var star_w: float = 14.0
-		var w: float = lead_w + star_w + tail_w + 20.0
-		var plate := Rect2(anchor - Vector2(w * 0.5, 11.0), Vector2(w, 22.0))
+		var star_w: float = 15.0 if show_star else 0.0
+		var w: float = lead_w + star_w + 16.0
+		var plate := Rect2(anchor - Vector2(w * 0.5, 12.0), Vector2(w, 24.0))
 		c.draw_rect(plate, Color(0.1, 0.07, 0.05, 0.9))
 		c.draw_rect(plate, color, false, 1.5)
-		c.draw_rect(Rect2(plate.position.x + 2.0, plate.end.y - 4.0, (plate.size.x - 4.0) * frac, 2.0), color)
-		var x: float = plate.position.x + 7.0
-		c.draw_string(font, Vector2(x, anchor.y + 4.5), lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
-		x += lead_w + 1.0
-		_fx_star(c, Vector2(x + star_w * 0.5, anchor.y - 0.5), 6.0, color)
-		x += star_w + 3.0
-		c.draw_string(font, Vector2(x, anchor.y + 4.5), tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		var bar := Rect2(plate.position.x + 3.0, plate.end.y - 6.0, plate.size.x - 6.0, 4.0)
+		c.draw_rect(bar, Color(color, 0.18))
+		c.draw_rect(Rect2(bar.position, Vector2(bar.size.x * frac, bar.size.y)), color)
+		var x: float = plate.position.x + 8.0
+		c.draw_string(font, Vector2(x, anchor.y + 2.5), lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		if show_star:
+			_fx_star(c, Vector2(x + lead_w + 2.0 + star_w * 0.5, anchor.y - 2.5), 6.0, color)
 		## The action strip sits ABOVE the plate so it never hides the bone.
 		var tip: String = ""
 		if castable:
