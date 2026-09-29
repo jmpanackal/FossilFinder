@@ -25,6 +25,7 @@ func _run() -> void:
 	_test_cart_climbs_one_level_per_interval()
 	_test_cart_ties_go_to_the_pricier_bone_and_stay()
 	_test_cart_is_a_late_game_upgrade()
+	_test_catalog_tiers_never_go_backwards()
 	_test_parked_cart_does_nothing()
 	_test_cart_ranks_clean_faster()
 	_test_cart_position_saves()
@@ -182,6 +183,22 @@ func _test_cart_is_a_late_game_upgrade() -> void:
 	_assert(int(GS.levels["workshop"]) == 0, "the cart was never bought")
 	_assert(GS.prep_cart_seconds(1) >= 300, "a rank 1 cart is very slow")
 	_reset()
+
+
+func _test_catalog_tiers_never_go_backwards() -> void:
+	## The shop opens a new tier section whenever the tier changes down the
+	## catalog, so an out-of-place row shows a duplicate "Museum III" block.
+	var last: Dictionary = {}
+	var ok: bool = true
+	var bad: String = ""
+	for item in GS.catalog:
+		var cat: String = str(item["cat"])
+		var tier: int = int(item["tier"])
+		if last.has(cat) and tier < int(last[cat]):
+			ok = false
+			bad = str(item["id"])
+		last[cat] = tier
+	_assert(ok, "catalog rows stay grouped by tier in every shop tab (%s)" % bad)
 
 
 func _test_parked_cart_does_nothing() -> void:
