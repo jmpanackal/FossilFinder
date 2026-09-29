@@ -1823,7 +1823,9 @@ func piece_visitors(piece_id: String, force_clean: bool = false) -> int:
 	## Better-condition bones draw more visitors (Good = 1x).
 	var cond_mult: float = Tuning.condition_visitors(int(piece.get("condition", Tuning.CONDITION_GOOD)))
 	var scale: float = stand_size_scale(stand_for_piece(piece_id)) if exhibit else 1.0
-	return int(round(draw * float(count) * cond_mult * scale))
+	var weight: float = piece_unit_weight(piece_id) if exhibit else 1.0
+	## Every mounted bone draws at least one visitor, however small.
+	return maxi(1, int(round(draw * float(count) * weight * cond_mult * scale)))
 
 
 ## How clean a displayed bone is, 0..1 (1 = fully clean).
@@ -1863,6 +1865,32 @@ func stand_size_scale(stand_id: String) -> float:
 	var scale: float = Tuning.stand_target_units / float(units) * edge
 	_stand_scale_cache[stand_id] = scale
 	return scale
+
+
+## How much one copy of a bone draws compared with an average bone on its
+## stand (1.0 = average). Bigger, more intricate bones (higher base_value) draw
+## more, so a skull always out-earns a tail and a tail out-earns a tooth. A
+## set of small bones (need > 1) shares one base_value between its copies, so a
+## full set of teeth never out-earns a big bone. Weights are normalised per
+## stand, so a finished stand's total draw is unchanged.
+func piece_unit_weight(piece_id: String) -> float:
+	var key: String = "w|" + piece_id
+	if _stand_scale_cache.has(key):
+		return float(_stand_scale_cache[key])
+	var stand_id: String = stand_for_piece(piece_id)
+	var units: float = 0.0
+	var total_value: float = 0.0
+	for id in stand_piece_ids(stand_id):
+		units += float(piece_need(str(id)))
+		var other: FossilData = fossil_data_for(str(id))
+		total_value += float(other.base_value) if other != null else 1.0
+	var data: FossilData = fossil_data_for(piece_id)
+	var weight: float = 1.0
+	if data != null and total_value > 0.0 and units > 0.0:
+		var per_copy: float = float(data.base_value) / float(piece_need(piece_id))
+		weight = per_copy * units / total_value
+	_stand_scale_cache[key] = weight
+	return weight
 
 
 func stand_visitors(stand_id: String, force_clean: bool = false) -> int:

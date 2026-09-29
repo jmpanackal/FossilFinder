@@ -392,10 +392,11 @@ func _test_shop_dollar_this_buy_is_at_least_a_cent() -> void:
 
 
 func _pack_fifty_visitors() -> void:
+	## Bigger bones draw more (skull 19, femur 9, jaw 8, ribcage 8, tail 5, one
+	## tooth 1), and these six add up to exactly 50 for round dollar maths.
 	var ids := [
 		"t_rex_skull", "t_rex_jaw", "t_rex_ribcage", "t_rex_femur", "t_rex_tail",
-		"triceratops_skull", "triceratops_brow_horns", "triceratops_nose_horn",
-		"triceratops_hind_limb", "triceratops_tail",
+		"t_rex_tooth",
 	]
 	for id in ids:
 		GS.install_find(id, id, 1.0, true)

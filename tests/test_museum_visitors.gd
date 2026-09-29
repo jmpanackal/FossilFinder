@@ -34,6 +34,7 @@ func _run() -> void:
 	_test_richer_stands_hold_visitors_longer()
 	_test_each_stand_shows_its_own_rate()
 	_test_spotlight_raises_the_featured_stand_rate()
+	_test_bigger_bones_always_earn_more()
 	print("museum_visitors %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -461,6 +462,50 @@ func _test_spotlight_raises_the_featured_stand_rate() -> void:
 	_assert(after != before, "the stand chip updates when the exhibit is featured")
 	_assert(after.find("$") >= 0 and after.find("/ sec") >= 0, "featured rate stays $ / sec")
 	exhibit.free()
+
+
+func _reset_hall() -> void:
+	GS.pieces.clear()
+	GS.pending_unveils.clear()
+	GS.featured_stand_id = ""
+	GS.cleaner_stand_id = ""
+	for item in GS.catalog:
+		GS.levels[item["id"]] = 0
+	GS.apply_upgrades()
+
+
+func _test_bigger_bones_always_earn_more() -> void:
+	## With the same stars and cleanliness, a bone's income follows its size
+	## (base_value): a skull beats a tail beats a tooth on every dino stand, and
+	## a full set of small bones never out-earns a bigger bone.
+	for stand_id in ["t_rex", "triceratops", "brachiosaurus", "velociraptor", "stegosaurus"]:
+		_reset_hall()
+		var ids: PackedStringArray = GS.stand_piece_ids(stand_id)
+		for id in ids:
+			while bool(GS.piece_needs_more(id)):
+				GS.install_find(id, id, 1.0, true, 3)
+		GS.pending_unveils.clear()
+		var ok: bool = true
+		var worst: String = ""
+		for a in ids:
+			for b in ids:
+				var va: float = float(GS.fossil_data_for(a).base_value)
+				var vb: float = float(GS.fossil_data_for(b).base_value)
+				if va > vb and float(GS.piece_stand_income(a)) < float(GS.piece_stand_income(b)):
+					ok = false
+					worst = "%s < %s" % [a, b]
+		_assert(ok, "%s: higher base value never earns less (%s)" % [stand_id, worst])
+	_reset_hall()
+	## The stand's total is unchanged by the split: same visitors as equal weights.
+	for id in GS.stand_piece_ids("brachiosaurus"):
+		while bool(GS.piece_needs_more(id)):
+			GS.install_find(id, id, 1.0, true, 3)
+	GS.pending_unveils.clear()
+	var neck: float = float(GS.piece_stand_income("brachiosaurus_neck"))
+	var tooth: float = float(GS.piece_stand_income("brachiosaurus_tooth"))
+	var humerus: float = float(GS.piece_stand_income("brachiosaurus_humerus"))
+	_assert(neck > humerus and humerus > tooth, "brachiosaurus: neck > humerus > the whole tooth set")
+	_reset_hall()
 
 
 func _assert(ok: bool, label: String) -> void:

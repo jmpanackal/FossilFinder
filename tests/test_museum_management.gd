@@ -347,7 +347,8 @@ func _test_exhibit_upgrades_lengthen_and_strengthen_rush() -> void:
 	GS.levels["unveil_crowd"] = 1
 	GS.apply_upgrades()
 	_assert(float(TN.unveil_spike_seconds) > base_secs, "Opening Hours lengthens the rush")
-	GS.install_find("triceratops_skull", "Triceratops Skull", 1.0, true)
+	## A small bone: a big one (a skull) now out-earns the fixed unveil surge alone.
+	GS.install_find("triceratops_tail", "Triceratops Tail", 1.0, true)
 	var base: float = _income_base()
 	GS.unveil_stand("triceratops")
 	var rush: float = _rush_rate()
