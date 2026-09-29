@@ -1,7 +1,7 @@
 class_name LuckyStrike
 extends RefCounted
 
-## Mid-shift amber pocket: a glowing lump of amber (with an insect inside) under
+## Mid-shift agate pocket: a glowing lump of agate under
 ## one cell of dirt. Strike it before it fades for a cash burst.
 
 
@@ -45,7 +45,7 @@ static func burst_payout(base_money: int) -> int:
 
 
 static func toast_title() -> String:
-	return "Amber pocket!"
+	return "Agate pocket!"
 
 
 static func float_text(amount: int) -> String:

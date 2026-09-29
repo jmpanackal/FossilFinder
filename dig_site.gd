@@ -17,7 +17,7 @@ signal fossil_ready_to_dust(find_index: int)
 signal tool_used(tool: int)
 signal lucky_struck(amount: int, world_pos: Vector2)
 signal lucky_fled
-## An amber pocket just started glowing in the dirt.
+## An agate pocket just started glowing in the dirt.
 signal lucky_appeared(world_pos: Vector2)
 signal bone_sensed(world_pos: Vector2)
 ## A bone was fully uncovered and its hidden condition (1 Poor .. 5 Perfect) shows.
@@ -329,8 +329,7 @@ func _refresh_pending(cell: Vector2i) -> void:
 	_pending[cell.x][cell.y] = _roll_matrix(layer)
 
 
-## An amber pocket: a glowing lump of amber showing through the dirt with a tiny
-## insect trapped inside, the classic fossil find. No box, no crosshair: it
+## An agate pocket: a glowing lump of agate showing through the dirt. No box, no crosshair: it
 ## should look like something in the ground, not a button.
 func _draw_lucky() -> void:
 	var cell := _lucky_cell
@@ -1749,11 +1748,12 @@ func _draw() -> void:
 		for x in width:
 			_draw_cell_sides(x, y)
 			_draw_top(x, y)
-	_draw_pit_finish()
 	_drawing = false
+	_draw_pit_finish()
 	_draw_bone_pulse()
 	_draw_find_markers()
 	_draw_lucky()
+
 
 ## Finishing touches on the pit's edges: a faint warm wash over the wall faces
 ## (never the cells) and a soft inner shadow along all four sides, so the walls
@@ -1778,7 +1778,6 @@ func _draw_pit_finish() -> void:
 	draw_polygon(PackedVector2Array([Vector2(x0, y1 - w), Vector2(x1, y1 - w), Vector2(x1, y1), Vector2(x0, y1)]), PackedColorArray([clear, clear, dark, dark]))
 	draw_polygon(PackedVector2Array([Vector2(x0, y0), Vector2(x0 + w, y0), Vector2(x0 + w, y1), Vector2(x0, y1)]), PackedColorArray([dark, clear, clear, dark]))
 	draw_polygon(PackedVector2Array([Vector2(x1 - w, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x1 - w, y1)]), PackedColorArray([clear, dark, dark, clear]))
-
 
 
 func _chunk_top() -> Rect2:
@@ -2006,10 +2005,10 @@ func _draw_top(x: int, y: int) -> void:
 	var edge := 0.18
 	if bone:
 		edge += float(cleanliness.get(cell, 0.0)) * 0.22
+	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
 	if layer < Tuning.layer_count and not bone:
 		## A soft shade along the bottom edge gives each cell a little thickness.
 		draw_rect(Rect2(rect.position.x + 2.0, rect.end.y - 4.0, rect.size.x - 4.0, 3.0), Color(0.12, 0.07, 0.03, 0.14))
-	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
 	if y == 0:
 		_draw_north_cell_shade(rect, color)
 	_draw_cracks(rect, cell, layer)

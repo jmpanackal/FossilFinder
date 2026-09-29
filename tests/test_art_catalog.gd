@@ -140,7 +140,7 @@ func _test_id_helpers_match_game() -> void:
 		_assert(SCRAP_IDS.has(kind_name), "scrap drop list includes matrix icon %s" % kind_name)
 	_assert(str(Matrix.icon_kind("rust flake")) == "flake", "rust flake still maps to flake.png")
 	_assert(str(Matrix.icon_kind("shell hash")) == "shell", "shell hash still maps to shell.png")
-	_assert(str(Matrix.icon_kind("amber speck")) == "amber", "amber speck still maps to amber.png")
+	_assert(str(Matrix.icon_kind("agate chip")) == "amber", "agate chip still maps to amber.png")
 
 
 func _test_ai_placeholders_exist_at_exact_sizes() -> void:

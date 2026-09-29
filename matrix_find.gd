@@ -11,7 +11,7 @@ const RARITY_UNCOMMON := 1
 const RARITY_RARE := 2
 const DIRT_COMMON: PackedStringArray = ["shell hash", "pebble", "fish scale", "rust flake", "seed"]
 const DIRT_UNCOMMON: PackedStringArray = ["tiny toothlet", "glassy chip", "bone flake", "pyrite fleck"]
-const DIRT_RARE: PackedStringArray = ["amber speck", "opal flake", "enamel chip"]
+const DIRT_RARE: PackedStringArray = ["agate chip", "opal flake", "enamel chip"]
 const STONE_UNCOMMON: PackedStringArray = ["nodule", "geode crumb", "crystal shard"]
 const STONE_RARE: PackedStringArray = ["quartz nodule", "calcite crystal", "ironstone nodule"]
 
@@ -93,7 +93,7 @@ static func icon_kind(find_or_name: Variant) -> String:
 		return "speck"
 	if key.find("pyrite") >= 0:
 		return "sparkle"
-	if key.find("amber") >= 0:
+	if key.find("agate") >= 0:
 		return "amber"
 	if key.find("opal") >= 0:
 		return "opal"

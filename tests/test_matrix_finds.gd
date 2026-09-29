@@ -277,7 +277,7 @@ func _test_wide_scoop_batches_a_few_floats() -> void:
 	for i in 21:
 		pile.append({"name": "pebble", "amount": 1, "rarity": 0})
 	pile[3] = {"name": "tiny toothlet", "amount": 3, "rarity": 1}
-	pile[9] = {"name": "amber speck", "amount": 5, "rarity": 2}
+	pile[9] = {"name": "agate chip", "amount": 5, "rarity": 2}
 	_assert(Matrix.has_method("batch_display"), "wide scoops batch find floats")
 	if not Matrix.has_method("batch_display"):
 		return
@@ -290,7 +290,7 @@ func _test_wide_scoop_batches_a_few_floats() -> void:
 		names.append(str(raw.get("name", "")))
 	_assert(shown <= 21 + 2 + 4, "capped sprites do not reprint the leftover as a fatter last label")
 	var blob: String = " ".join(names).to_lower()
-	_assert(blob.find("amber") >= 0 or blob.find("toothlet") >= 0, "the rare scrap still gets a sprite")
+	_assert(blob.find("agate") >= 0 or blob.find("toothlet") >= 0, "the rare scrap still gets a sprite")
 
 
 func _test_lucky_is_a_matrix_glint() -> void:
@@ -299,7 +299,7 @@ func _test_lucky_is_a_matrix_glint() -> void:
 	_assert(Lucky.has_method("toast_title"), "lucky strike exposes glint copy")
 	if Lucky.has_method("toast_title"):
 		var title: String = str(Lucky.toast_title()).to_lower()
-		_assert(title.find("amber") >= 0, "the shiny cell is an amber pocket")
+		_assert(title.find("agate") >= 0, "the shiny cell is an agate pocket")
 		_assert(title.find("glint") < 0 and title.find("matrix") < 0, "no jargon in the pocket's name")
 		_assert(title.find("beetle") < 0, "pocket copy is not a beetle")
 		_assert(title.find("lucky strike") < 0, "pocket copy drops lucky-strike leftover")
@@ -435,7 +435,7 @@ func _test_wide_scoop_caps_sprites_without_merging() -> void:
 	for i in 21:
 		pile.append({"name": "pebble", "amount": 1, "rarity": 0, "origin": Vector2(float(i) * 8.0, 0.0)})
 	pile[3] = {"name": "tiny toothlet", "amount": 3, "rarity": 1, "origin": Vector2(24, 0)}
-	pile[9] = {"name": "amber speck", "amount": 5, "rarity": 2, "origin": Vector2(72, 0)}
+	pile[9] = {"name": "agate chip", "amount": 5, "rarity": 2, "origin": Vector2(72, 0)}
 	var juice: Array = Matrix.batch_display(pile, 5)
 	_assert(juice.size() >= 3 and juice.size() <= 5, "wide scoop flies 3-5 objects, not every cell")
 	var shown: int = 0
@@ -585,7 +585,7 @@ func _test_shovel_ranks_do_not_print_rare_loot() -> void:
 			uncommon += 1
 	_assert(rare == 0, "Super Shovel does not print rare toothlets")
 	_assert(uncommon == 0, "shovel radius and Heavy Swings do not raise find rarity")
-	var pending := {"name": "amber speck", "amount": 8, "rarity": 2}
+	var pending := {"name": "agate chip", "amount": 8, "rarity": 2}
 	if Matrix.has_method("harvest"):
 		var scoop: Dictionary = Matrix.harvest(pending, 0, TN.TOOL_SHOVEL)
 		_assert(int(scoop.get("rarity", -1)) == 0, "a 21-cell scoop still downgrades a rare tell to spoil")

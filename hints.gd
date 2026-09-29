@@ -11,7 +11,7 @@ const KEY_PREFIX := "tip_"
 const TIPS: Array[Dictionary] = [
 	{"id": "dig", "title": "Dig for bones", "text": "Click the dirt to dig. There may be bones buried below."},
 	{"id": "sifted", "title": "Sifted finds", "text": "Digging can turn up small finds that sell for cash."},
-	{"id": "pocket", "title": "Amber pocket!", "text": "Strike the glowing amber before it fades for cash."},
+	{"id": "pocket", "title": "Agate pocket!", "text": "Strike the glowing agate before it fades for cash."},
 	{"id": "tools", "title": "New tool", "text": "Press 1-4 or scroll to switch tools."},
 	{"id": "hold", "title": "Hold to dig", "text": "Hold the mouse button to keep digging."},
 	{"id": "sense", "title": "Bone Sense", "text": "Hand digging now marks bone in nearby cells."},
