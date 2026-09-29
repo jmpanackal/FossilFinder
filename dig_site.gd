@@ -1821,7 +1821,12 @@ func _draw_cell_sides(x: int, y: int) -> void:
 func _cell_face_color(x: int, y: int) -> Color:
 	var cell := Vector2i(x, y)
 	if _is_exposed_fossil(cell):
-		return _bone_color(cell).darkened(0.28)
+		## The side matches what is on top: dirt while it is dirty, bone as it
+		## is brushed clean, so the column never looks two-toned.
+		var bone: Color = _bone_color(cell)
+		var clean: float = clampf(float(cleanliness.get(cell, 0.0)), 0.0, 1.0)
+		var dirt: Color = _dust_face_color(cell)
+		return dirt.lerp(bone, clean).darkened(0.28)
 	var layer: int = _top_layer[x][y]
 	if layer >= Tuning.layer_count:
 		return Color("1A1410")
@@ -2131,6 +2136,18 @@ const DUST_LAYER_COLORS: PackedColorArray = [
 
 
 const BONE_RIM := Color("F2E3BE")
+
+
+func _dust_face_color(cell: Vector2i) -> Color:
+	## The color of the thickest dirt still on this cell (outer layer first).
+	if not dust.has(cell):
+		return DUST_LAYER_COLORS[0]
+	var grid: PackedFloat32Array = dust[cell]
+	var most: float = 0.0
+	for amount in grid:
+		most = maxf(most, amount)
+	var depth: int = clampi(int(ceil(most)) - 1, 0, DUST_LAYER_COLORS.size() - 1)
+	return DUST_LAYER_COLORS[depth]
 
 
 func _draw_dust(rect: Rect2, cell: Vector2i) -> void:

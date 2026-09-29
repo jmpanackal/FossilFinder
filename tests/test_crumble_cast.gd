@@ -64,6 +64,16 @@ func _test_kinds_roll_mostly_solid() -> void:
 		counts[int(TN.roll_bone_kind(rng))] += 1
 	_assert(counts[0] > counts[1] and counts[1] > counts[2], "solid > fragile > opal")
 	_assert(counts[2] > 0, "opal does turn up")
+	## Opal is rare until you own Plaster Cast, then much more common.
+	GS.levels["hands_cast"] = 1
+	GS.apply_upgrades()
+	var with_cast := [0, 0, 0]
+	rng.seed = 11
+	for i in 3000:
+		with_cast[int(TN.roll_bone_kind(rng))] += 1
+	GS.levels["hands_cast"] = 0
+	GS.apply_upgrades()
+	_assert(with_cast[2] > counts[2] * 3, "Plaster Cast makes opal bones far more common")
 
 
 func _test_solid_bones_never_crumble() -> void:

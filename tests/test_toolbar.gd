@@ -139,31 +139,30 @@ func _test_hud_shows_tool_role_always() -> void:
 		_assert(str(role.text).find("  ") < 0, "role copy is not smashed together")
 		if str(expected[tool]).find(" ") >= 0:
 			_assert(str(role.text).find(" ") >= 0, "role keeps its spaces")
-		_assert(role.visible, "role stays visible in the stacked card")
-		_assert_role_inside_card(hud, role, int(tool))
+		## Slim rail: the role moved off the card into a hover tip.
+		_assert(not role.visible, "role is off the slim card (shown on hover)")
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_PICKAXE, true)
 	var heights_pick: PackedFloat32Array = _visible_slot_heights(hud)
 	_assert(_arrays_match(heights_hands, heights_pick), "selecting pickaxe does not change row heights")
 	var pick_role: Label = _role_for(hud, TN.TOOL_PICKAXE)
-	_assert(pick_role != null and pick_role.visible, "selected pickaxe still shows Break clay and stone")
+	_assert(pick_role != null and not pick_role.visible, "selecting pickaxe keeps the card slim")
 	if pick_role != null:
 		_assert(str(pick_role.text) == "Break clay and stone", "pickaxe role stays Break clay and stone")
 	var hands_role: Label = _role_for(hud, TN.TOOL_HANDS)
 	var shovel_role: Label = _role_for(hud, TN.TOOL_SHOVEL)
-	_assert(hands_role != null and hands_role.visible, "hands role stays on without hover")
-	_assert(shovel_role != null and shovel_role.visible, "shovel role stays on without hover")
+	_assert(not _tip_visible(hud), "no tool tip without hover")
 	_hover_tool(hud, TN.TOOL_PICKAXE, true)
 	var heights_hover: PackedFloat32Array = _visible_slot_heights(hud)
 	_assert(_arrays_match(heights_hands, heights_hover), "hovering a row does not slide neighbors")
-	_assert(pick_role != null and pick_role.visible, "hover does not become the only way to see the role")
+	_assert(_tip_shows(hud, "Break clay and stone"), "hovering pickaxe shows what it does")
 	_hover_tool(hud, TN.TOOL_PICKAXE, false)
-	_assert(pick_role != null and pick_role.visible, "leaving the rail keeps the role visible")
+	_assert(not _tip_visible(hud), "leaving the rail hides the tip")
 	if hands_role != null:
 		_assert(str(hands_role.text) == "Pick up small finds", "hands stay Pick up small finds")
 		_assert(int(hands_role.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "hands role is centered")
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_BRUSH, true)
 	_assert(_arrays_match(heights_hands, _visible_slot_heights(hud)), "selecting brush does not change row heights")
-	_assert(_any_role_visible(hud), "keyboard select still shows the stacked roles")
+	_assert(not _any_role_visible(hud), "keyboard select keeps the slim cards")
 	hud.queue_free()
 
 
@@ -188,7 +187,7 @@ func _test_tool_card_icon_stack_layout() -> void:
 	_assert(rest_name.size.x > 1.0 and rest_name.size.y > 1.0, "idle shovel has a laid-out name")
 	_hover_tool(hud, TN.TOOL_SHOVEL, true)
 	var role: Label = _role_for(hud, TN.TOOL_SHOVEL)
-	_assert(role != null and role.visible, "shovel role stays visible")
+	_assert(_tip_shows(hud, "Clear dirt fast"), "hovering shovel shows its tip")
 	if role != null:
 		_assert(str(role.text) == "Clear dirt fast", "shovel keeps Clear dirt fast")
 		_assert(str(role.text).find(" ") >= 0, "Clear dirt keeps its space")
@@ -198,10 +197,6 @@ func _test_tool_card_icon_stack_layout() -> void:
 		var sized: int = role.get_theme_font_size("font_size")
 		var need: float = font.get_string_size("Clear dirt", HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
 		_assert(role.custom_minimum_size.x + 0.5 >= need, "role min width keeps Clear dirt's space")
-		var role_rect := _control_rect_in_card(role, shovel)
-		_assert(role_rect.position.y + 0.5 >= rest_name.end.y, "role sits below the name")
-		_assert(absf(role_rect.position.x + role_rect.size.x * 0.5 - _card_size(shovel).x * 0.5) <= 3.0, "role is centered in the card")
-		_assert(role_rect.end.y <= _card_size(shovel).y + 0.5, "role stays inside the card")
 	var hover_name := _name_row_rect_in_card(shovel)
 	_assert(rest_name.position.is_equal_approx(hover_name.position), "hover does not move the shovel name")
 	_assert(rest_name.size.is_equal_approx(hover_name.size), "hover does not resize the shovel name")
@@ -213,10 +208,8 @@ func _test_tool_card_icon_stack_layout() -> void:
 	if hands != null:
 		_assert_rail_card_layout(hands, "hands")
 	if hands != null and hands_role != null:
-		var hands_rect := _control_rect_in_card(hands_role, hands)
-		_assert(hands_role.visible, "Harvest role stays on")
+		_assert(_tip_shows(hud, "Pick up small finds"), "hovering Hands shows its tip")
 		_assert(int(hands_role.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "Harvest role is centered")
-		_assert(absf(hands_rect.position.x + hands_rect.size.x * 0.5 - _card_size(hands).x * 0.5) <= 3.0, "Harvest role is centered in the card")
 	_hover_tool(hud, TN.TOOL_HANDS, false)
 	hud.queue_free()
 
@@ -322,8 +315,7 @@ func _test_selected_tool_chrome_is_unmistakable() -> void:
 	_assert(is_equal_approx(sel_size.y, idle_size.y), "selected chrome does not grow the card")
 	var role: Label = _role_for(hud, TN.TOOL_SHOVEL)
 	_assert(role != null and str(role.text) == "Clear dirt fast", "shovel still owns Clear dirt fast")
-	_assert(role != null and role.visible, "selected chrome keeps the stacked role visible")
-	_assert_role_inside_card(hud, role, TN.TOOL_SHOVEL)
+	_assert(role != null and not role.visible, "selected chrome keeps the card slim")
 	var hud_src: String = FileAccess.get_file_as_string("res://hud.gd")
 	_assert(hud_src.find("damage") < 0 or hud_src.find("integrity") < 0, "the rail is still not a HUD stat sheet")
 	hud.queue_free()
@@ -552,10 +544,8 @@ func _assert_rail_card_layout(button: Button, where: String) -> void:
 	_assert(absf(icon_rect.position.x + icon_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s icon is horizontally centered" % where)
 	_assert(int(name.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "%s name is centered" % where)
 	_assert(absf(name_rect.position.x + name_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s name sits under the icon" % where)
-	_assert(absf(role_rect.position.x + role_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s role sits under the name" % where)
 	_assert(absf(name_rect.position.y - icon_rect.end.y - gap) <= 2.0, "%s keeps a gap under the icon" % where)
-	_assert(absf(role_rect.position.y - name_rect.end.y - gap) <= 2.0, "%s keeps a gap under the name" % where)
-	_assert(role.visible, "%s role is always on" % where)
+	_assert(not role.visible, "%s role lives in the hover tip" % where)
 	_assert(key_rect.position.y <= 6.0, "%s hotkey sits at the top of the card" % where)
 	_assert(key_rect.end.x >= card.x - 8.0, "%s hotkey sits in the top-right" % where)
 	_assert(key_rect.end.y <= name_rect.position.y + 0.5, "%s hotkey is not in the name row" % where)
@@ -627,6 +617,16 @@ func _arrays_match(a: PackedFloat32Array, b: PackedFloat32Array) -> bool:
 		if not is_equal_approx(a[i], b[i]):
 			return false
 	return true
+
+
+func _tip_visible(hud: CanvasLayer) -> bool:
+	var tip: Label = hud.get("_tool_tip") as Label
+	return tip != null and tip.visible
+
+
+func _tip_shows(hud: CanvasLayer, text: String) -> bool:
+	var tip: Label = hud.get("_tool_tip") as Label
+	return tip != null and tip.visible and str(tip.text).contains(text)
 
 
 func _any_role_visible(hud: CanvasLayer) -> bool:

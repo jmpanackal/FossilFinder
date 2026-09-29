@@ -19,6 +19,8 @@ const RAIL_PAD := 8.0
 const DOCK_W := 120.0
 const TOOL_CARD_H := 110.0
 const TOOL_CARD_MIN_H := 70.0
+## Slim rail: icon + name only, so cards don't need to be tall.
+const TOOL_SLIM_MAX_H := 84.0
 const TOOL_CARD_INSET := 6.0
 const TOOL_CARD_INSET_TIGHT := 3.0
 const TOOL_STACK_GAP := 8.0
@@ -39,6 +41,15 @@ const FIND_INSET := 10.0
 const CHIP_GAP := 8.0
 ## At this many finds the tray switches to condensed cards (hover for details).
 const CONDENSE_AT := 5
+## Finds rail: full cards are this tall; below ROW_MODE_H they become one-line
+## rows; rows never shrink under CHIP_ROW_MIN_H.
+const CHIP_FULL_H := 84.0
+const ROW_MODE_H := 64.0
+const CHIP_ROW_MIN_H := 24.0
+const ROW_GAP := 4.0
+const CHIP_ROW_MAX_H := 40.0
+## Room at the foot of the Finds rail for the museum fame medal.
+const FAME_FOOT_H := 50.0
 const WALLET_MONEY_SAMPLE := "$8888888"
 const WALLET_RATE_SAMPLE := "$8888.88/s"
 const WALLET_RIGHT_PAD := 20.0
@@ -69,7 +80,7 @@ var _tool_slots: Array[Control] = []
 var _slot_tools: Array[int] = []
 var _hovered_tool: int = -1
 var _headline: String = ""
-var _find_box: HFlowContainer
+var _find_box: VBoxContainer
 var _chips: Array = []
 var _tool_colors := [
 	Color("E4B75A"),
@@ -89,6 +100,7 @@ var _ribbon: Control
 var _fame_label: Control
 var _detail_chip: Control
 var _detail_for: Control
+var _tool_tip: Label
 
 
 func _ready() -> void:
@@ -148,13 +160,12 @@ func _ready() -> void:
 	_fame_label.visible = false
 	root.add_child(_fame_label)
 
-	_find_box = HFlowContainer.new()
+	_find_box = VBoxContainer.new()
 	_find_box.name = "FindTray"
 	_find_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_find_box.clip_contents = true
-	_find_box.alignment = FlowContainer.ALIGNMENT_CENTER
-	_find_box.add_theme_constant_override("h_separation", int(CHIP_GAP))
-	_find_box.add_theme_constant_override("v_separation", 4)
+	_find_box.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_find_box.add_theme_constant_override("separation", int(CHIP_GAP))
 	_find_box.visible = false
 	root.add_child(_find_box)
 
@@ -190,8 +201,9 @@ func _refresh_fame() -> void:
 		return
 	var mult: float = GameState.fame_mult() if GameState.has_method("fame_mult") else 1.0
 	_fame_label.call("set_mult", mult)
-	## Hang the medal on the tray's top-right corner, clear of the cards.
-	var at := Vector2(_finds_frame.position.x + _finds_frame.size.x - _fame_label.size.x - 10.0, _finds_frame.position.y - _fame_label.size.y * 0.5)
+	## The medal sits centered at the foot of the Finds rail, under the cards.
+	var at := Vector2(_finds_frame.position.x + (_finds_frame.size.x - _fame_label.size.x) * 0.5, _finds_frame.position.y + _finds_frame.size.y - FIND_INSET - (FAME_FOOT_H + _fame_label.size.y) * 0.5 + 2.0)
+	at = at.round()
 	if _fame_label.position != at:
 		_fame_label.position = at
 
@@ -245,9 +257,14 @@ func set_find_cards(cards: Array) -> void:
 	var tray_w: float = maxf(160.0, _find_box.size.x if _find_box.size.x > 1.0 else Tuning.pit_grid_size().x - FIND_INSET * 2.0)
 	var tray_h: float = _find_box.size.y if _find_box.size.y > 1.0 else 70.0
 	var n: int = shown.size()
-	var each: float = _chip_width_for_count(n, tray_w)
-	var crowded: bool = n >= 4 or each < 220.0
-	var condensed: bool = n >= CONDENSE_AT
+	## One card per row, full rail width. Cards get shorter as the list grows;
+	## very short ones become one-line rows (hover shows the full card).
+	var each: float = tray_w
+	var card_h: float = _chip_height_for_count(n, tray_h)
+	tray_h = card_h
+	var crowded: bool = card_h < 64.0
+	var condensed: bool = card_h < ROW_MODE_H
+	_find_box.add_theme_constant_override("separation", int(ROW_GAP if condensed else CHIP_GAP))
 	for i in shown.size():
 		var card: Dictionary = shown[i]
 		if not card.has("index"):
@@ -282,6 +299,17 @@ func _cards_signature(shown: Array) -> String:
 	return ";".join(parts)
 
 
+func _chip_height_for_count(n: int, tray_h: float) -> float:
+	if n <= 0:
+		return CHIP_FULL_H
+	var each: float = floorf((tray_h - CHIP_GAP * float(maxi(n - 1, 0))) / float(n))
+	if each >= ROW_MODE_H:
+		return minf(each, CHIP_FULL_H)
+	## Rows pack tighter.
+	each = floorf((tray_h - ROW_GAP * float(maxi(n - 1, 0))) / float(n))
+	return clampf(each, CHIP_ROW_MIN_H, CHIP_ROW_MAX_H)
+
+
 func _chip_width_for_count(n: int, tray_w: float) -> float:
 	if n <= 0:
 		return CHIP_COMFORT_MIN
@@ -297,7 +325,8 @@ func find_chip_catch_pos(index: int) -> Vector2:
 	var chip: Control = _chip_for_find(index)
 	if chip != null and chip.has_method("catch_pos"):
 		return chip.call("catch_pos")
-	return Vector2(Tuning.view_w * 0.5, Tuning.footer_find_top() + 34.0)
+	var rail: Rect2 = finds_rail_rect()
+	return Vector2(rail.get_center().x, rail.position.y + 60.0)
 
 
 func catch_find(index: int) -> void:
@@ -322,12 +351,9 @@ func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0,
 func ribbon_anchor(index: int) -> Vector2:
 	if _find_box != null:
 		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
-	var anchor_x: float = Tuning.pit_grid_rect().get_center().x
-	var chip: Control = _chip_for_find(index) if index >= 0 else null
-	if chip != null and chip.is_visible_in_tree():
-		anchor_x = chip.global_position.x + chip.size.x * 0.5
-	var top: float = _finds_frame.position.y if _finds_frame != null else Tuning.footer_top()
-	return Vector2(anchor_x, top)
+	## Ribbons own the band under the pit, centered, so they never cover the
+	## cells or the Finds cards.
+	return Vector2(Tuning.pit_grid_rect().get_center().x, rails_bottom() + 4.0)
 
 
 func _on_chip_hover(chip: Control) -> void:
@@ -342,9 +368,11 @@ func _on_chip_hover(chip: Control) -> void:
 	_detail_for = chip
 	_detail_chip.call("apply_card", chip.get("_card"))
 	_detail_chip.call("fit_tray", 300.0, false, false)
-	var x: float = chip.global_position.x + chip.size.x * 0.5 - 150.0
-	x = clampf(x, 8.0, Tuning.view_w - 308.0)
-	_detail_chip.position = Vector2(x, chip.global_position.y - _detail_chip.size.y - 6.0)
+	## Open to the left of the rail, level with the hovered row.
+	var x: float = chip.global_position.x - 300.0 - 8.0
+	var y: float = chip.global_position.y + (chip.size.y - _detail_chip.size.y) * 0.5
+	y = clampf(y, Tuning.hud_h, Tuning.view_h - _detail_chip.size.y - 8.0)
+	_detail_chip.position = Vector2(maxf(x, 8.0), y)
 	_detail_chip.visible = true
 
 
@@ -484,7 +512,7 @@ func _section_title_h(copy_w: float) -> float:
 func _tool_card_size() -> Vector2:
 	var frame_w: float = _section_frame_width()
 	var pit := Tuning.pit_grid_rect()
-	var inner := _section_inner(Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y)))
+	var inner := _section_inner(Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, rails_bottom() - pit.position.y)))
 	return _tool_card_size_in(inner)
 
 
@@ -494,7 +522,7 @@ func _tool_card_size_in(inner: Rect2) -> Vector2:
 	if _tool_rail != null:
 		sep = float(_tool_rail.get_theme_constant("separation"))
 	var avail: float = maxf(inner.size.y - sep * float(maxi(n - 1, 0)), TOOL_CARD_MIN_H)
-	var card_h: float = clampf(floor(avail / float(n)), TOOL_CARD_MIN_H, TOOL_ROW.y)
+	var card_h: float = clampf(floor(avail / float(n)), TOOL_CARD_MIN_H, TOOL_SLIM_MAX_H)
 	return Vector2(maxf(inner.size.x, 1.0), card_h)
 
 
@@ -606,8 +634,9 @@ func _apply_tool_card_size(slot: Control, button: Button, card: Vector2) -> void
 		stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		stack.position = Vector2(inset, inset)
 		stack.size = inner
-		stack.alignment = BoxContainer.ALIGNMENT_BEGIN
-		stack.add_theme_constant_override("separation", int(_tool_stack_gap(card.y)))
+		## Slim cards: icon + name centered in the card.
+		stack.alignment = BoxContainer.ALIGNMENT_CENTER
+		stack.add_theme_constant_override("separation", int(_tool_stack_gap(card.y)) + 2)
 		var icon: Control = stack.get_node_or_null("ToolIcon") as Control
 		if icon != null:
 			Ui.apply_rail_tool_icon(icon, _tool_icon_px(card.y))
@@ -762,11 +791,36 @@ func _on_tool_unhover(tool: int) -> void:
 
 
 func _sync_tool_roles() -> void:
+	## The slim rail shows icon + name; what a tool does appears in a tip
+	## beside the card on hover.
 	for i in _tool_roles.size():
 		var role: Label = _tool_roles[i]
 		if role == null:
 			continue
-		role.visible = i < _tool_slots.size() and _tool_slots[i].visible
+		role.visible = false
+	_show_tool_tip(_hovered_tool)
+
+
+func _show_tool_tip(tool: int) -> void:
+	var index: int = _slot_tools.find(tool)
+	if tool < 0 or index < 0 or not _tool_slots[index].visible:
+		if _tool_tip != null:
+			_tool_tip.visible = false
+		return
+	if _tool_tip == null:
+		_tool_tip = Label.new()
+		_tool_tip.name = "ToolTip"
+		_tool_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_tool_tip.z_index = 20
+		_tool_tip.add_theme_stylebox_override("normal", Ui.tooltip_box())
+		_tool_rail.get_parent().add_child(_tool_tip)
+	Ui.apply_label(_tool_tip, 13, Ui.INK)
+	_tool_tip.text = "%s (%s): %s" % [GameState.tool_display_name(tool), Tuning.hotkey_for_tool(tool), GameState.tool_role_line(tool)]
+	_tool_tip.size = _tool_tip.get_combined_minimum_size()
+	var btn: Control = _tool_buttons[index]
+	var at := Vector2(btn.global_position.x + btn.size.x + 10.0, btn.global_position.y + (btn.size.y - _tool_tip.size.y) * 0.5)
+	_tool_tip.position = at.round()
+	_tool_tip.visible = true
 
 
 func _on_tool_pressed(tool: int) -> void:
@@ -872,7 +926,7 @@ func _layout_chrome() -> void:
 		_header_bar.size = Vector2(maxf(header_w, 1.0), HEADER_BTN_H)
 		_header_bar.notification(Container.NOTIFICATION_SORT_CHILDREN)
 	var frame_w: float = _section_frame_width()
-	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y))
+	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, rails_bottom() - pit.position.y))
 	_place_section_frame(_tools_frame, tools_frame)
 	_layout_section_title(_tools_label, TOOLS_TITLE, tools_frame)
 	var tools_inner := _section_inner(tools_frame)
@@ -888,22 +942,34 @@ func _layout_chrome() -> void:
 			_apply_tool_card_size(_tool_slots[i], btn, card)
 		_tool_rail.size = Vector2(tools_inner.size.x, tools_inner.size.y)
 		_tool_rail.notification(Container.NOTIFICATION_SORT_CHILDREN)
-	var south_bottom: float = Tuning.pit_face_bottom() + Tuning.chunk_front
-	var find_top: float = maxf(Tuning.footer_find_top(), south_bottom + 14.0)
-	var find_bottom: float = Tuning.view_h - 8.0
-	var finds_band := Rect2(Vector2(pit.position.x, find_top), Vector2(maxf(160.0, pit.size.x), maxf(1.0, find_bottom - find_top)))
+	## Finds rail on the right, mirroring the tools rail: cards stack top to
+	## bottom in discovery order; the fame medal sits at its foot.
+	var finds_band: Rect2 = finds_rail_rect()
 	_place_section_frame(_finds_frame, finds_band)
-	_layout_section_title(_finds_label, FINDS_TITLE, finds_band, 10.0)
-	var finds_top: float = finds_band.position.y + 10.0
+	_layout_section_title(_finds_label, FINDS_TITLE, finds_band)
+	var finds_top: float = finds_band.position.y + SECTION_TITLE_TOP
 	if _finds_label != null:
-		finds_top = _finds_label.position.y + _finds_label.size.y + 6.0
+		finds_top = _finds_label.position.y + _finds_label.size.y + RAIL_LABEL_GAP
+	var finds_bottom: float = finds_band.end.y - FIND_INSET - FAME_FOOT_H
 	_find_box.anchor_left = 0.0
 	_find_box.anchor_top = 0.0
 	_find_box.anchor_right = 0.0
 	_find_box.anchor_bottom = 0.0
 	_find_box.custom_minimum_size = Vector2(0, 0)
 	_find_box.position = Vector2(finds_band.position.x + FIND_INSET, finds_top)
-	_find_box.size = Vector2(maxf(finds_band.size.x - FIND_INSET * 2.0, 1.0), maxf(find_bottom - finds_top - 8.0, 1.0))
+	_find_box.size = Vector2(maxf(finds_band.size.x - FIND_INSET * 2.0, 1.0), maxf(finds_bottom - finds_top, 1.0))
+
+
+## Both rails run from the pit's top edge to the bottom of its front face.
+func rails_bottom() -> float:
+	return Tuning.pit_face_bottom() + Tuning.chunk_front
+
+
+func finds_rail_rect() -> Rect2:
+	var pit := Tuning.pit_grid_rect()
+	var left: float = pit.end.x + Tuning.chunk_pad + 10.0
+	var right: float = Tuning.view_w - RAIL_PAD
+	return Rect2(Vector2(left, pit.position.y), Vector2(maxf(right - left, 120.0), maxf(rails_bottom() - pit.position.y, 120.0)))
 
 
 func _layout_footer() -> void:

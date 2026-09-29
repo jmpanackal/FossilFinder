@@ -23,8 +23,21 @@ func hotkey_for_tool(tool: int) -> String:
 			return ""
 
 
+## Left rail: slim icon tool cards (descriptions show on hover).
 func hud_rail_w() -> float:
-	return 184.0
+	return 100.0
+
+
+## Right rail: the Finds list, one card per bone in discovery order.
+func finds_rail_w() -> float:
+	return 260.0
+
+
+## Band under the pit kept free for reward ribbons and toasts.
+const RIBBON_BAND_H := 112.0
+## Cells may grow up to this much taller than the art's base aspect, so the
+## pit fills the space between the rails instead of leaving a gap below it.
+const PIT_STRETCH_MAX := 1.3
 
 const MAT_LOOSE := 0
 const MAT_PACKED := 1
@@ -270,7 +283,11 @@ const BONE_KIND_HINTS: PackedStringArray = [
 	"It dries out in open air: loses a star every 10s once uncovered, until it is plastered.",
 	"Bone that turned into opal, a rainbow gemstone. Worth 2.5x, but it cracks as it dries: loses a star every 6s once uncovered.",
 ]
-var bone_kind_weights: PackedFloat32Array = [74.0, 20.0, 6.0]
+## Solid / Fragile / Opal odds. Before Plaster Cast, crumbly bones (Opal
+## especially) are rare so they don't feel unfair; owning it makes Opal a
+## regular, exciting find.
+var bone_kind_weights: PackedFloat32Array = [72.0, 20.0, 8.0]
+var bone_kind_weights_no_cast: PackedFloat32Array = [85.0, 13.5, 1.5]
 ## Seconds in open air before the first crumble, then between crumbles.
 var crumble_first: PackedFloat32Array = [0.0, 12.0, 6.0]
 var crumble_step: PackedFloat32Array = [0.0, 10.0, 6.0]
@@ -288,13 +305,18 @@ func bone_crumbles(kind: int) -> bool:
 	return kind == BONE_FRAGILE or kind == BONE_OPAL
 
 
+func active_kind_weights() -> PackedFloat32Array:
+	return bone_kind_weights if cast_owned() else bone_kind_weights_no_cast
+
+
 func roll_bone_kind(rng: RandomNumberGenerator = null) -> int:
+	var weights: PackedFloat32Array = active_kind_weights()
 	var total: float = 0.0
-	for w in bone_kind_weights:
+	for w in weights:
 		total += w
 	var roll: float = (rng.randf() if rng != null else randf()) * total
-	for i in bone_kind_weights.size():
-		roll -= bone_kind_weights[i]
+	for i in weights.size():
+		roll -= weights[i]
 		if roll <= 0.0:
 			return i
 	return BONE_SOLID
@@ -583,10 +605,12 @@ func shovel_hit_cells(center: Vector2i, radius: float, precision: bool = false) 
 
 func fitted_pit_size() -> Vector2:
 	var footprint: Vector2 = reference_pit_size()
-	var max_w: float = maxf(view_w - 90.0, 160.0)
-	var max_h: float = maxf(view_h - hud_h - find_bar_h - chunk_front - 24.0, 120.0)
-	var scale: float = minf(1.0, minf(max_w / footprint.x, max_h / footprint.y))
-	return footprint * scale
+	var max_w: float = maxf(view_w - hud_rail_w() - finds_rail_w() - chunk_pad * 2.0 - 8.0, 160.0)
+	var max_h: float = maxf(view_h - hud_h - chunk_front - RIBBON_BAND_H - chunk_pad, 120.0)
+	var sx: float = minf(1.0, max_w / footprint.x)
+	## Height follows width, stretched a little taller when there is room.
+	var sy: float = minf(sx * PIT_STRETCH_MAX, max_h / footprint.y)
+	return Vector2(footprint.x * sx, footprint.y * sy)
 
 
 func apply_cell_metrics() -> void:
