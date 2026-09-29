@@ -20,6 +20,7 @@ const LINE_FS := 13
 const MINI_R := 5.5
 const COL_GAP := 22.0
 const MISSING_INK := Color("8A7A66")
+const DIRTY_W := 36.0
 
 var info: Dictionary = {}
 var _bones: Array = []
@@ -53,7 +54,7 @@ func _stars_w(r: float) -> float:
 
 
 func _col_w() -> float:
-	return _name_w + 10.0 + _stars_w(MINI_R)
+	return _name_w + 10.0 + _stars_w(MINI_R) + DIRTY_W
 
 
 func _rows() -> int:
@@ -75,12 +76,12 @@ func _avg_line() -> String:
 func _master_line() -> String:
 	var need: int = int(info.get("master_stars", 5))
 	if bool(info.get("master", false)):
-		return "Masterpiece! Every bone has %d stars" % need
+		return "Masterpiece! Every bone has %d stars and is clean" % need
 	var to_go: int = 0
 	for b in _bones:
-		if int(b["cond"]) < need:
+		if int(b["cond"]) < need or not bool(b.get("clean", true)):
 			to_go += 1
-	return "Masterpiece: all %d bones at %d stars (%d to go)" % [_bones.size(), need, to_go]
+	return "Masterpiece: all %d bones at %d stars, clean (%d to go)" % [_bones.size(), need, to_go]
 
 
 func _star(center: Vector2, r: float, on: bool, color: Color = Ui.GOLD) -> void:
@@ -128,5 +129,8 @@ func _draw() -> void:
 		draw_string(font, Vector2(bx, by + 5.0), str(b["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1, ROW_FS, Ui.INK if found else MISSING_INK)
 		var star_col: Color = (Color("FFD66B") if cond >= need else Ui.GOLD) if found else MISSING_INK
 		_stars_row(Vector2(bx + _name_w + 10.0, by), cond, MINI_R, star_col)
+		if found and not bool(b.get("clean", true)):
+			## Dirty bones earn less and block a Masterpiece.
+			draw_string(font, Vector2(bx + _name_w + 14.0 + _stars_w(MINI_R), by + 4.0), "dirty", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("C08A5A"))
 	y += float(_rows()) * ROW_H + 8.0
 	draw_string(font, Vector2(PAD.x, y + 8.0), _master_line(), HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_FS, Color("FFD66B"))

@@ -52,22 +52,26 @@ func _fill_stand(stand: String, condition: int) -> void:
 
 func _test_workshop_needs_the_upgrade() -> void:
 	_reset()
-	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 1)
-	_assert(GS.run_workshop().is_empty(), "no repairs without the Repair Workshop")
-	_assert(int(GS.piece_condition("t_rex_skull")) == 1, "the bone stays Poor")
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.3, false, 3)
+	_assert(GS.run_workshop().is_empty(), "no cleaning without the Prep Lab")
+	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "the bone stays dirty")
 
 
 func _test_workshop_repairs_the_weakest_bone() -> void:
+	## Prep Lab cleans the dirtiest bone on display; stars don't change.
 	_reset()
 	GS.levels["workshop"] = 1
 	GS.apply_upgrades()
-	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 3)
-	GS.install_find("t_rex_jaw", "T. rex Jaw", 1.0, true, 1)
-	var repairs: Array = GS.run_workshop()
-	_assert(repairs.size() == 1, "rank 1 repairs one bone per shift")
-	_assert(str(repairs[0]["piece_id"]) == "t_rex_jaw", "the weakest bone is repaired first")
-	_assert(int(GS.piece_condition("t_rex_jaw")) == 2, "it gains one star")
-	_assert(int(GS.piece_condition("t_rex_skull")) == 3, "other bones are untouched")
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.6, false, 3)
+	GS.install_find("t_rex_jaw", "T. rex Jaw", 0.2, false, 2)
+	var dirty_income: int = int(GS.piece_visitors("t_rex_jaw"))
+	var cleaned: Array = GS.run_workshop()
+	_assert(cleaned.size() == 1, "rank 1 cleans one bone per shift")
+	_assert(str(cleaned[0]["piece_id"]) == "t_rex_jaw", "the dirtiest bone is cleaned first")
+	_assert(bool(GS.piece_is_clean("t_rex_jaw")), "it is clean now")
+	_assert(int(GS.piece_condition("t_rex_jaw")) == 2, "its stars do not change")
+	_assert(int(GS.piece_visitors("t_rex_jaw")) > dirty_income, "a cleaned bone earns more")
+	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "other bones wait their turn")
 
 
 func _test_workshop_never_passes_great() -> void:
@@ -75,19 +79,19 @@ func _test_workshop_never_passes_great() -> void:
 	GS.levels["workshop"] = 3
 	GS.apply_upgrades()
 	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 4)
-	_assert(GS.run_workshop().is_empty(), "Great bones are left alone")
-	_assert(int(GS.piece_condition("t_rex_skull")) == 4, "Perfect only comes from the ground")
+	_assert(GS.run_workshop().is_empty(), "clean bones are left alone")
+	_assert(int(GS.piece_condition("t_rex_skull")) == 4, "stars only come from the field")
 
 
 func _test_workshop_ranks_repair_more() -> void:
 	_reset()
 	GS.levels["workshop"] = 3
 	GS.apply_upgrades()
-	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 1)
-	var repairs: Array = GS.run_workshop()
-	_assert(repairs.size() == 3, "rank 3 makes three repairs per shift")
-	_assert(int(GS.piece_condition("t_rex_skull")) == 4, "one bone can climb several stars")
-	_assert(str(GS.shop_effect_line("workshop")).contains("Repairs"), "shop line says what it repairs")
+	for id in ["t_rex_skull", "t_rex_jaw", "t_rex_femur", "t_rex_tail", "t_rex_ribcage"]:
+		GS.install_find(id, id, 0.3, false, 3)
+	var cleaned: Array = GS.run_workshop()
+	_assert(cleaned.size() == 4, "rank 3 cleans four bones per shift")
+	_assert(str(GS.shop_effect_line("workshop")).contains("Clean"), "shop line says it cleans")
 
 
 func _test_masterpiece_needs_complete_and_great() -> void:
@@ -108,22 +112,27 @@ func _test_masterpiece_needs_complete_and_great() -> void:
 
 
 func _test_workshop_can_finish_a_masterpiece() -> void:
-	## Masterpieces need every bone Perfect; the workshop tops out at Great,
-	## so it can't finish one on its own.
+	## A Masterpiece needs every bone Perfect AND clean: one dirty bone blocks
+	## it, and the Prep Lab cleaning it finishes the Masterpiece.
 	_reset()
 	_fill_stand("velociraptor", 5)
 	await process_frame
-	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect bones make a Masterpiece")
+	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect, clean bones make a Masterpiece")
 	_masters.clear()
 	var ids: PackedStringArray = GS.stand_piece_ids("velociraptor")
 	var piece: Dictionary = GS.pieces[ids[0]]
-	piece["condition"] = 4
+	piece["clean"] = false
+	piece["cleanliness"] = 0.4
 	GS.pieces[ids[0]] = piece
-	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "one Great bone blocks the Masterpiece")
+	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "one dirty bone blocks the Masterpiece")
 	GS.levels["workshop"] = 1
 	GS.apply_upgrades()
 	GS.run_workshop()
-	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "the workshop cannot make a bone Perfect")
+	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the Prep Lab cleaning it completes the Masterpiece")
+	_assert(_masters.size() == 1, "and it is celebrated")
+	piece = GS.pieces[ids[0]]
+	piece["condition"] = 4
+	GS.pieces[ids[0]] = piece
 	var info: Dictionary = _exhibit_info("velociraptor")
 	if not info.is_empty():
 		_assert((info["bones"] as Array).size() == ids.size(), "the star card lists every bone")

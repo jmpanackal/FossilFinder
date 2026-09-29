@@ -491,8 +491,11 @@ func _meter_line(card: Dictionary) -> String:
 	var left: float = float(card.get("crumble_in", INF))
 	if left != INF and not bool(card.get("extracted", false)):
 		## Plain words: it is crumbling, and plaster (hold Hands) saves it.
-		var lead: String = "Plaster it!" if Tuning.cast_owned() else "Crumbling"
-		return "%s -1 star in %ds" % [lead, int(ceil(left))]
+		if Tuning.cast_owned() and bool(card.get("fully_exposed", false)):
+			var delta: int = Tuning.plaster_bonus - int(card.get("crumbled", 0))
+			var what: String = ("+%d★" % delta) if delta > 0 else ("keeps ★" if delta == 0 else "%d★" % delta)
+			return "Plaster now: %s · %ds" % [what, int(ceil(left))]
+		return "Crumbling: -1 star in %ds" % int(ceil(left))
 	if bool(card.get("cast", false)) and not bool(card.get("extracted", false)):
 		return "Plastered · stars safe"
 	if _status == "bagged" or bool(card.get("extracted", false)):
@@ -519,7 +522,7 @@ func _museum_line(line: String) -> String:
 func _status_color(line: String) -> Color:
 	if line.begins_with("New"):
 		return Color("A8E07A")
-	if line.begins_with("Upgrade"):
+	if line.begins_with("Upgrade") or line.contains("Plaster now: +"):
 		return Ui.GOLD
 	if line.contains("-1 star"):
 		return Color("FF9A7A")

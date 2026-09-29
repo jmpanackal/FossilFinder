@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_half_exposed_starts_the_clock()
 	_test_wet_burlap_slows_crumbling()
 	_test_solid_perfect_is_rare()
+	_test_plaster_windows()
 	_reset()
 	print("crumble_cast %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -80,7 +81,7 @@ func _test_kinds_roll_mostly_solid() -> void:
 	var worst: int = 5
 	for i in 200:
 		worst = mini(worst, int(TN.roll_opal_condition(rng)))
-	_assert(worst >= 4, "opal bones are always Great or Perfect")
+	_assert(worst >= 3, "opal bones come out Good or Great")
 
 
 func _test_solid_bones_never_crumble() -> void:
@@ -256,10 +257,53 @@ func _test_solid_perfect_is_rare() -> void:
 			perfect += 1
 	_assert(perfect < 60, "a Perfect bone that never needed plaster is rare")
 	var opal_low: int = 5
+	var opal_high: int = 1
 	for i in 200:
-		opal_low = mini(opal_low, int(site.call("_roll_find_condition", TN.BONE_OPAL, 5)))
-	_assert(opal_low >= 4, "opal is always Great or Perfect")
+		var oc: int = int(site.call("_roll_find_condition", TN.BONE_OPAL, 5))
+		opal_low = mini(opal_low, oc)
+		opal_high = maxi(opal_high, oc)
+	_assert(opal_low >= 3 and opal_high <= 4, "opal comes out Good or Great; plaster makes it Perfect")
+	var frag_high: int = 1
+	for i in 400:
+		frag_high = maxi(frag_high, int(site.call("_roll_find_condition", TN.BONE_FRAGILE, 20)))
+	_assert(frag_high <= 4, "fragile bones top out at Great before plaster")
 	site.queue_free()
+
+
+func _test_plaster_windows() -> void:
+	## +1 in the first window, keeps in the second, -1 in the third.
+	_reset()
+	GS.levels["hands_cast"] = 1
+	GS.apply_upgrades()
+	for crumbles in [0, 1, 2]:
+		var site := _site_with(TN.BONE_FRAGILE, 4)
+		_expose_all(site)
+		var air: float = 0.0
+		if crumbles >= 1:
+			air = float(TN.crumble_first_s(TN.BONE_FRAGILE)) + 0.1 + float(TN.crumble_step_s(TN.BONE_FRAGILE)) * float(crumbles - 1)
+		site.call("tick_crumble", air)
+		_assert(int(site.finds[0]["crumbled"]) == crumbles, "window %d reached" % (crumbles + 1))
+		site.call("cast_find", 0)
+		var expect: int = 4 + 1 - crumbles
+		_assert(int(site.finds[0]["condition"]) == expect, "window %d plaster gives %d stars" % [crumbles + 1, expect])
+		site.queue_free()
+	GS.levels["hands_consolidant"] = 1
+	GS.apply_upgrades()
+	_assert(int(TN.plaster_bonus) == 2, "Consolidant makes quick plaster +2")
+	var s2 := _site_with(TN.BONE_OPAL, 3)
+	_expose_all(s2)
+	s2.call("cast_find", 0)
+	_assert(int(s2.finds[0]["condition"]) == 5, "a Good opal plastered quickly with Consolidant is Perfect")
+	s2.queue_free()
+	_assert(int(_catalog_cost("hands_consolidant")) >= 50000 and int(_catalog_cost("hands_resin")) >= 500000, "+2/+3 plaster are expensive late upgrades")
+	_reset()
+
+
+func _catalog_cost(id: String) -> int:
+	for entry in GS.catalog:
+		if str(entry["id"]) == id:
+			return int(entry["cost"])
+	return 0
 
 
 func _test_plain_names_and_hints() -> void:
@@ -270,7 +314,7 @@ func _test_plain_names_and_hints() -> void:
 	for entry in GS.catalog:
 		if str(entry["id"]) == "hands_cast":
 			item = entry
-	_assert(str(item.get("unlock_desc", "")).contains("broken arm"), "Plaster Cast is explained with an everyday comparison")
+	_assert(str(item.get("unlock_desc", "")).contains("GAINS a star") and str(item.get("unlock_desc", "")).contains("Hold"), "Plaster Cast says: hold to plaster, quick plaster gains a star")
 
 
 func _assert(ok: bool, label: String) -> void:

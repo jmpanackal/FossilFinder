@@ -45,8 +45,10 @@ var catalog: Array[Dictionary] = [
 	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
 	{"id": "hands_sense", "cat": "Hands", "tier": 1, "name": "Bone Sense", "desc": "Feel for buried bone farther away.", "unlock_name": "Bone Sense", "unlock_desc": "Digging by hand marks buried bone in nearby cells.", "unlock_action": "Unlock", "cost": 60, "scale": 1.9, "max": 4},
-	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Wrap crumbling bones faster, before they lose stars.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a dug-out Fragile or Opal bone to wrap it in plaster, like a cast on a broken arm, and lift it out. Its stars stop dropping. Brush it first: it leaves as clean as it is.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
+	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Plaster faster: a quicker hold means you catch the +1★ window more often.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a dug-out Fragile or Opal bone to plaster it. Plaster quickly and it GAINS a star. Wait and it only keeps what is left, or less.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
 	{"id": "hands_burlap", "cat": "Hands", "tier": 2, "name": "Wet Burlap", "desc": "Keeps dug-out Fragile and Opal bones damp: more time before each lost star.", "unlock_name": "Wet Burlap", "unlock_desc": "Drape damp cloth over crumbling bones: they take longer to lose each star, so you have more time to brush and plaster.", "unlock_action": "Unlock", "cost": 2200, "scale": 1.9, "max": 4, "requires": "hands_cast"},
+	{"id": "hands_consolidant", "cat": "Hands", "tier": 3, "name": "Consolidant", "desc": "Quick plaster gains +2 stars instead of +1.", "unlock_name": "Consolidant", "unlock_desc": "A hardening resin soaked in before the plaster: quick plaster now gains +2 stars (then +1, then keeps, as it dries).", "unlock_action": "Unlock", "cost": 60000, "scale": 1.0, "max": 1, "requires": "hands_burlap"},
+	{"id": "hands_resin", "cat": "Hands", "tier": 4, "name": "Museum Resin", "desc": "Quick plaster gains +3 stars.", "unlock_name": "Museum Resin", "unlock_desc": "Lab-grade resin: quick plaster now gains +3 stars, turning even a Fair bone Perfect if you are fast.", "unlock_action": "Unlock", "cost": 900000, "scale": 1.0, "max": 1, "requires": "hands_consolidant"},
 	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds and more $. With Bone Sense, a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt much harder (holding a bit harder too).", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
@@ -74,13 +76,12 @@ var catalog: Array[Dictionary] = [
 	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 1400, "scale": 1.85, "max": 6},
 	{"id": "round_marathon", "cat": "Site", "tier": 3, "name": "Marathon Shift", "desc": "Shifts run longer than a full Longer Shift.", "cost": 25000, "scale": 1.74, "max": 6},
 	{"id": "prime_bed", "cat": "Site", "tier": 3, "name": "Prime Bed", "desc": "Better odds of extra fossils. Each one found may mean another is hiding.", "cost": 28000, "scale": 1.7, "max": 4},
-	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
 	{"id": "lighting", "cat": "Museum", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 500, "scale": 2.0, "max": 5},
 	{"id": "spotlight", "cat": "Museum", "tier": 1, "name": "Featured exhibit 2x", "desc": "Featured exhibit 3x.", "unlock_name": "Unlock Spotlight", "unlock_desc": "Featured exhibit 2x.", "unlock_action": "Unlock", "cost": 280, "scale": 1.9, "max": 3},
 	{"id": "benches", "cat": "Museum", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 450, "scale": 2.0, "max": 5},
 	{"id": "unveil_time", "cat": "Museum", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 200, "scale": 1.85, "max": 4},
 	{"id": "unveil_crowd", "cat": "Museum", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes bring more people.", "cost": 220, "scale": 1.85, "max": 4},
-	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Repair Workshop", "desc": "Repairs one more bone after each shift.", "unlock_name": "Repair Workshop", "unlock_desc": "After each shift, repairs a bone on display by one star (up to Great). Gets back stars lost to drying out.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
+	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Prep Lab", "desc": "Cleans more dirty bones after each shift.", "unlock_name": "Prep Lab", "unlock_desc": "Dirty bones on display earn less and can't make a Masterpiece. After each shift, your prep lab cleans a dirty bone so it earns full income.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
 	{"id": "glass_case", "cat": "Museum", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 1000, "scale": 1.85, "max": 6},
 	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
 	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
@@ -422,12 +423,12 @@ func _tuning_snapshot() -> Dictionary:
 		"visitor_flat": Tuning.visitor_flat,
 		"visitor_mult": Tuning.visitor_mult,
 		"crumble_slow": Tuning.crumble_slow,
+		"plaster_bonus": Tuning.plaster_bonus,
 		"dirty_income_factor": Tuning.dirty_income_factor,
 		"site_size_rank": Tuning.site_size_rank,
 		"extra_find_slots": Tuning.extra_find_slots,
 		"extra_find_chance": Tuning.extra_find_chance,
 		"big_finds_unlocked": Tuning.big_finds_unlocked,
-		"passive_miner_owned": Tuning.passive_miner_owned,
 		"integrity_hit_cost": Tuning.integrity_hit_cost,
 		"unveil_spike_seconds": Tuning.unveil_spike_seconds,
 		"unveil_rush_strength": Tuning.unveil_rush_strength,
@@ -449,6 +450,8 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_over_line("+%d%% click harvest", float(zero["hands_click_mult"]), float(at["hands_click_mult"]))
 		"hands_hold", "hands_swift", "shovel_hold":
 			return _pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"]))
+		"hands_consolidant", "hands_resin":
+			return "Quick plaster +%d★ (was +%d★)" % [int(at["plaster_bonus"]), int(zero["plaster_bonus"])]
 		"hands_burlap":
 			return _pct_delta_line("+%d%% time before a bone crumbles", float(zero["crumble_slow"]), float(at["crumble_slow"]))
 		"hands_cast":
@@ -521,8 +524,6 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_delta_line("+%d%% dig value", float(zero["money_mult"]), float(at["money_mult"]))
 		"fossil_value":
 			return _pct_delta_line("+%d%% fossil sale", float(zero["fossil_value_mult"]), float(at["fossil_value_mult"]))
-		"passive_miner":
-			return "Unlocks a hired hand"
 		"lighting", "labels", "gift_shop", "benches", "blockbuster_ticket":
 			return _ticket_this_buy_line(float(at["donation"]) - float(zero["donation"]))
 		"spotlight", "blockbuster_feature":
@@ -542,8 +543,8 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 		"unveil_crowd":
 			return _pct_delta_line("+%d%% visitors on unveil", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
 		"workshop":
-			var jobs: int = int(at["workshop"])
-			return "Repairs %d bone%s per shift" % [jobs, "" if jobs == 1 else "s"]
+			var jobs: int = prep_lab_jobs(int(at["workshop"]))
+			return "Cleans %d dirty bone%s per shift" % [jobs, "" if jobs == 1 else "s"]
 		"restoration":
 			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
 		_:
@@ -691,7 +692,7 @@ func shop_hero_stats(cat: String) -> Array:
 			add.call("Harvest power", "%d%%" % int(round(Tuning.hands_click_mult * 100.0)))
 			add.call("Hold speed", ("%.1f/s" % Tuning.shovel_hold_tick_rate) if _lv("hands_hold") > 0.0 else "Locked")
 			add.call("Bone sense", ("%.1f cells" % Tuning.hands_sense_radius) if Tuning.hands_sense_radius > 0.0 else "Locked")
-			add.call("Plaster", ("%.1fs" % Tuning.cast_hold_seconds()) if Tuning.cast_owned() else "Locked")
+			add.call("Plaster", ("+%d★ · %.1fs" % [Tuning.plaster_bonus, Tuning.cast_hold_seconds()]) if Tuning.cast_owned() else "Locked")
 			if _lv("hands_burlap") > 0.0:
 				add.call("Crumble time", "x%.2f" % Tuning.crumble_slow)
 		"Shovel":
@@ -728,7 +729,7 @@ func shop_hero_stats(cat: String) -> Array:
 			add.call("Income", UiStyle.money_text(museum_income()) + "/s")
 			add.call("Visitors", str(museum_visitors()))
 			add.call("Museum fame", "x%.1f" % fame_mult())
-			add.call("Repairs/shift", str(int(_lv("workshop"))))
+			add.call("Cleaned/shift", str(prep_lab_jobs(int(_lv("workshop")))))
 	return out
 
 
@@ -935,7 +936,7 @@ func _stand_goal() -> Dictionary:
 
 
 func is_site_upgrade(id: String) -> bool:
-	return id == "round_time" or id == "dirt_pay" or id == "site_size" or id == "scrap_bed" or id == "rich_bed" or id == "site_expand" or id == "rock_pay" or id == "money_mult" or id == "fossil_value" or id == "round_marathon" or id == "prime_bed" or id == "passive_miner"
+	return id == "round_time" or id == "dirt_pay" or id == "site_size" or id == "scrap_bed" or id == "rich_bed" or id == "site_expand" or id == "rock_pay" or id == "money_mult" or id == "fossil_value" or id == "round_marathon" or id == "prime_bed"
 
 
 func upgrade_feel_line(id: String) -> String:
@@ -992,8 +993,6 @@ func upgrade_feel_line(id: String) -> String:
 			return "Large bones can appear"
 		"site_expand":
 			return "The pit is bigger"
-		"passive_miner":
-			return "A helper is waiting"
 		"rock_pay":
 			return "Richer nodules"
 		"money_mult":
@@ -1076,6 +1075,7 @@ func apply_upgrades() -> void:
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
 	Tuning.brush_reach_px = 5.0 * brush_ranks + 7.0 * _lv("brush_master")
 	Tuning.cast_rank = int(_lv("hands_cast"))
+	Tuning.plaster_bonus = 1 + int(_lv("hands_consolidant")) + int(_lv("hands_resin"))
 	Tuning.crumble_slow = 1.0 + 0.35 * _lv("hands_burlap")
 	var sense: float = _lv("hands_sense")
 	Tuning.hands_sense_radius = 0.0 if sense <= 0.0 else 0.75 + 0.5 * sense + 0.45 * _lv("hands_craft")
@@ -1111,7 +1111,7 @@ func apply_upgrades() -> void:
 	var bed_odds: float = 0.30 + 0.10 * _lv("scrap_bed") + 0.07 * _lv("rich_bed") + 0.05 * _lv("prime_bed") if beds > 0.0 else 0.0
 	Tuning.extra_find_chance = minf(bed_odds + 0.04 * pit_steps, 0.85)
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
-	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
+	Tuning.passive_miner_owned = false
 	Tuning.integrity_hit_cost = 0.0
 	Tuning.condition_luck = 0.12 * (_lv("shovel_soft") + _lv("pick_soft"))
 	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time") + 6.0 * _lv("blockbuster_hours")
@@ -1240,14 +1240,20 @@ func fame_line() -> String:
 	return "Museum fame: finds pay x%s" % (("%.1f" % mult) if mult < 10.0 else str(int(round(mult))))
 
 
-## Masterpiece: complete, and every piece Perfect (5 stars).
+## Masterpiece: complete, and every piece Perfect (5 stars) AND clean.
 func stand_is_masterpiece(stand_id: String) -> bool:
 	if stand_id.is_empty() or not stand_is_complete(stand_id):
 		return false
 	for piece_id in stand_piece_ids(stand_id):
 		if piece_condition(str(piece_id)) < Tuning.masterpiece_min_condition:
 			return false
+		if not piece_is_clean(str(piece_id)):
+			return false
 	return true
+
+
+func piece_is_clean(piece_id: String) -> bool:
+	return has_piece(piece_id) and bool((pieces[piece_id] as Dictionary).get("clean", false))
 
 
 func masterpiece_bonus(stand_id: String) -> int:
@@ -1267,32 +1273,41 @@ func _award_masterpiece(stand_id: String) -> void:
 
 ## Repair Workshop: after a shift, raise the weakest bones on display by one
 ## star each (never past Great). Returns what was repaired, for the summary.
+## Prep Lab (id "workshop" for old saves): after each shift, clean the dirty
+## bones on display, dirtiest first. Stars only come from the field.
+func prep_lab_jobs(rank: int) -> int:
+	return [0, 1, 2, 4][clampi(rank, 0, 3)]
+
+
 func run_workshop() -> Array:
-	var repairs: Array = []
-	var jobs: int = int(_lv("workshop"))
-	for _job in jobs:
+	var cleaned: Array = []
+	for _job in prep_lab_jobs(int(_lv("workshop"))):
 		var pick: String = ""
-		var lowest: int = Tuning.CONDITION_PERFECT
+		var dirtiest: float = 2.0
 		for piece_id in pieces:
 			var id: String = str(piece_id)
-			var cond: int = piece_condition(id)
-			if cond < Tuning.workshop_max_condition and cond < lowest:
-				lowest = cond
+			var piece: Dictionary = pieces[id]
+			if bool(piece.get("clean", false)):
+				continue
+			var c: float = float(piece.get("cleanliness", 0.0))
+			if c < dirtiest:
+				dirtiest = c
 				pick = id
 		if pick.is_empty():
 			break
 		var stand_id: String = stand_for_piece(pick)
 		var was_master: bool = stand_is_masterpiece(stand_id)
 		var piece: Dictionary = pieces[pick]
-		piece["condition"] = lowest + 1
+		piece["clean"] = true
+		piece["cleanliness"] = 1.0
 		pieces[pick] = piece
-		repairs.append({"piece_id": pick, "name": str(piece.get("name", pick)), "from": lowest, "to": lowest + 1})
+		cleaned.append({"piece_id": pick, "name": str(piece.get("name", pick))})
 		if not was_master and stand_is_masterpiece(stand_id):
 			_award_masterpiece(stand_id)
-	if not repairs.is_empty():
+	if not cleaned.is_empty():
 		collection_changed.emit()
 		hall_changed.emit()
-	return repairs
+	return cleaned
 
 
 ## The finished-skeleton payout: the stand's full bone value, doubled.
@@ -1318,8 +1333,10 @@ func _install_piece(piece_id: String, display_name: String, cleanliness: float, 
 		var set_bonus: bool = need > 1
 		var held: Dictionary = pieces[piece_id]
 		var old_condition: int = int(held.get("condition", Tuning.CONDITION_GOOD))
-		if condition > old_condition:
-			## A better copy replaces the one on display; the old one is sold.
+		var cleaner: bool = condition == old_condition and clean and not bool(held.get("clean", false))
+		if condition > old_condition or cleaner:
+			## A better (or same-star but clean) copy replaces the one on display;
+			## the old one is sold.
 			var old_sale: int = _duplicate_sale(float(held.get("cleanliness", 0.0)), set_bonus, old_condition)
 			held["condition"] = condition
 			held["name"] = display_name
@@ -1689,12 +1706,12 @@ func museum_donation() -> float:
 	return Tuning.donation_base * Tuning.donation_mult + Tuning.donation_flat
 
 
-func piece_visitors(piece_id: String) -> int:
+func piece_visitors(piece_id: String, force_clean: bool = false) -> int:
 	if not has_piece(piece_id):
 		return 0
 	var piece: Dictionary = pieces[piece_id]
 	var count: int = piece_count(piece_id)
-	var clean: bool = bool(piece.get("clean", false))
+	var clean: bool = bool(piece.get("clean", false)) or force_clean
 	var exhibit: bool = stand_uses_exhibit_rate(stand_for_piece(piece_id))
 	var clean_draw: int = Tuning.visitor_draw_exhibit_clean if exhibit else Tuning.visitor_draw_scrap_clean
 	var dirty_draw: int = Tuning.visitor_draw_exhibit_dirty if exhibit else Tuning.visitor_draw_scrap_dirty
@@ -1723,12 +1740,12 @@ func stand_size_scale(stand_id: String) -> float:
 	return scale
 
 
-func stand_visitors(stand_id: String) -> int:
+func stand_visitors(stand_id: String, force_clean: bool = false) -> int:
 	var total: int = 0
 	for piece_id in pieces:
 		if stand_for_piece(str(piece_id)) != stand_id:
 			continue
-		total += piece_visitors(str(piece_id))
+		total += piece_visitors(str(piece_id), force_clean)
 	if stand_id != "" and stand_is_complete(stand_id):
 		total = int(round(float(total) * Tuning.complete_stand_mult))
 		if stand_is_masterpiece(stand_id):
@@ -1807,6 +1824,42 @@ func piece_income(piece_id: String) -> float:
 
 func stand_income(stand_id: String) -> float:
 	return float(stand_visitors(stand_id)) * museum_donation()
+
+
+## What a dirty bone earns next to a clean one (e.g. 0.4 = 40%).
+func dirty_income_share() -> float:
+	var clean_draw: float = float(Tuning.visitor_draw_exhibit_clean)
+	var dirty_draw: float = clampf(roundf(float(Tuning.visitor_draw_exhibit_dirty) * Tuning.dirty_income_factor), float(Tuning.visitor_draw_exhibit_dirty), clean_draw)
+	return dirty_draw / maxf(clean_draw, 1.0)
+
+
+## Everything the $/sec hover card explains: where a stand's income comes
+## from, and what dirty bones are costing it.
+func stand_income_breakdown(stand_id: String) -> Dictionary:
+	var clean: int = 0
+	var dirty: int = 0
+	for piece_id in pieces:
+		var id: String = str(piece_id)
+		if stand_for_piece(id) != stand_id:
+			continue
+		if piece_is_clean(id):
+			clean += 1
+		else:
+			dirty += 1
+	var income: float = stand_income(stand_id)
+	var if_clean: float = float(stand_visitors(stand_id, true)) * museum_donation()
+	return {
+		"income": income,
+		"visitors": stand_visitors(stand_id),
+		"each": museum_donation(),
+		"clean": clean,
+		"dirty": dirty,
+		"dirty_share": dirty_income_share(),
+		"clean_gain": maxf(if_clean - income, 0.0),
+		"complete": stand_is_complete(stand_id),
+		"master": stand_is_masterpiece(stand_id),
+		"featured": stand_id == featured_stand_id,
+	}
 
 
 func unveil_stand(stand_id: String) -> int:

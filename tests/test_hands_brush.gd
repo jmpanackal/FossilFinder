@@ -188,6 +188,8 @@ func _test_wiping_everything_cleans_and_bags_the_bone() -> void:
 	_reset()
 	var site := _make_site()
 	var find: Dictionary = site.finds[0]
+	## A solid bone: crumbly ones wait for plaster instead of being bagged.
+	find["kind"] = TN.BONE_SOLID
 	var cells: Dictionary = find["cells"]
 	for raw in cells:
 		site.call("_reveal_fossil_cell", raw)

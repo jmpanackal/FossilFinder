@@ -87,8 +87,6 @@ static func glyph_for(id: String) -> String:
 			return "keen"
 		"fossil_value":
 			return "fossil"
-		"passive_miner":
-			return "hired"
 		"lighting":
 			return "lighting"
 		"benches":

@@ -136,9 +136,8 @@ func _test_hired_hand_does_not_auto_dig() -> void:
 	GS.money = 0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
-	GS.levels["passive_miner"] = 1
 	GS.apply_upgrades()
-	_assert(bool(TN.passive_miner_owned), "owning Hired Hand still only sets the late flag")
+	_assert(not bool(TN.passive_miner_owned), "there is no Hired Hand")
 	_assert(not Lucky != null or not Lucky.has_method("tick_worker"), "lucky strike is not a hired digger")
 	_assert(not GS.has_method("tick_hired_hands"), "no hired-hand auto-dig this pass")
 

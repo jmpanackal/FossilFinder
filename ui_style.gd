@@ -36,6 +36,13 @@ static var _font: Font
 
 
 ## "$950", "$1,240", "$12.4k", "$1.25M": readable at a glance at any stage.
+## Money with cents for small rates ($0.16), else the short form ($6.6k).
+static func money_text_cents(amount: float) -> String:
+	if absf(amount) < 100.0:
+		return "%s$%.2f" % ["-" if amount < 0.0 else "", absf(amount)]
+	return money_text(amount)
+
+
 static func money_text(amount: float) -> String:
 	var v: float = absf(amount)
 	var sign: String = "-" if amount < 0.0 else ""

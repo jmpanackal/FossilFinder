@@ -305,6 +305,7 @@ func _update_star_tip(pad_pos: Vector2) -> void:
 	var stand_id: String = ""
 	if _canvas.has_method("stand_at_stars"):
 		stand_id = str(_canvas.call("stand_at_stars", _pad_to_hall(pad_pos)))
+	_update_rate_tip(pad_pos, stand_id.is_empty())
 	if stand_id.is_empty():
 		if _star_tip != null:
 			_star_tip.visible = false
@@ -319,6 +320,36 @@ func _update_star_tip(pad_pos: Vector2) -> void:
 	at.y = minf(at.y, view.y - _star_tip.size.y - 8.0)
 	_star_tip.position = at
 	_star_tip.visible = true
+
+
+## Hovering a stand's $/sec explains the income, including what dirty bones
+## are costing.
+var _rate_tip: Label
+
+
+func _update_rate_tip(pad_pos: Vector2, allowed: bool) -> void:
+	var stand_id: String = ""
+	if allowed and _canvas.has_method("stand_at_rate"):
+		stand_id = str(_canvas.call("stand_at_rate", _pad_to_hall(pad_pos)))
+	if stand_id.is_empty():
+		if _rate_tip != null:
+			_rate_tip.visible = false
+		return
+	if _rate_tip == null:
+		_rate_tip = Label.new()
+		_rate_tip.name = "RateTip"
+		_rate_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_rate_tip.add_theme_stylebox_override("normal", Ui.tooltip_box())
+		Ui.apply_label(_rate_tip, 14, Ui.INK)
+		add_child(_rate_tip)
+	_rate_tip.text = str(_canvas.call("stand_income_tip", stand_id))
+	_rate_tip.size = _rate_tip.get_combined_minimum_size()
+	var at: Vector2 = pad_pos + Vector2(18.0, HEADER_H + 18.0)
+	var view: Vector2 = _view()
+	at.x = minf(at.x, view.x - _rate_tip.size.x - 8.0)
+	at.y = minf(at.y, view.y - _rate_tip.size.y - 8.0)
+	_rate_tip.position = at
+	_rate_tip.visible = true
 
 
 func _finish_press() -> void:

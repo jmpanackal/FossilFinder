@@ -42,7 +42,6 @@ func _run() -> void:
 	_test_apex_chapters_exist_and_gate()
 	_test_apex_ranks_add_power()
 	_test_first_tool_buys_stay_early_victories()
-	_test_passive_miner_is_catalogued()
 	_test_wider_scoop_rank_2_hits_more_than_one_cell()
 	_test_pick_wider_scoop_scales_like_shovel()
 	_test_fullscreen_pixels_do_not_become_play_view()
@@ -510,6 +509,8 @@ func _test_existing_shop_reaches_millions_before_apex() -> void:
 		"blockbuster_crowd": true,
 		"blockbuster_hours": true,
 		"blockbuster_feature": true,
+		"hands_consolidant": true,
+		"hands_resin": true,
 	}
 	var existing: int = 0
 	var whole: int = 0
@@ -656,7 +657,7 @@ func _test_first_tool_buys_stay_early_victories() -> void:
 	_assert(int(_item("shovel_click").get("cost", 999)) >= 18 and int(_item("shovel_click").get("cost", 999)) <= 30, "first shovel stays an early-game victory")
 	_assert(int(_item("pick_click").get("cost", 999)) >= 130 and int(_item("pick_click").get("cost", 999)) <= 170, "first pick is still a shift, not $200")
 	_assert(int(_item("hands_click").get("cost", 999)) >= 8 and int(_item("hands_click").get("cost", 999)) <= 12, "first hands buy stays cheap")
-	_assert(int(_item("passive_miner").get("cost", 0)) < 8000, "Hired Hand stays a cheap stub")
+	_test_hired_hand_is_gone()
 	_assert(int(_item("benches").get("max", 0)) == 5, "Benches stay five ranks")
 	_assert(int(_item("lighting").get("max", 0)) == 5, "Warm Lights stay five ranks")
 	_assert(_item("brush_titan").is_empty() and _item("brush_master_plus").is_empty(), "there is no Brush III")
@@ -1220,22 +1221,8 @@ func _test_hands_stay_the_careful_one_cell_tool() -> void:
 	_assert(TN.shovel_hit_cells(Vector2i(2, 2), 0.0).size() == 1, "hands stay a one-cell scrape")
 
 
-func _test_passive_miner_is_catalogued() -> void:
-	_reset()
-	var item: Dictionary = _item("passive_miner")
-	_assert(not item.is_empty(), "Hired Hand exists in the shop")
-	_assert(int(item.get("tier", 0)) >= 3, "Hired Hand sits at the end of Site")
-	_assert(int(item.get("cost", 0)) >= 2000, "Hired Hand is a late purchase")
-	_assert(not bool(GS.tier_unlocked("passive_miner")), "Hired Hand waits behind Site II")
-	_assert(not bool(GS.requirements_met("passive_miner")), "Hired Hand waits for Super tools / Rich Bed")
-	GS.money = 99999
-	_assert(not bool(GS.can_buy("passive_miner")), "Hired Hand cannot be bought at the start")
-	GS.levels["shovel_super"] = 1
-	GS.levels["rich_bed"] = 1
-	GS.apply_upgrades()
-	_assert(bool(GS.requirements_met("passive_miner")), "Hired Hand requires Super Shovel and Rich Bed")
-	_assert(not bool(GS.can_buy("passive_miner")), "Hired Hand still waits for Site II even with those ranks")
-	_assert(not GS.has_method("tick_hired_hands"), "Hired Hand does not auto-dig this pass")
+func _test_hired_hand_is_gone() -> void:
+	_assert(_item("passive_miner").is_empty(), "Hired Hand was removed from the shop")
 
 
 func _make_hud() -> Node:

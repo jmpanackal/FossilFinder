@@ -1380,6 +1380,37 @@ func stand_stars_rect(stand_id: String) -> Rect2:
 	return Rect2(Vector2(x0 - r - 4.0, chip.end.y + 3.0), Vector2(gap * 4.0 + r * 2.0 + 8.0, r * 2.0 + 6.0))
 
 
+func stand_at_rate(hall_pos: Vector2) -> String:
+	for stand_id in STAND_LAYOUT.keys():
+		var id: String = str(stand_id)
+		if GameState.stand_income(id) > 0.0 and stand_rate_rect(id).has_point(hall_pos):
+			return id
+	return ""
+
+
+## Plain-language lines for the $/sec hover card.
+func stand_income_tip(stand_id: String) -> String:
+	var b: Dictionary = GameState.stand_income_breakdown(stand_id)
+	var lines: PackedStringArray = []
+	lines.append("%s / sec   ·   %d visitors x %s" % [Ui.money_text_cents(float(b["income"])), int(b["visitors"]), Ui.money_text_cents(float(b["each"]))])
+	lines.append("Clean bones: %d  (full income)" % int(b["clean"]))
+	if int(b["dirty"]) > 0:
+		lines.append("Dirty bones: %d  (earn only %d%%)" % [int(b["dirty"]), int(round(float(b["dirty_share"]) * 100.0))])
+		lines.append("Cleaning them: +%s / sec" % Ui.money_text_cents(float(b["clean_gain"])))
+		lines.append("Brush bones clean in the field, or buy the Prep Lab.")
+		lines.append("Dirty bones can't make a Masterpiece.")
+	var boosts: PackedStringArray = []
+	if bool(b["complete"]):
+		boosts.append("Complete x%s" % GameState._mult_text(Tuning.complete_stand_mult))
+	if bool(b["master"]):
+		boosts.append("Masterpiece x%s" % GameState._mult_text(Tuning.masterpiece_mult))
+	if bool(b["featured"]):
+		boosts.append("Featured x%s" % GameState._mult_text(Tuning.spotlight_mult))
+	if not boosts.is_empty():
+		lines.append(" · ".join(boosts))
+	return "\n".join(lines)
+
+
 func stand_at_stars(hall_pos: Vector2) -> String:
 	for stand_id in STAND_LAYOUT.keys():
 		if stand_stars_rect(str(stand_id)).has_point(hall_pos):
@@ -1398,7 +1429,7 @@ func stand_condition_info(stand_id: String) -> Dictionary:
 	var title: String = GameState.stand_title(stand_id)
 	for piece_id in GameState.stand_piece_ids(stand_id):
 		var cond: int = int(GameState.piece_condition(str(piece_id)))
-		bones.append({"name": _short_bone_name(str(piece_id), title), "cond": cond})
+		bones.append({"name": _short_bone_name(str(piece_id), title), "cond": cond, "clean": GameState.piece_is_clean(str(piece_id))})
 		if cond <= 0:
 			continue
 		total += 1

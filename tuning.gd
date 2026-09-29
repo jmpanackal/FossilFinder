@@ -262,7 +262,7 @@ const CONDITION_PERFECT := 5
 const CONDITION_NAMES: PackedStringArray = ["Poor", "Fair", "Good", "Great", "Perfect"]
 ## Plain-language explanation shown in hints, so no one needs the jargon.
 const CONDITION_HINT := "Condition is how well a bone survived in the ground. Better condition sells for more and draws more museum visitors."
-var condition_weights: PackedFloat32Array = [14.0, 26.0, 32.0, 20.0, 8.0]
+var condition_weights: PackedFloat32Array = [16.0, 28.0, 32.0, 18.0, 6.0]
 ## Each point shifts the odds toward better-condition bones.
 var condition_luck: float = 0.0
 var condition_value_mult: PackedFloat32Array = [0.5, 0.75, 1.0, 1.4, 2.0]
@@ -300,21 +300,26 @@ var bone_kind_weights: PackedFloat32Array = [76.0, 20.0, 4.0]
 var bone_kind_weights_no_cast: PackedFloat32Array = [86.0, 14.0, 0.0]
 ## Opal only forms in the best-kept bone: always Great or Perfect, so it is
 ## always worth the race to plaster it.
-var opal_perfect_chance: float = 0.4
+## Opal comes out Good or Great; quick plaster is what makes it Perfect.
+var opal_great_chance: float = 0.45
 ## Perfect is special: a solid bone (nothing to plaster) that rolls Perfect
 ## only keeps it this often, else it comes out Great.
-var solid_perfect_keep: float = 0.25
+var solid_perfect_keep: float = 0.2
 
 
 func roll_opal_condition(rng: RandomNumberGenerator = null) -> int:
 	var roll: float = rng.randf() if rng != null else randf()
-	return CONDITION_PERFECT if roll < opal_perfect_chance else CONDITION_PERFECT - 1
+	return CONDITION_PERFECT - 1 if roll < opal_great_chance else CONDITION_PERFECT - 2
 ## Seconds in open air before the first crumble, then between crumbles.
 var crumble_first: PackedFloat32Array = [0.0, 12.0, 6.0]
 var crumble_step: PackedFloat32Array = [0.0, 10.0, 6.0]
 var bone_kind_value: PackedFloat32Array = [1.0, 1.0, 2.5]
 ## Plaster Cast: seconds of holding Hands on a dug-out bone to wrap it, by rank.
-var cast_hold_by_rank: PackedFloat32Array = [1.4, 1.0, 0.6]
+var cast_hold_by_rank: PackedFloat32Array = [2.0, 1.5, 1.0]
+## Stars a bone gains when plastered in the first window (before it has lost
+## any). Each star it loses to drying first takes one off: +B, +B-1, ... .
+## Consolidant (Hands III) and Museum Resin (Hands IV) raise it.
+var plaster_bonus: int = 1
 var cast_rank: int = 0
 
 

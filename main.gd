@@ -393,15 +393,14 @@ func _end_round() -> void:
 
 
 func _run_workshop() -> void:
-	## Repair Workshop: fix the weakest bones on display after each shift.
-	var repairs: Array = GameState.run_workshop()
-	if repairs.is_empty() or toast == null or not toast.has_method("show_toast"):
+	## Prep Lab: clean dirty bones on display after each shift.
+	var cleaned: Array = GameState.run_workshop()
+	if cleaned.is_empty() or toast == null or not toast.has_method("show_toast"):
 		return
-	var lines: PackedStringArray = []
-	for raw in repairs:
-		var r: Dictionary = raw
-		lines.append("%s: %s → %s" % [str(r["name"]), Tuning.condition_name(int(r["from"])), Tuning.condition_name(int(r["to"]))])
-	toast.show_toast("Workshop repaired %d bone%s" % [repairs.size(), "" if repairs.size() == 1 else "s"], ", ".join(lines))
+	var names: PackedStringArray = []
+	for raw in cleaned:
+		names.append(str((raw as Dictionary)["name"]))
+	toast.show_toast("Prep lab cleaned %d bone%s" % [cleaned.size(), "" if cleaned.size() == 1 else "s"], ", ".join(names) + ": full income now")
 
 
 func _show_summary() -> void:
@@ -445,7 +444,7 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 
 func _on_masterpiece_completed(stand_id: String, bonus: int) -> void:
 	var title_text: String = "%s Masterpiece!" % GameState.stand_title(stand_id)
-	var sub: String = "Every bone Perfect: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
+	var sub: String = "Every bone Perfect and clean: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
 	if hud != null and hud.visible and hud.has_method("celebrate"):
 		hud.celebrate(-1, title_text, sub, 5, 3)
 	elif toast != null and toast.has_method("show_toast"):
@@ -535,8 +534,17 @@ func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
 	_spawn_float(text, world_pos + Vector2(0, -20), Color("D8C8A8"), 18)
 
 
-func _on_bone_cast(_index: int, world_pos: Vector2) -> void:
-	_spawn_float("Plastered: stars locked", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
+func _on_bone_cast(index: int, world_pos: Vector2) -> void:
+	var text: String = "Plastered"
+	if index >= 0 and index < dig_site.finds.size():
+		var find: Dictionary = dig_site.finds[index]
+		var gain: int = int(find.get("plaster_gain", 0))
+		var now: int = int(find.get("condition", 3))
+		if gain > 0:
+			text = "Plastered +%d★ (%s)" % [gain, Tuning.condition_name(now)]
+		else:
+			text = "Plastered (%s)" % Tuning.condition_name(now)
+	_spawn_float(text, world_pos + Vector2(0, -24), Color("FFE9A0"), 20)
 	_ping(world_pos)
 
 

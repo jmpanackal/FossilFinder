@@ -600,7 +600,16 @@ func _roll_find_condition(kind: int, layer: int) -> int:
 	## A Perfect bone you never had to save should be rare.
 	if kind == Tuning.BONE_SOLID and cond >= Tuning.CONDITION_PERFECT and randf() >= Tuning.solid_perfect_keep:
 		cond = Tuning.CONDITION_PERFECT - 1
+	## Fragile bones top out at Great: Perfect comes from quick plaster.
+	if kind == Tuning.BONE_FRAGILE:
+		cond = mini(cond, Tuning.CONDITION_PERFECT - 1)
 	return cond
+
+
+## What plastering right now would do, relative to how the bone came out of
+## the ground: +bonus in the first window, one less per star lost since.
+func plaster_delta(find: Dictionary) -> int:
+	return Tuning.plaster_bonus - int(find.get("crumbled", 0))
 
 
 ## Bigger, pricier bones sit deeper in their range, so the best finds wait at
@@ -1283,6 +1292,12 @@ func cast_find(index: int) -> void:
 	if not _castable(find):
 		return
 	find["cast"] = true
+	## Plaster adds its bonus to what is left of the bone (capped at Perfect).
+	var before: int = int(find.get("condition", Tuning.CONDITION_GOOD))
+	find["condition"] = clampi(before + Tuning.plaster_bonus, Tuning.CONDITION_POOR, Tuning.CONDITION_PERFECT)
+	find["plaster_gain"] = int(find["condition"]) - before
+	if _focus_index == index:
+		condition = int(find["condition"])
 	_cast_hold = 0.0
 	_cast_index = -1
 	_grid_dirty = true
@@ -2268,10 +2283,25 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		var frac: float = clampf(left / maxf(span, 0.1), 0.0, 1.0)
 		_draw_spreading_cracks(c, find, 1.0 - frac)
 		var urgent: bool = left <= 3.0
-		var color := Color("FF6A4A") if urgent else (Color("9FE3F0") if kind == Tuning.BONE_OPAL else Color("F2E6C4"))
 		var anchor: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 16.0)
+		var owned: bool = Tuning.cast_owned()
+		var castable: bool = owned and _castable(find)
 		var lead: String = "Crumbling: -1"
 		var tail: String = "in %ds" % int(ceil(left))
+		var color := Color("FF6A4A") if urgent else (Color("9FE3F0") if kind == Tuning.BONE_OPAL else Color("F2E6C4"))
+		if castable:
+			## Plaster windows: what plastering NOW gives, and how long it lasts.
+			var delta: int = plaster_delta(find)
+			if delta > 0:
+				lead = "Plaster now: +%d" % delta
+				color = Color("FFD66B")
+			elif delta == 0:
+				lead = "Plaster now: keeps"
+				color = Color("F2E6C4")
+			else:
+				lead = "Plaster now: %d" % delta
+				color = Color("FF6A4A")
+			tail = "· %ds" % int(ceil(left))
 		var fs: int = 13
 		var lead_w: float = font.get_string_size(lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var tail_w: float = font.get_string_size(tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
@@ -2289,8 +2319,7 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		c.draw_string(font, Vector2(x, anchor.y + 4.5), tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 		## The action strip sits ABOVE the plate so it never hides the bone.
 		var tip: String = ""
-		var owned: bool = Tuning.cast_owned()
-		if owned and _castable(find):
+		if castable:
 			tip = "Hold Hands to plaster" if _using_hands() else "Press 1, hold to plaster"
 		elif owned:
 			tip = "Dig it all out to plaster"
