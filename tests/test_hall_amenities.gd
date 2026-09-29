@@ -44,8 +44,6 @@ const FRAME_A := Rect2(220, 86, 200, 96)
 const FRAME_B := Rect2(1630, 86, 200, 96)
 const NORTH_GIFT := Rect2(1280, 388, 96, 48)
 const SOUTH_GIFT := Rect2(1120, 1420, 140, 40)
-const NORTH_CART := Rect2(16, 478, 72, 36)
-const SOUTH_CART := Rect2(80, 1420, 72, 36)
 
 
 func _init() -> void:
@@ -60,7 +58,6 @@ func _run() -> void:
 	_test_benches_rank_one_fronts_t_rex()
 	_test_lighting_rank_one_places_t_rex_bay_lamp_and_runner()
 	_test_gift_shop_rank_one_places_north_kiosk()
-	_test_restoration_rank_one_places_north_cart()
 	_test_glass_case_zero_has_no_sheen()
 	_test_benches_rank_n_fronts_first_n_dino_stands()
 	_test_each_new_bench_is_a_distinct_stand_slot()
@@ -74,8 +71,8 @@ func _run() -> void:
 	_test_labels_rank_one_shows_wall_frames()
 	_test_labels_rank_three_shows_case_titles()
 	_test_labels_enrich_plaque_gold()
-	_test_gift_and_cart_details_scale_on_the_north_prop()
-	_test_late_ranks_add_south_gift_and_cart()
+	_test_gift_details_scale_on_the_north_prop()
+	_test_late_ranks_add_south_gift()
 	_test_south_props_stay_off_mounts_and_aisle()
 	_test_crowd_ranks_add_no_benches_or_shops()
 	_test_rank_one_tells_sit_in_the_default_north_view()
@@ -191,7 +188,6 @@ func _test_start_hall_has_no_shop_furniture() -> void:
 	_assert(exhibit.has_method("hall_runner_visible"), "exhibit exposes runner visibility")
 	_assert(exhibit.has_method("hall_frame_rects"), "exhibit exposes wall frames")
 	_assert(exhibit.has_method("hall_gift_rect"), "exhibit exposes the gift counter")
-	_assert(exhibit.has_method("hall_cart_rect"), "exhibit exposes the cleanup cart")
 	_assert(exhibit.has_method("hall_hours_rect"), "exhibit exposes the hours query")
 	_assert(exhibit.has_method("hall_case_glass_alpha"), "exhibit exposes case glass alpha")
 	_assert(exhibit.has_method("hall_case_titles_visible"), "exhibit exposes case-title visibility")
@@ -207,12 +203,9 @@ func _test_start_hall_has_no_shop_furniture() -> void:
 		_assert(exhibit.call("hall_lamp_pools").is_empty(), "0 lighting ranks hide lamp wash")
 	_assert(exhibit.call("hall_frame_rects").is_empty(), "0 labels ranks draw 0 wall frames")
 	_assert(exhibit.call("hall_gift_rect").size == Vector2.ZERO, "0 gift_shop ranks hide the counter")
-	_assert(exhibit.call("hall_cart_rect").size == Vector2.ZERO, "0 restoration ranks hide the cart")
 	_assert(exhibit.call("hall_hours_rect").size == Vector2.ZERO, "0 unveil_time ranks have no hours plate")
 	if exhibit.has_method("hall_gift_south_rect"):
 		_assert(exhibit.call("hall_gift_south_rect").size == Vector2.ZERO, "0 gift_shop ranks hide the south counter")
-	if exhibit.has_method("hall_cart_south_rect"):
-		_assert(exhibit.call("hall_cart_south_rect").size == Vector2.ZERO, "0 restoration ranks hide the south cart")
 	if exhibit.has_method("hall_crowd_rope_rects"):
 		_assert(exhibit.call("hall_crowd_rope_rects").is_empty(), "0 crowds ranks hide the velvet ropes")
 	if exhibit.has_method("hall_opening_bunting_rect"):
@@ -311,25 +304,6 @@ func _test_gift_shop_rank_one_places_north_kiosk() -> void:
 	_assert(not _overlaps_stand_or_gather(exhibit, gift), "north gift kiosk stays off mounts and gather slots")
 	if exhibit.has_method("hall_gift_south_rect"):
 		_assert(exhibit.call("hall_gift_south_rect").size == Vector2.ZERO, "rank 1 gift_shop does not add the south counter")
-	exhibit.free()
-
-
-func _test_restoration_rank_one_places_north_cart() -> void:
-	_reset()
-	_set_rank("restoration", 1)
-	var exhibit: Node2D = _make_exhibit()
-	if not exhibit.has_method("hall_cart_rect"):
-		_assert(false, "rank 1 restoration places the north cart")
-		exhibit.free()
-		return
-	var cart: Rect2 = exhibit.call("hall_cart_rect")
-	_assert(cart.size.x > 1.0 and cart.size.y > 1.0, "rank 1 restoration places the cart")
-	_assert(cart.position == NORTH_CART.position, "rank 1 cart sits west near Small Finds")
-	_assert(cart.position.y < NORTH_VIEW_Y, "rank 1 cart sits in the default north view")
-	_assert(cart.end.x < 400.0, "rank 1 cart stays on the west side")
-	_assert(not _overlaps_stand_or_gather(exhibit, cart), "north cart stays off mounts and gather slots")
-	if exhibit.has_method("hall_cart_south_rect"):
-		_assert(exhibit.call("hall_cart_south_rect").size == Vector2.ZERO, "rank 1 restoration does not add the south cart")
 	exhibit.free()
 
 
@@ -640,11 +614,11 @@ func _test_labels_enrich_plaque_gold() -> void:
 	exhibit.free()
 
 
-func _test_gift_and_cart_details_scale_on_the_north_prop() -> void:
+func _test_gift_details_scale_on_the_north_prop() -> void:
 	_reset()
 	var exhibit: Node2D = _make_exhibit()
-	if not exhibit.has_method("hall_gift_rect") or not exhibit.has_method("hall_cart_rect"):
-		_assert(false, "later gift and restoration ranks dress the north props")
+	if not exhibit.has_method("hall_gift_rect"):
+		_assert(false, "later gift ranks dress the north kiosk")
 		exhibit.free()
 		return
 	_set_rank("gift_shop", 1)
@@ -657,23 +631,14 @@ func _test_gift_and_cart_details_scale_on_the_north_prop() -> void:
 		_assert(bool(exhibit.call("hall_gift_has_rack")), "later gift ranks add a postcard rack")
 	if exhibit.has_method("hall_gift_has_stack"):
 		_assert(bool(exhibit.call("hall_gift_has_stack")), "later gift ranks add a souvenir stack")
-	_set_rank("restoration", 1)
-	var cart: Rect2 = exhibit.call("hall_cart_rect")
-	_assert(cart.position == NORTH_CART.position, "rank 1 restoration is the north cart")
-	if exhibit.has_method("hall_cart_has_bucket"):
-		_assert(not bool(exhibit.call("hall_cart_has_bucket")), "rank 1 restoration is only the cart")
-	_set_rank("restoration", 3)
-	_assert(exhibit.call("hall_cart_rect") == cart, "later restoration ranks keep the same north cart")
-	if exhibit.has_method("hall_cart_has_bucket"):
-		_assert(bool(exhibit.call("hall_cart_has_bucket")), "later restoration ranks add a bucket")
 	exhibit.free()
 
 
-func _test_late_ranks_add_south_gift_and_cart() -> void:
+func _test_late_ranks_add_south_gift() -> void:
 	_reset()
 	var exhibit: Node2D = _make_exhibit()
-	if not exhibit.has_method("hall_gift_south_rect") or not exhibit.has_method("hall_cart_south_rect"):
-		_assert(false, "late gift and restoration ranks add the south extras")
+	if not exhibit.has_method("hall_gift_south_rect"):
+		_assert(false, "late gift ranks add the south counter")
 		exhibit.free()
 		return
 	_set_rank("gift_shop", 3)
@@ -682,12 +647,6 @@ func _test_late_ranks_add_south_gift_and_cart() -> void:
 	var south_gift: Rect2 = exhibit.call("hall_gift_south_rect")
 	_assert(south_gift.position == SOUTH_GIFT.position, "gift rank 4+ adds the south counter")
 	_assert(south_gift.position.y > 1380.0, "late gift extra sits at the south end")
-	_set_rank("restoration", 3)
-	_assert(exhibit.call("hall_cart_south_rect").size == Vector2.ZERO, "restoration ranks 1–3 keep only the north cart")
-	_set_rank("restoration", 4)
-	var south_cart: Rect2 = exhibit.call("hall_cart_south_rect")
-	_assert(south_cart.position == SOUTH_CART.position, "restoration rank 4+ adds the south-west cart")
-	_assert(south_cart.position.y > 1330.0, "late restoration extra sits south-west")
 	exhibit.free()
 
 
@@ -695,7 +654,6 @@ func _test_south_props_stay_off_mounts_and_aisle() -> void:
 	_reset()
 	_set_rank("benches", 5)
 	_set_rank("gift_shop", 6)
-	_set_rank("restoration", 6)
 	_set_rank("unveil_time", 4)
 	_set_rank("crowds", 6)
 	_set_rank("unveil_crowd", 4)
@@ -707,11 +665,8 @@ func _test_south_props_stay_off_mounts_and_aisle() -> void:
 	var props: Array = []
 	props.append_array(exhibit.call("hall_bench_rects"))
 	props.append(exhibit.call("hall_gift_rect"))
-	props.append(exhibit.call("hall_cart_rect"))
 	if exhibit.has_method("hall_gift_south_rect"):
 		props.append(exhibit.call("hall_gift_south_rect"))
-	if exhibit.has_method("hall_cart_south_rect"):
-		props.append(exhibit.call("hall_cart_south_rect"))
 	if exhibit.has_method("hall_crowd_rope_rects"):
 		props.append_array(exhibit.call("hall_crowd_rope_rects"))
 	var hours: Rect2 = exhibit.call("hall_hours_rect")
@@ -742,7 +697,6 @@ func _test_crowd_ranks_add_no_benches_or_shops() -> void:
 	_assert(exhibit.call("hall_bench_rects").is_empty(), "unveil_crowd and crowds add no benches")
 	_assert(int(exhibit.call("hall_lamp_count")) == 0, "spotlight adds no lamps")
 	_assert(exhibit.call("hall_gift_rect").size == Vector2.ZERO, "crowd ranks add no gift counter")
-	_assert(exhibit.call("hall_cart_rect").size == Vector2.ZERO, "crowd ranks add no cart")
 	exhibit.free()
 
 
@@ -751,7 +705,6 @@ func _test_rank_one_tells_sit_in_the_default_north_view() -> void:
 	var exhibit: Node2D = _make_exhibit()
 	_set_rank("benches", 1)
 	_set_rank("gift_shop", 1)
-	_set_rank("restoration", 1)
 	_set_rank("unveil_time", 1)
 	_set_rank("crowds", 1)
 	_set_rank("unveil_crowd", 1)
@@ -763,7 +716,6 @@ func _test_rank_one_tells_sit_in_the_default_north_view() -> void:
 	if not benches.is_empty():
 		_assert_bench_fronts_stand(exhibit, benches[0], "t_rex")
 	_assert(_in_north_view(exhibit.call("hall_gift_rect")), "rank 1 gift_shop is in the default north view")
-	_assert(_in_north_view(exhibit.call("hall_cart_rect")), "rank 1 restoration is in the default north view")
 	_assert(exhibit.call("hall_hours_rect").size == Vector2.ZERO, "rank 1 unveil_time places no hours plate")
 	if exhibit.has_method("hall_crowd_rope_rects"):
 		var ropes: Array = exhibit.call("hall_crowd_rope_rects")
@@ -939,10 +891,6 @@ func _prop_name(prop: Rect2, exhibit: Node2D) -> String:
 		return "gift kiosk"
 	if exhibit.has_method("hall_gift_south_rect") and prop == exhibit.call("hall_gift_south_rect"):
 		return "south gift counter"
-	if exhibit.has_method("hall_cart_rect") and prop == exhibit.call("hall_cart_rect"):
-		return "cleanup cart"
-	if exhibit.has_method("hall_cart_south_rect") and prop == exhibit.call("hall_cart_south_rect"):
-		return "south cleanup cart"
 	if exhibit.has_method("hall_opening_bunting_rect") and prop == exhibit.call("hall_opening_bunting_rect"):
 		return "opening bunting"
 	return "amenity"

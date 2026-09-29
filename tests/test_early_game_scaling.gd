@@ -433,7 +433,7 @@ func _test_super_and_crowds_price_band() -> void:
 
 func _test_mid_rows_last_in_late_band() -> void:
 	_reset()
-	for id in ["shovel_soft", "restoration", "site_expand", "money_mult"]:
+	for id in ["shovel_soft", "site_expand", "money_mult"]:
 		var last: int = _row_last(id)
 		_assert(last >= 25000 and last <= 50000, "%s last buy is $25k–$50k" % id)
 	var museum_i: int = _chapter_total("Museum", 1)

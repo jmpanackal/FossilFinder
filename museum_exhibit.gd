@@ -52,8 +52,6 @@ const HALL_FRAME_RECTS := [
 ]
 const HALL_GIFT_RECT := Rect2(1280, 388, 96, 48)
 const HALL_GIFT_SOUTH_RECT := Rect2(1120, 1420, 140, 40)
-const HALL_CART_RECT := Rect2(16, 478, 72, 36)
-const HALL_CART_SOUTH_RECT := Rect2(80, 1420, 72, 36)
 const HALL_BUNTING_RECT := Rect2(810, 4, 380, 28)
 ## Cleaning Cart: its parking bay (parked = every exhibit earns normally).
 const CLEANER_PARK := Rect2(520, 1386, 104, 62)
@@ -208,7 +206,6 @@ func _draw_hall() -> void:
 	for bench in hall_bench_rects():
 		_draw_bench(bench.position)
 	_draw_gift_counter()
-	_draw_cleanup_cart()
 	_draw_crowd_ropes()
 	for i in lamps.size():
 		_draw_warm_light(lamps[i], float(HALL_LAMP_RADII[i]))
@@ -391,26 +388,6 @@ func _clock(seconds: int) -> String:
 	return "%ds" % seconds
 
 
-func _draw_cleanup_cart() -> void:
-	_draw_cart_prop(hall_cart_rect(), true)
-	_draw_cart_prop(hall_cart_south_rect(), false)
-
-
-func _draw_cart_prop(cart: Rect2, dress: bool) -> void:
-	if cart.size == Vector2.ZERO:
-		return
-	var rank: int = _museum_rank("restoration")
-	draw_rect(cart, Color("4A4030"))
-	draw_rect(Rect2(cart.position.x, cart.position.y, cart.size.x, 8.0 if rank <= 1 else 10.0), Color("5A4A36") if rank <= 1 else Color("6A5A40"))
-	draw_rect(cart, Color("C9A056") if rank <= 1 else Color("E4B75A"), false, 1.0 if rank <= 1 else 1.6)
-	draw_circle(Vector2(cart.position.x + 12.0, cart.end.y), 6.0, Color("2A2418"))
-	draw_circle(Vector2(cart.end.x - 12.0, cart.end.y), 6.0, Color("2A2418"))
-	if dress and hall_cart_has_bucket():
-		var bucket := Rect2(cart.end.x + 8.0, cart.position.y + 6.0, 18.0, 22.0)
-		draw_rect(bucket, Color("4A5A6A"))
-		draw_rect(Rect2(bucket.position.x - 2.0, bucket.position.y, bucket.size.x + 4.0, 4.0), Color("3A4A5A"))
-
-
 func _draw_crowd_ropes() -> void:
 	var rank: int = _museum_rank("crowds")
 	var post_r: float = 4.0 if rank <= 1 else 6.0
@@ -570,22 +547,6 @@ func hall_gift_has_rack() -> bool:
 
 func hall_gift_has_stack() -> bool:
 	return _museum_rank("gift_shop") >= 3
-
-
-func hall_cart_rect() -> Rect2:
-	if _museum_rank("restoration") <= 0:
-		return Rect2()
-	return HALL_CART_RECT
-
-
-func hall_cart_south_rect() -> Rect2:
-	if _museum_rank("restoration") < 4:
-		return Rect2()
-	return HALL_CART_SOUTH_RECT
-
-
-func hall_cart_has_bucket() -> bool:
-	return _museum_rank("restoration") >= 2
 
 
 func hall_hours_rect() -> Rect2:

@@ -204,7 +204,6 @@ var piece_income_clean: float = 0.08
 var piece_income_dirty: float = 0.03
 var piece_income_exhibit: float = 0.09
 var piece_income_exhibit_dirty: float = 0.035
-var dirty_income_factor: float = 1.0
 var exhibit_flat_income: float = 0.0
 var donation_base: float = 0.02
 var donation_mult: float = 1.0

@@ -29,6 +29,7 @@ func _run() -> void:
 	_test_parked_cart_does_nothing()
 	_test_cart_ranks_clean_faster()
 	_test_cart_position_saves()
+	_test_cleanup_crew_is_gone_and_refunded()
 	await _test_masterpiece_needs_complete_and_great()
 	await _test_cart_can_finish_a_masterpiece()
 	_test_region_condition_is_the_weakest_bone()
@@ -215,6 +216,25 @@ func _test_cart_ranks_clean_faster() -> void:
 	_assert(GS.prep_cart_seconds(1) > GS.prep_cart_seconds(2) and GS.prep_cart_seconds(2) > GS.prep_cart_seconds(3), "higher ranks clean faster")
 	_own_cart(3)
 	_assert(str(GS.shop_effect_line("workshop")).contains("Cleans"), "shop line says how fast it cleans")
+
+
+func _test_cleanup_crew_is_gone_and_refunded() -> void:
+	## Cleanup Crew (paid dirty bones more) overlapped the cart and was removed.
+	## Old saves get the money back and the upgrade is ignored.
+	_reset()
+	_assert(GS._item("restoration").is_empty(), "Cleanup Crew is no longer in the shop")
+	var refund: int = int(GS.retired_refund({"restoration": 2}))
+	_assert(refund == 1600 + int(round(1600.0 * 1.85)), "two ranks refund what they cost")
+	_assert(int(GS.retired_refund({})) == 0, "no ranks, no refund")
+	var path: String = "user://test_crew_refund.json"
+	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"version": 1, "money": 100, "levels": {"restoration": 2}, "pieces": {}}))
+	f.close()
+	GS.load_game(path)
+	_assert(int(GS.money) == 100 + refund, "loading an old save pays the refund")
+	_assert(not GS.levels.has("restoration"), "the removed upgrade is not carried over")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_reset()
 
 
 func _test_cart_position_saves() -> void:

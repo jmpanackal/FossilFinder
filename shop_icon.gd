@@ -99,8 +99,6 @@ static func glyph_for(id: String) -> String:
 			return "gift"
 		"crowds":
 			return "crowds"
-		"restoration":
-			return "restore"
 		"unveil_time":
 			return "shift"
 		"unveil_crowd":

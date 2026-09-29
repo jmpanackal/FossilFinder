@@ -22,6 +22,9 @@ const STAND_SMALL_FINDS := "small_finds"
 const STAND_PLANT_FOSSILS := "plant_fossils"
 const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
+## Upgrades that no longer exist. Ranks in old saves are refunded at what they
+## cost (base cost x scale^rank for each rank bought).
+const RETIRED_UPGRADES := {"restoration": {"cost": 1600, "scale": 1.85}}
 
 var money: int = 0
 var levels: Dictionary = {}
@@ -92,7 +95,6 @@ var catalog: Array[Dictionary] = [
 	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
 	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
 	{"id": "crowds", "cat": "Museum", "tier": 3, "name": "Weekend Crowds", "desc": "More foot traffic every second.", "cost": 4000, "scale": 1.95, "max": 6},
-	{"id": "restoration", "cat": "Museum", "tier": 3, "name": "Cleanup Crew", "desc": "Dirty finds still look decent on display.", "cost": 1600, "scale": 1.85, "max": 6},
 	{"id": "workshop", "cat": "Museum", "tier": 3, "name": "Cleaning Cart", "desc": "The cart climbs each dirt level faster.", "unlock_name": "Cleaning Cart", "unlock_desc": "Drag the cart onto an exhibit to slowly clean its dirty bones. The exhibit is closed and earns nothing while the cart is there. Drag it to the parking bay to reopen everything.", "unlock_action": "Unlock", "cost": 30000, "scale": 2.2, "max": 3, "optional": true},
 	{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4, "name": "Box Office", "desc": "Tickets pay more.", "cost": 120000, "scale": 1.90, "max": 6},
 	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors: +20% of your crowd per rank.", "cost": 140000, "scale": 1.75, "max": 5},
@@ -119,7 +121,6 @@ func _ready() -> void:
 		"museum_income_mult": Tuning.museum_income_mult,
 		"precision_damage_bonus": 0.0,
 		"money_mult": Tuning.money_mult,
-		"dirty_income_factor": 1.0,
 		"exhibit_flat_income": 0.0,
 		"dirt_money_bonus": 0.0,
 		"rock_money_bonus": 0.0,
@@ -435,7 +436,6 @@ func _tuning_snapshot() -> Dictionary:
 		"visitor_mult": Tuning.visitor_mult,
 		"crumble_slow": Tuning.crumble_slow,
 		"plaster_bonus": Tuning.plaster_bonus,
-		"dirty_income_factor": Tuning.dirty_income_factor,
 		"site_size_rank": Tuning.site_size_rank,
 		"extra_find_slots": Tuning.extra_find_slots,
 		"extra_find_chance": Tuning.extra_find_chance,
@@ -558,8 +558,6 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			if secs <= 0:
 				return "No cart yet"
 			return "Cleans one dirt level per %ds" % secs
-		"restoration":
-			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
 		_:
 			return ""
 
@@ -1112,7 +1110,6 @@ func apply_upgrades() -> void:
 	Tuning.matrix_stone_chance = float(_bases["matrix_stone_chance"]) + 0.055 * _lv("rock_pay")
 	Tuning.fossil_value_mult = 1.0 + 0.08 * _lv("fossil_value")
 	Tuning.exhibit_flat_income = 0.0
-	Tuning.dirty_income_factor = 1.0 + 0.12 * _lv("restoration")
 	Tuning.site_size_rank = int(_lv("site_size") + _lv("site_expand"))
 	## Extra fossils are a chain of chances, not a fixed count: each one that
 	## shows up rolls for another, so you never know when the pit is empty.
@@ -1838,7 +1835,7 @@ func piece_visitors(piece_id: String, force_clean: bool = false) -> int:
 	## How dirty it is matters, not just clean-or-not: income slides from the
 	## dirty floor (fully caked) up to full as the bone gets cleaner.
 	var cleanliness: float = 1.0 if clean else clampf(float(piece.get("cleanliness", 0.0)), 0.0, 1.0)
-	var floor_draw: float = minf(float(dirty_draw) * Tuning.dirty_income_factor, float(clean_draw))
+	var floor_draw: float = minf(float(dirty_draw), float(clean_draw))
 	var draw: float = lerpf(floor_draw, float(clean_draw), cleanliness)
 	## Better-condition bones draw more visitors (Good = 1x).
 	var cond_mult: float = Tuning.condition_visitors(int(piece.get("condition", Tuning.CONDITION_GOOD)))
@@ -2103,6 +2100,16 @@ func _erase_save(path: String) -> void:
 		save_game(path)
 
 
+## Money back for ranks of upgrades that have since been removed.
+func retired_refund(raw_levels: Dictionary) -> int:
+	var total: float = 0.0
+	for id in RETIRED_UPGRADES:
+		var info: Dictionary = RETIRED_UPGRADES[id]
+		for rank in int(raw_levels.get(id, 0)):
+			total += float(info["cost"]) * pow(float(info["scale"]), float(rank))
+	return int(round(total))
+
+
 func has_save(path: String = SAVE_PATH) -> bool:
 	return FileAccess.file_exists(path)
 
@@ -2143,6 +2150,7 @@ func load_game(path: String = SAVE_PATH) -> bool:
 	var data: Dictionary = parsed
 	money = int(data.get("money", 0))
 	var raw_levels: Dictionary = data.get("levels", {})
+	money += retired_refund(raw_levels)
 	for item in catalog:
 		var id: String = str(item["id"])
 		levels[id] = int(raw_levels.get(id, 0))
