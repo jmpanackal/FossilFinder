@@ -146,6 +146,8 @@ func _test_set_copies_fill_the_hall() -> void:
 
 
 func _test_first_piece_unveils_later_pieces_grow() -> void:
+	## Every new bone gets its own unveiling: the second foot is "NEW 2/4" and so it
+	## waits under a ribbon too. Only a copy that just sells does not.
 	_reset()
 	GS.install_find("stegosaurus_foot", "Stegosaurus Foot", 1.0, true)
 	_assert(bool(GS.stand_has_pending_unveil("stegosaurus")), "first foot waits under a ribbon")
@@ -153,8 +155,17 @@ func _test_first_piece_unveils_later_pieces_grow() -> void:
 	_assert(not GS.stand_has_pending_unveil("stegosaurus"), "ribbon clears after unveil")
 	GS.install_find("stegosaurus_foot", "Stegosaurus Foot", 1.0, true)
 	_assert(_count("stegosaurus_foot") == 2, "second foot grows the mount")
-	_assert(not GS.stand_has_pending_unveil("stegosaurus"), "later feet do not re-ribbon")
+	_assert(bool(GS.stand_has_pending_unveil("stegosaurus")), "the second foot waits under a ribbon too")
 	_assert(bool(GS.stand_is_filled("stegosaurus")), "the stand stays filled while the set grows")
+	GS.unveil_stand("stegosaurus")
+	for _i in 2:
+		GS.install_find("stegosaurus_foot", "Stegosaurus Foot", 1.0, true)
+		GS.unveil_stand("stegosaurus")
+	_assert(_count("stegosaurus_foot") == int(GS.piece_need("stegosaurus_foot")), "the set is full")
+	var money: int = int(GS.money)
+	GS.install_find("stegosaurus_foot", "Stegosaurus Foot", 1.0, true)
+	_assert(int(GS.money) > money, "a copy beyond the set sells")
+	_assert(not GS.stand_has_pending_unveil("stegosaurus"), "and a copy that only sells is not unveiled")
 
 
 func _test_new_piece_type_re_ribbons_and_names_the_bone() -> void:

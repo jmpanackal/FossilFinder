@@ -1555,6 +1555,10 @@ func _install_piece(piece_id: String, display_name: String, cleanliness: float, 
 			piece["cleanliness"] = cleanliness
 			piece["clean"] = clean
 		pieces[piece_id] = piece
+		## Every bone that joins the display gets its own unveiling, not just the
+		## first of its kind (a copy that only sells, above, never does).
+		if stand_for_piece(piece_id) != "":
+			pending_unveils[piece_id] = true
 		collection_changed.emit()
 		hall_changed.emit()
 		return _mount_note(display_name, count + 1, need, bool(pieces[piece_id].get("clean", clean)))
