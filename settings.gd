@@ -420,6 +420,9 @@ func _build_ui() -> void:
 	confirm_label.text = "Erase save and start over?"
 	confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	## A wrapping label measured at zero width breaks at every letter and makes the
+	## panel absurdly tall, so it always keeps a real width (even while hidden).
+	confirm_label.custom_minimum_size = Vector2(380, 0)
 	Ui.apply_label(confirm_label, 14, Ui.GOLD)
 	_confirm_wrap.add_child(confirm_label)
 	var confirm_row := HBoxContainer.new()
@@ -580,6 +583,7 @@ func _on_new_game_pressed() -> void:
 	if _confirm_wrap != null:
 		_confirm_wrap.visible = true
 	_fit_menu_panel()
+	call_deferred("_fit_menu_panel")
 	Sfx.play("ui")
 
 
@@ -589,6 +593,7 @@ func _hide_new_game_confirm() -> void:
 	if _new_game != null:
 		_new_game.visible = true
 	_fit_menu_panel()
+	call_deferred("_fit_menu_panel")
 
 
 func _on_new_game_confirmed() -> void:
