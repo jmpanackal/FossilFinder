@@ -92,7 +92,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting goes faster and the bristles reach the next bone cell.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "shovel_click"},
 	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Faster dusting and a much wider sweep.", "cost": 3500, "scale": 1.95, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
-	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Small finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
+	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Sifted finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 100, "scale": 2.1, "max": 3},
 	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Fossils", "desc": "Better odds of extra fossils. Each one found may mean another is hiding.", "unlock_name": "Scattered Fossils", "unlock_desc": "Extra fossils may hide in the pit. You never know how many: keep digging to find out.", "unlock_action": "Unlock", "cost": 160, "scale": 2.0, "max": 2},
 	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Better odds of extra fossils.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 1400, "scale": 1.9, "max": 3},
@@ -544,7 +544,7 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 		"round_time", "round_marathon":
 			return "+%ds per shift" % int(round(float(at["round_seconds"]) - float(zero["round_seconds"])))
 		"dirt_pay":
-			return "+$%.2f matrix finds" % (float(at["dirt_money_bonus"]) - float(zero["dirt_money_bonus"]))
+			return "+$%.2f per sifted find" % (float(at["dirt_money_bonus"]) - float(zero["dirt_money_bonus"]))
 		"site_size", "site_expand":
 			var layout: Vector2i = Tuning.site_layout_for_rank(int(at["site_size_rank"]))
 			return "Pit %d×%d" % [layout.x, layout.y]
@@ -1025,7 +1025,7 @@ func upgrade_feel_line(id: String) -> String:
 		"prime_bed":
 			return "More fossils in the pit"
 		"dirt_pay":
-			return "Richer matrix"
+			return "Sifted finds pay more"
 		"site_size":
 			return "The pit is bigger"
 		"scrap_bed":

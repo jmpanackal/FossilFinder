@@ -65,6 +65,7 @@ func _ready() -> void:
 	dig_site.pickaxe_struck.connect(_on_pickaxe)
 	dig_site.tool_used.connect(_on_tool_used)
 	dig_site.lucky_struck.connect(_on_lucky_struck)
+	dig_site.lucky_appeared.connect(_on_lucky_appeared)
 	if dig_site.has_signal("bone_sensed"):
 		dig_site.bone_sensed.connect(_on_bone_sensed)
 	if dig_site.has_signal("condition_revealed"):
@@ -493,6 +494,7 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 	if juice.is_empty():
 		_spawn_float("+$%d" % amount, world_pos, Color("E4B75A"))
 		return
+	Hints.teach("sifted")
 	for i in juice.size():
 		var find: Dictionary = juice[i]
 		if GameState.has_method("try_mount_matrix_find"):
@@ -773,6 +775,10 @@ func _notify(title_text: String, subtitle: String = "", stars: int = 0, tier: in
 		hud.celebrate(-1, title_text, subtitle, stars, tier)
 	elif toast != null and toast.has_method("show_toast"):
 		toast.show_toast(title_text, subtitle, stars)
+
+
+func _on_lucky_appeared(_world_pos: Vector2) -> void:
+	Hints.teach("pocket")
 
 
 func _on_lucky_struck(amount: int, world_pos: Vector2) -> void:

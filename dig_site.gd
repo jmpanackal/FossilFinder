@@ -17,6 +17,8 @@ signal fossil_ready_to_dust(find_index: int)
 signal tool_used(tool: int)
 signal lucky_struck(amount: int, world_pos: Vector2)
 signal lucky_fled
+## An amber pocket just started glowing in the dirt.
+signal lucky_appeared(world_pos: Vector2)
 signal bone_sensed(world_pos: Vector2)
 ## A bone was fully uncovered and its hidden condition (1 Poor .. 5 Perfect) shows.
 signal condition_revealed(find_index: int, condition: int, world_pos: Vector2)
@@ -249,6 +251,7 @@ func _spawn_lucky() -> void:
 	if _lucky_cell.x < 0:
 		return
 	_lucky_left = Tuning.lucky_duration
+	lucky_appeared.emit(cell_center(_lucky_cell))
 
 
 func _clear_lucky_if_empty() -> void:
@@ -326,30 +329,72 @@ func _refresh_pending(cell: Vector2i) -> void:
 	_pending[cell.x][cell.y] = _roll_matrix(layer)
 
 
+## An amber pocket: a glowing lump of amber showing through the dirt with a tiny
+## insect trapped inside, the classic fossil find. No box, no crosshair: it
+## should look like something in the ground, not a button.
 func _draw_lucky() -> void:
 	var cell := _lucky_cell
-	var pulse: float = 1.0
+	var fade: float = 1.0
 	if cell.x < 0:
 		if _lucky_flee <= 0.0:
 			return
 		cell = _lucky_flee_cell
-		pulse = _lucky_flee
+		fade = _lucky_flee
 	if not _in_bounds(cell):
 		return
 	var rect := _top_rect(cell.x, cell.y)
-	var beat: float = 0.55 + 0.45 * absf(sin(float(Time.get_ticks_msec()) * 0.012))
-	var grow: float = (3.0 + beat * 3.0) * pulse
-	var amber := Color("FFB020", (0.55 + beat * 0.4) * pulse)
-	var gold := Color("FFE08A", (0.7 + beat * 0.3) * pulse)
-	draw_rect(rect.grow(grow), amber)
-	draw_rect(rect, Color("FFCC44", 0.38 * pulse))
-	draw_rect(rect.grow(2.0 * pulse), gold, false, 2.5 + beat * 2.0)
-	var flake: float = minf(rect.size.x, rect.size.y) * (0.10 + beat * 0.04)
-	var center := rect.get_center()
-	draw_circle(center, flake, Color("FFF6D0", pulse))
-	draw_line(center + Vector2(-flake * 2.4, 0), center + Vector2(flake * 2.4, 0), gold, 1.6)
-	draw_line(center + Vector2(0, -flake * 2.4), center + Vector2(0, flake * 2.4), gold, 1.6)
-	draw_arc(center, flake * 1.8, 0.0, TAU, 22, Color("FFE08A", 0.85 * pulse), 2.0)
+	var t: float = float(Time.get_ticks_msec()) / 1000.0
+	var beat: float = 0.5 + 0.5 * sin(t * 3.4)
+	var unit: float = minf(rect.size.x, rect.size.y)
+	var center: Vector2 = rect.get_center() + Vector2(0.0, unit * 0.04)
+	## Warm glow seeping up through the dirt.
+	draw_circle(center, unit * (0.74 + 0.06 * beat), Color(1.0, 0.62, 0.15, 0.10 * fade))
+	draw_circle(center, unit * (0.52 + 0.05 * beat), Color(1.0, 0.72, 0.25, 0.18 * fade))
+	## Loosened dirt around the base.
+	for i in 6:
+		var ang: float = TAU * float(i) / 6.0 + 0.3
+		draw_circle(center + Vector2(cos(ang) * unit * 0.62, sin(ang) * unit * 0.30 + unit * 0.05), unit * 0.05, Color(0.30, 0.20, 0.12, 0.65 * fade))
+	## The amber: a darker rim, a glowing body, a bright highlight.
+	var rx: float = unit * 0.56
+	var ry: float = unit * 0.40
+	draw_colored_polygon(_lump_points(center, rx, ry, 0.10), Color(0.72, 0.36, 0.06, 0.96 * fade))
+	draw_colored_polygon(_lump_points(center + Vector2(0.0, -unit * 0.02), rx * 0.86, ry * 0.84, 0.10), Color(0.98, 0.66, 0.16, 0.96 * fade))
+	draw_colored_polygon(_lump_points(center + Vector2(-unit * 0.12, -unit * 0.12), rx * 0.42, ry * 0.30, 0.0), Color(1.0, 0.92, 0.62, 0.55 * fade))
+	draw_circle(center + Vector2(-unit * 0.20, -unit * 0.17), unit * 0.045, Color(1.0, 1.0, 0.92, 0.9 * fade))
+	## A tiny insect caught inside: wings, body and legs.
+	var bug: Vector2 = center + Vector2(unit * 0.04, unit * 0.02)
+	var s: float = unit * 0.075
+	var body_col := Color(0.30, 0.16, 0.05, 0.95 * fade)
+	draw_colored_polygon(_lump_points(bug + Vector2(-s * 0.6, -s * 1.3), s * 1.4, s * 0.55, 0.0), Color(1.0, 0.94, 0.72, 0.55 * fade))
+	draw_colored_polygon(_lump_points(bug + Vector2(s * 1.2, -s * 1.2), s * 1.3, s * 0.5, 0.0), Color(1.0, 0.94, 0.72, 0.45 * fade))
+	for i in 3:
+		var lx: float = bug.x + (float(i) - 1.0) * s * 0.9
+		draw_line(Vector2(lx, bug.y), Vector2(lx - s * 0.5, bug.y + s * 1.5), body_col, 1.2)
+		draw_line(Vector2(lx, bug.y), Vector2(lx + s * 0.5, bug.y + s * 1.5), body_col, 1.2)
+	draw_circle(bug + Vector2(-s * 1.7, 0.0), s * 0.62, body_col)
+	draw_circle(bug, s * 0.85, body_col)
+	draw_colored_polygon(_lump_points(bug + Vector2(s * 1.6, s * 0.1), s * 1.15, s * 0.8, 0.0), body_col)
+	## Twinkles.
+	for i in 3:
+		var phase: float = t * (2.6 + float(i) * 0.7) + float(i) * 2.1
+		var sp: float = maxf(0.0, sin(phase)) * unit * (0.16 + 0.03 * float(i))
+		if sp < 1.0:
+			continue
+		var at: Vector2 = center + Vector2((float(i) - 1.0) * unit * 0.5, -unit * (0.42 + 0.14 * float(i % 2)))
+		var col := Color(1.0, 0.98, 0.84, 0.95 * fade)
+		draw_line(at + Vector2(-sp, 0.0), at + Vector2(sp, 0.0), col, 1.8)
+		draw_line(at + Vector2(0.0, -sp), at + Vector2(0.0, sp), col, 1.8)
+		draw_circle(at, sp * 0.28, col)
+
+
+## A slightly lumpy ellipse, so the amber looks like a drop of resin.
+func _lump_points(center: Vector2, rx: float, ry: float, wobble: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in 22:
+		var ang: float = TAU * float(i) / 22.0
+		var k: float = 1.0 + wobble * sin(ang * 3.0 + 0.7)
+		pts.append(center + Vector2(cos(ang) * rx * k, sin(ang) * ry * k))
+	return pts
 
 
 func fossil_exposure() -> float:

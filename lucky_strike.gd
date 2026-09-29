@@ -1,7 +1,8 @@
 class_name LuckyStrike
 extends RefCounted
 
-## Mid-shift glint in the matrix. Cash burst only — no hired diggers.
+## Mid-shift amber pocket: a glowing lump of amber (with an insect inside) under
+## one cell of dirt. Strike it before it fades for a cash burst.
 
 
 static func plan_shift(rng: RandomNumberGenerator, round_seconds: float) -> PackedFloat32Array:
@@ -44,7 +45,7 @@ static func burst_payout(base_money: int) -> int:
 
 
 static func toast_title() -> String:
-	return "Glint in the matrix"
+	return "Amber pocket!"
 
 
 static func float_text(amount: int) -> String:
@@ -52,7 +53,7 @@ static func float_text(amount: int) -> String:
 
 
 static func icon_kind() -> String:
-	return "glint"
+	return "amber"
 
 
 static func can_hit_with(tool: int) -> bool:

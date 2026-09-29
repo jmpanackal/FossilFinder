@@ -299,9 +299,10 @@ func _test_lucky_is_a_matrix_glint() -> void:
 	_assert(Lucky.has_method("toast_title"), "lucky strike exposes glint copy")
 	if Lucky.has_method("toast_title"):
 		var title: String = str(Lucky.toast_title()).to_lower()
-		_assert(title.find("glint") >= 0, "the shiny cell is a glint in the matrix")
-		_assert(title.find("beetle") < 0, "glint copy is not a beetle")
-		_assert(title.find("lucky strike") < 0, "glint copy drops lucky-strike leftover")
+		_assert(title.find("amber") >= 0, "the shiny cell is an amber pocket")
+		_assert(title.find("glint") < 0 and title.find("matrix") < 0, "no jargon in the pocket's name")
+		_assert(title.find("beetle") < 0, "pocket copy is not a beetle")
+		_assert(title.find("lucky strike") < 0, "pocket copy drops lucky-strike leftover")
 	var lucky_src: String = FileAccess.get_file_as_string("res://lucky_strike.gd")
 	var site_src: String = FileAccess.get_file_as_string("res://dig_site.gd")
 	var main_src: String = FileAccess.get_file_as_string("res://main.gd")
@@ -328,7 +329,8 @@ func _test_shop_copy_is_matrix_language() -> void:
 	var stone: String = str(GS.shop_item_desc("rock_pay")).to_lower()
 	var soil_feel: String = str(GS.upgrade_feel_line("dirt_pay")).to_lower()
 	var stone_feel: String = str(GS.upgrade_feel_line("rock_pay")).to_lower()
-	_assert(soil.find("matrix") >= 0 or soil.find("find") >= 0, "Soil Bounty talks about matrix finds")
+	_assert(soil.find("sifted") >= 0, "Soil Bounty talks about sifted finds")
+	_assert(soil.find("matrix") < 0 and soil_feel.find("matrix") < 0 and stone_feel.find("matrix") < 0, "shop text has no matrix jargon")
 	_assert(stone.find("nodule") >= 0 or stone.find("crystal") >= 0, "Stone Bounty talks about nodules")
 	_assert(soil.find("dirt layers pay") < 0, "Soil Bounty drops dirt-price language")
 	_assert(stone.find("rock pay") < 0, "Stone Bounty drops rock-dollar language")
@@ -637,7 +639,7 @@ func _test_lucky_float_is_currency() -> void:
 	if Lucky.has_method("float_text"):
 		_assert(str(Lucky.float_text(48)) == "+$48", "lucky juice is +$48, not glint  +$48")
 		_assert(str(Lucky.float_text(48)).to_lower().find("glint") < 0, "the bank number is not +glint")
-	_assert(Lucky.has_method("icon_kind") and str(Lucky.icon_kind()) == "glint", "the shiny object flies as a glint")
+	_assert(Lucky.has_method("icon_kind") and str(Lucky.icon_kind()) == "amber", "the shiny object flies as amber")
 
 
 func _assert(ok: bool, label: String) -> void:

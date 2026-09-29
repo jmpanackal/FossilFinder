@@ -39,6 +39,14 @@ func _run() -> void:
 	_assert(bool(main.hud.ribbon_busy()), "and shows it on the ribbon under the pit, not over the cells")
 	_assert(not bool(H.seen("shop")) and not bool(H.seen("museum")), "tips for screens you have not opened wait")
 
+	## The dig teaches why it pays, and what the amber pocket is, the first time each shows up.
+	_assert(main.dig_site.has_signal("lucky_appeared"), "the dig announces an amber pocket")
+	main.dig_site._spawn_lucky()
+	_assert(H.is_pending("pocket") or bool(H.seen("pocket")), "the first amber pocket explains itself")
+	main.dig_site._matrix_juice = [{"name": "pebble", "amount": 3, "rarity": 0}]
+	main._on_layer_cleared(3, Vector2(600, 300))
+	_assert(H.is_pending("sifted") or bool(H.seen("sifted")), "the first sifted find explains why digging pays")
+
 	## Another tip never cuts one that is still up.
 	H.teach("collect")
 	await _frames(6)

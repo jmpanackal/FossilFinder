@@ -1,7 +1,8 @@
 class_name MatrixFind
 extends RefCounted
 
-## Junk screened out of a popped layer. This is the money — not a dirt sale.
+## Sifted finds: the small things (shells, teeth, crystals) sifted out of each
+## layer you dig. Collectors buy them, so this is the digging money, not a dirt sale.
 
 const ArtCatalogScript := preload("res://art_catalog.gd")
 
