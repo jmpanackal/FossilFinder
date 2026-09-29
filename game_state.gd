@@ -34,6 +34,8 @@ var featured_stand_id: String = ""
 ## Stand the Cleaning Cart is parked at ("" = parked in the bay).
 var cleaner_stand_id: String = ""
 var cleaner_finished_name: String = ""
+## The bone the cart is currently on (see prep_cart_target).
+var _cart_target: String = ""
 ## One-time explainer hints the player has already seen (saved).
 var hints_seen: Dictionary = {}
 var pending_unveils: Dictionary = {}
@@ -1337,17 +1339,32 @@ func stand_dirty_pieces(stand_id: String) -> PackedStringArray:
 	return out
 
 
-## The bone the cart is working on: the dirtiest one on its stand.
+## The bone the cart is working on. It picks the bone in the lowest dirt
+## level (Caked before Dirty before Dusty); among bones in the same level, the
+## more valuable one goes first. Once picked it sticks with that bone until it
+## is clean, so equally dirty bones can't swap places every frame.
 func prep_cart_target() -> String:
 	if not stand_is_being_cleaned(cleaner_stand_id):
+		_cart_target = ""
 		return ""
+	if _cart_target != "" and stand_for_piece(_cart_target) == cleaner_stand_id and has_piece(_cart_target) and not piece_is_clean(_cart_target):
+		return _cart_target
+	_cart_target = _pick_cart_target(cleaner_stand_id)
+	return _cart_target
+
+
+func _pick_cart_target(stand_id: String) -> String:
 	var pick: String = ""
-	var dirtiest: float = 2.0
-	for id in stand_dirty_pieces(cleaner_stand_id):
-		var c: float = float((pieces[id] as Dictionary).get("cleanliness", 0.0))
-		if c < dirtiest:
-			dirtiest = c
+	var pick_level: float = 2.0
+	var pick_value: float = -1.0
+	for id in stand_dirty_pieces(stand_id):
+		var level: float = float(dirt_level_span(piece_cleanliness(id))[0])
+		var data: FossilData = fossil_data_for(id)
+		var value: float = float(data.base_value) if data != null else 0.0
+		if level < pick_level - 0.0001 or (absf(level - pick_level) <= 0.0001 and value > pick_value):
 			pick = id
+			pick_level = level
+			pick_value = value
 	return pick
 
 
@@ -1366,6 +1383,7 @@ func set_cleaner_stand(stand_id: String) -> bool:
 	if cleaner_stand_id == stand_id:
 		return true
 	cleaner_stand_id = stand_id
+	_cart_target = ""
 	hall_changed.emit()
 	return true
 

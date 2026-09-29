@@ -23,6 +23,7 @@ func _run() -> void:
 	_test_cart_closes_its_exhibit()
 	_test_cart_cleans_dirtiest_bone_slowly()
 	_test_cart_climbs_one_level_per_interval()
+	_test_cart_ties_go_to_the_pricier_bone_and_stay()
 	_test_parked_cart_does_nothing()
 	_test_cart_ranks_clean_faster()
 	_test_cart_position_saves()
@@ -130,6 +131,29 @@ func _test_cart_climbs_one_level_per_interval() -> void:
 	_assert(float(info["to"]) > 0.59 and float(info["to"]) < 0.61, "the overlay shows it heading for Dusty")
 	GS._tick_cleaner(secs * 2.0)
 	_assert(bool(GS.piece_is_clean("t_rex_skull")), "three intervals clean a Caked bone")
+
+
+func _test_cart_ties_go_to_the_pricier_bone_and_stay() -> void:
+	## Two equally dirty bones: the more valuable one is cleaned first, and the
+	## cart does not flip back and forth between them while it works.
+	_reset()
+	_own_cart(1)
+	GS.install_find("t_rex_jaw", "T. rex Jaw", 0.2, false, 3)
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.2, false, 3)
+	GS.pending_unveils.clear()
+	GS.set_cleaner_stand("t_rex")
+	_assert(str(GS.prep_cart_target()) == "t_rex_skull", "a tie goes to the more valuable bone")
+	var flips: int = 0
+	for _i in 2000:
+		GS._tick_cleaner(0.5)
+		if bool(GS.piece_is_clean("t_rex_skull")):
+			break
+		if str(GS.prep_cart_target()) != "t_rex_skull":
+			flips += 1
+	_assert(flips == 0, "the cart stays on the same bone until it is clean")
+	_assert(bool(GS.piece_is_clean("t_rex_skull")), "the pricier bone finishes first")
+	_assert(not bool(GS.piece_is_clean("t_rex_jaw")), "the cheaper one waits")
+	_assert(str(GS.prep_cart_target()) == "t_rex_jaw", "then the cart moves to the cheaper bone")
 
 
 func _test_parked_cart_does_nothing() -> void:
