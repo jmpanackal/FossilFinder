@@ -301,8 +301,8 @@ var _star_tip: Control
 
 
 func _update_star_tip(pad_pos: Vector2) -> void:
-	## Hovering a stand's stars OR its $/sec shows one card: stars, dirt and
-	## what each bone earns (both set the income).
+	## Hovering stars, $/sec (including $0), or an empty bay shows one card:
+	## stars, dirt, missing bones, and what each bone earns.
 	var stand_id: String = ""
 	if _canvas.has_method("stand_at_card"):
 		stand_id = str(_canvas.call("stand_at_card", _pad_to_hall(pad_pos)))

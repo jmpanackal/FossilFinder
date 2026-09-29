@@ -1381,9 +1381,10 @@ func stand_stars_rect(stand_id: String) -> Rect2:
 
 
 func stand_at_rate(hall_pos: Vector2) -> String:
+	## $0.00 / sec chips still open the card — empty stands need the tip too.
 	for stand_id in STAND_LAYOUT.keys():
 		var id: String = str(stand_id)
-		if GameState.stand_income(id) > 0.0 and stand_rate_rect(id).has_point(hall_pos):
+		if stand_rate_rect(id).has_point(hall_pos):
 			return id
 	return ""
 
@@ -1392,6 +1393,19 @@ func stand_at_stars(hall_pos: Vector2) -> String:
 	for stand_id in STAND_LAYOUT.keys():
 		if stand_stars_rect(str(stand_id)).has_point(hall_pos):
 			return str(stand_id)
+	return ""
+
+
+func stand_at_empty(hall_pos: Vector2) -> String:
+	## No stars yet and nothing earning: the whole empty bay opens the tip.
+	for stand_id in STAND_LAYOUT.keys():
+		var id: String = str(stand_id)
+		if stand_condition_stars(id) > 0:
+			continue
+		if GameState.stand_is_filled(id):
+			continue
+		if stand_rect(id).has_point(hall_pos):
+			return id
 	return ""
 
 
@@ -1422,7 +1436,7 @@ func stand_condition_info(stand_id: String) -> Dictionary:
 			below += 1
 	return {
 		"stars": stars,
-		"word": Tuning.condition_name(maxi(stars, 1)),
+		"word": "Empty" if total <= 0 else Tuning.condition_name(maxi(stars, 1)),
 		"below": below,
 		"total": total,
 		"avg": sum / float(total) if total > 0 else 0.0,
@@ -1446,11 +1460,13 @@ func _stand_boosts(stand_id: String) -> String:
 	return " · ".join(parts)
 
 
-## Hovering either a stand's stars or its $/sec opens the same card.
+## Hovering a stand's stars, its $/sec, or an empty bay opens the same card.
 func stand_at_card(hall_pos: Vector2) -> String:
 	var id: String = stand_at_stars(hall_pos)
 	if id.is_empty():
 		id = stand_at_rate(hall_pos)
+	if id.is_empty():
+		id = stand_at_empty(hall_pos)
 	return id
 
 

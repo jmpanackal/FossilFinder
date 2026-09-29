@@ -28,6 +28,7 @@ func _run() -> void:
 	_test_region_condition_is_the_weakest_bone()
 	_test_fame_scales_bone_value_with_income()
 	_test_find_card_says_new_or_duplicate()
+	_test_empty_stand_still_opens_hover_card()
 	_reset()
 	print("masterpiece %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -193,6 +194,50 @@ func _test_find_card_says_new_or_duplicate() -> void:
 	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_FRAGILE})).contains("losing stars"), "plaster on a fragile bone says what it saved")
 	_assert(str(chip.call("_note_line", {"cast": true, "kind": TN.BONE_SOLID})) == "", "plaster on a solid bone adds no noise")
 	chip.queue_free()
+
+
+func _test_empty_stand_still_opens_hover_card() -> void:
+	## Empty stands still show $0.00 / sec. Hovering that chip (or the empty
+	## bay) must open the same museum card: missing bones + Masterpiece path.
+	_reset()
+	_assert(not bool(GS.stand_is_filled("velociraptor")), "Velociraptor starts empty")
+	_assert(is_equal_approx(float(GS.stand_income("velociraptor")), 0.0), "empty stand earns $0 / sec")
+	var exhibit: Node2D = (load("res://museum_exhibit.gd") as GDScript).new()
+	root.add_child(exhibit)
+	var rate: Rect2 = exhibit.call("stand_rate_rect", "velociraptor")
+	_assert(rate.size != Vector2.ZERO, "empty stand still paints a $/sec chip")
+	_assert(str(exhibit.call("stand_at_card", rate.get_center())) == "velociraptor", "hovering the $0 chip opens the stand card")
+	_assert(str(exhibit.call("stand_at_card", exhibit.stand_rect("velociraptor").get_center())) == "velociraptor", "hovering the empty bay opens the stand card")
+	var info: Dictionary = exhibit.call("stand_condition_info", "velociraptor")
+	var bones: Array = info.get("bones", [])
+	_assert(bones.size() == GS.stand_piece_ids("velociraptor").size(), "empty card lists every missing bone")
+	_assert(int(info.get("total", -1)) == 0, "empty card counts zero found bones")
+	_assert(is_equal_approx(float(info.get("income", -1.0)), 0.0), "empty card shows $0 / sec")
+	_assert(str(info.get("word", "")).to_lower().find("empty") >= 0 or int(info.get("stars", -1)) == 0, "empty card does not pretend it is rated")
+	var tip: Control = (load("res://star_tip.gd") as GDScript).new()
+	root.add_child(tip)
+	tip.call("show_info", info)
+	_assert(tip.size.x > 40.0 and tip.size.y > 40.0, "empty stand tip has a real card size")
+	_assert(str(tip.call("_avg_line")).to_lower().find("mounted") >= 0 or str(tip.call("_avg_line")).to_lower().find("nothing") >= 0, "empty tip says nothing is mounted yet")
+	_assert(str(tip.call("_master_line")).to_lower().find("masterpiece") >= 0, "empty tip still names the Masterpiece path")
+	## Filled stands keep the stars + $/sec hit targets.
+	_fill_stand("velociraptor", 4)
+	var filled_rate: Rect2 = exhibit.call("stand_rate_rect", "velociraptor")
+	_assert(str(exhibit.call("stand_at_card", filled_rate.get_center())) == "velociraptor", "filled $/sec chip still opens the card")
+	var mus: Node = (load("res://museum.gd") as GDScript).new()
+	root.add_child(mus)
+	mus.visible = true
+	_reset()
+	var empty_exhibit: Node2D = mus._canvas
+	var chip: Rect2 = empty_exhibit.call("stand_rate_rect", "velociraptor")
+	var zoom: float = empty_exhibit.scale.x
+	var pad_pos: Vector2 = chip.get_center() * zoom - Vector2(0.0, mus.HEADER_H) + mus._pan
+	mus.call("_update_star_tip", pad_pos)
+	var star_tip: Control = mus.get("_star_tip")
+	_assert(star_tip != null and star_tip.visible, "museum shows the hover card over an empty stand chip")
+	tip.queue_free()
+	exhibit.queue_free()
+	mus.free()
 
 
 func _assert(ok: bool, label: String) -> void:

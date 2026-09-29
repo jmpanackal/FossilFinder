@@ -101,6 +101,8 @@ static func dirt_color(clean_pct: float) -> Color:
 
 func _avg_line() -> String:
 	var total: int = int(info.get("total", 0))
+	if total <= 0:
+		return "Nothing mounted yet — dig bones to fill this stand"
 	var avg: float = float(info.get("avg", 0.0))
 	var stars: int = int(info.get("stars", 0))
 	var tail: String = " (rounded down)" if absf(avg - float(stars)) > 0.05 else ""
