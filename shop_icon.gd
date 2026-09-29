@@ -109,8 +109,10 @@ static func glyph_for(id: String) -> String:
 			return "gift"
 		"blockbuster_crowd":
 			return "crowds"
-		"blockbuster_hours":
-			return "shift"
+		"masterpiece_prestige":
+			return "spotlight"
+		"masterpiece_renown":
+			return "crowds"
 		"blockbuster_feature":
 			return "spotlight"
 		_:

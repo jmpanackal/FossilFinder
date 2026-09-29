@@ -61,6 +61,11 @@ var flash_t: float = 0.0
 var pop_t: float = 0.0
 var _crowd_t: float = 0.0
 var _clean_t: float = 0.0
+## Masterpiece unveil ceremony: rays + rings (burst_t 1 -> 0) and confetti.
+var burst_t: float = 0.0
+var burst_stand_id: String = ""
+var _confetti: Array = []
+var _ready_pulse_t: float = 0.0
 ## Set by museum.gd while the player drags the Cleaning Cart (hall coordinates).
 var cleaner_dragging: bool = false
 var cleaner_drag_pos: Vector2 = Vector2.ZERO
@@ -82,6 +87,47 @@ func play_unveil_flash(stand_id: String) -> void:
 	queue_redraw()
 
 
+func play_masterpiece_unveil(stand_id: String) -> void:
+	burst_stand_id = stand_id
+	burst_t = 1.0
+	flash_stand_id = stand_id
+	flash_t = 1.0
+	var stand: Rect2 = stand_rect(stand_id)
+	var palette: Array = [Color("FFD66B"), Color("FFE9A0"), Color("F0A060"), Color("FFFFFF"), Color("A8E07A"), Color("7AB8E0")]
+	for _i in 180:
+		_confetti.append({
+			"pos": Vector2(stand.position.x + randf() * stand.size.x, stand.position.y - 10.0 + randf() * 50.0),
+			"vel": Vector2(randf_range(-170.0, 170.0), randf_range(-460.0, -110.0)),
+			"color": palette[randi() % palette.size()],
+			"life": randf_range(1.8, 3.2),
+			"size": randf_range(4.0, 9.0),
+		})
+	queue_redraw()
+
+
+func _step_confetti(delta: float) -> void:
+	var alive: Array = []
+	for p in _confetti:
+		var vel: Vector2 = p["vel"]
+		vel.y += 520.0 * delta
+		vel.x *= maxf(0.0, 1.0 - 0.6 * delta)
+		p["vel"] = vel
+		p["pos"] = (p["pos"] as Vector2) + vel * delta
+		p["life"] = float(p["life"]) - delta
+		if float(p["life"]) > 0.0:
+			alive.append(p)
+	_confetti = alive
+
+
+func _draw_confetti(c: CanvasItem) -> void:
+	var canvas: CanvasItem = c if c != null else self
+	for p in _confetti:
+		var col: Color = p["color"]
+		col.a = clampf(float(p["life"]), 0.0, 1.0)
+		var size: float = float(p["size"])
+		canvas.draw_rect(Rect2((p["pos"] as Vector2) - Vector2(size, size) * 0.5, Vector2(size, size * 0.6)), col)
+
+
 func play_feature_pop() -> void:
 	pop_t = 1.0
 	queue_redraw()
@@ -95,6 +141,14 @@ func tick(delta: float) -> void:
 	if pop_t > 0.0:
 		pop_t = maxf(0.0, pop_t - delta / 0.35)
 		dirty = true
+	if burst_t > 0.0:
+		burst_t = maxf(0.0, burst_t - delta / 2.4)
+		dirty = true
+	if GameState.has_ready_masterpiece():
+		_ready_pulse_t += delta
+		if _ready_pulse_t >= 0.08:
+			_ready_pulse_t = 0.0
+			dirty = true
 	if GameState.stand_is_being_cleaned(GameState.cleaner_stand_id):
 		_clean_t += delta
 		if _clean_t >= 0.25:
@@ -106,6 +160,9 @@ func tick(delta: float) -> void:
 		_redraw_guests()
 	elif not _guests.is_empty():
 		_guests.clear()
+		_redraw_guests()
+	if not _confetti.is_empty():
+		_step_confetti(delta)
 		_redraw_guests()
 	if dirty:
 		queue_redraw()
@@ -765,6 +822,7 @@ func _draw_visitors(c: CanvasItem = null) -> void:
 	_sync_guests()
 	for i in _guests.size():
 		_draw_visitor(_guests[i]["pos"], i, c)
+	_draw_confetti(c)
 
 
 func _sync_guests() -> void:
@@ -844,6 +902,8 @@ func _stand_weight(stand_id: String) -> float:
 		weight += 2.0
 	if GameState.featured_stand_id == stand_id:
 		weight += 2.5
+	if GameState.masterpiece_crowd_left > 0.0 and GameState.stand_masterpiece_active(stand_id):
+		weight += 8.0
 	return weight
 
 
@@ -1412,11 +1472,44 @@ func _draw_stand_finish(stand_id: String, stand: Rect2) -> void:
 	if GameState.stand_has_pending_unveil(stand_id):
 		_draw_ribbon(stand, stand_id)
 		_redraw_plaque(stand_id)
+	elif GameState.stand_masterpiece_ready(stand_id):
+		_draw_masterpiece_ribbon(stand, stand_id)
+	if burst_t > 0.0 and burst_stand_id == stand_id:
+		_draw_unveil_burst(stand)
 	if flash_t > 0.0 and flash_stand_id == stand_id:
 		draw_rect(stand, Color(1.0, 0.86, 0.40, 0.55 * flash_t))
 		draw_rect(stand.grow(10.0), Color(1.0, 0.92, 0.55, 0.28 * flash_t), false, 6.0)
 	_draw_closed_overlay(stand_id, stand)
 	_draw_stand_rate(stand_id)
+
+
+## A finished, all-Perfect, clean stand waits under a pulsing gold sheet until
+## the player clicks it: the click is the reward.
+func _draw_masterpiece_ribbon(stand: Rect2, stand_id: String) -> void:
+	var pulse: float = 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) / 1000.0 * 4.0)
+	var c: Vector2 = stand.get_center()
+	draw_rect(stand, Color(0.10, 0.07, 0.05, 0.84))
+	draw_rect(stand.grow(6.0 + 4.0 * pulse), Color(1.0, 0.84, 0.42, 0.30 + 0.40 * pulse), false, 6.0)
+	draw_rect(stand, Color("FFD66B"), false, 4.0)
+	draw_circle(c + Vector2(0.0, -50.0), 34.0 + 6.0 * pulse, Color(1.0, 0.9, 0.5, 0.18 + 0.22 * pulse))
+	_draw_star(c + Vector2(0.0, -50.0), 22.0, true)
+	_draw_label(c + Vector2(0.0, 4.0), "MASTERPIECE", 34, Color("FFE08A"))
+	_draw_label(c + Vector2(0.0, 32.0), "Click to unveil", 18, Color("F0E4C8"))
+	_draw_label(c + Vector2(0.0, 58.0), "+%s and a rush of visitors" % Ui.money_text(float(GameState.masterpiece_bonus(stand_id))), 15, Color("C8B080"))
+
+
+func _draw_unveil_burst(stand: Rect2) -> void:
+	var t: float = 1.0 - burst_t
+	var c: Vector2 = stand.get_center()
+	var fade: float = 1.0 - t
+	var reach: float = lerpf(60.0, 760.0, t)
+	for i in 20:
+		var angle: float = TAU * float(i) / 20.0 + t * 0.6
+		var dir := Vector2(cos(angle), sin(angle))
+		draw_line(c + dir * reach * 0.25, c + dir * reach, Color(1.0, 0.86, 0.42, 0.55 * fade), 7.0)
+	draw_arc(c, reach * 0.7, 0.0, TAU, 72, Color(1.0, 0.92, 0.55, 0.7 * fade), 9.0)
+	draw_arc(c, reach * 0.45, 0.0, TAU, 72, Color(1.0, 1.0, 0.85, 0.5 * fade), 5.0)
+	draw_rect(stand, Color(1.0, 0.9, 0.5, 0.5 * burst_t))
 
 
 func _draw_stand_rate(stand_id: String) -> void:
@@ -1442,7 +1535,7 @@ func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:
 	var stars: int = stand_condition_stars(stand_id)
 	if stars <= 0:
 		return
-	if GameState.stand_is_masterpiece(stand_id):
+	if GameState.stand_masterpiece_active(stand_id):
 		_draw_masterpiece_frame(stand_id, chip)
 	var r: float = 8.0
 	var gap: float = 18.0
@@ -1540,7 +1633,9 @@ func _stand_boosts(stand_id: String) -> String:
 		parts.append("Closed while the cleaning cart cleans")
 	if GameState.stand_is_complete(stand_id):
 		parts.append("Complete x%s" % GameState._mult_text(Tuning.complete_stand_mult))
-	if GameState.stand_is_masterpiece(stand_id):
+	if GameState.stand_masterpiece_ready(stand_id):
+		parts.append("Masterpiece ready: click to unveil!")
+	elif GameState.stand_masterpiece_active(stand_id):
 		parts.append("Masterpiece x%s" % GameState._mult_text(Tuning.masterpiece_mult))
 	if stand_id == GameState.featured_stand_id:
 		parts.append("Featured x%s" % GameState._mult_text(Tuning.spotlight_mult))

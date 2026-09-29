@@ -12,6 +12,8 @@ signal progress_reset
 signal skeleton_completed(stand_id: String, bonus: int)
 ## Complete stand where every bone is Perfect.
 signal masterpiece_completed(stand_id: String, bonus: int)
+## A stand just became a Masterpiece. It waits to be unveiled (bonus and boost start then).
+signal masterpiece_ready(stand_id: String)
 
 const STAND_T_REX := "t_rex"
 const STAND_TRICERATOPS := "triceratops"
@@ -24,7 +26,15 @@ const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
 ## Upgrades that no longer exist. Ranks in old saves are refunded at what they
 ## cost (base cost x scale^rank for each rank bought).
-const RETIRED_UPGRADES := {"restoration": {"cost": 1600, "scale": 1.85}}
+const RETIRED_UPGRADES := {
+	"restoration": {"cost": 1600, "scale": 1.85},
+	"blockbuster_hours": {"cost": 130000, "scale": 1.7},
+	"gala_payout": {"cost": 120000, "scale": 1.7},
+	"gala_crowd": {"cost": 140000, "scale": 1.75},
+	"gala_hours": {"cost": 130000, "scale": 1.7},
+}
+## The five dinosaur exhibits (the only stands that can be Masterpieces).
+const DINO_STANDS := ["t_rex", "triceratops", "brachiosaurus", "velociraptor", "stegosaurus"]
 
 var money: int = 0
 var levels: Dictionary = {}
@@ -39,6 +49,12 @@ var cleaner_stand_id: String = ""
 var cleaner_finished_name: String = ""
 ## The bone the cart is currently on (see prep_cart_target).
 var _cart_target: String = ""
+## Masterpieces the player has unveiled (stand_id -> true). A complete, all-Perfect,
+## clean stand is only "ready" until unveiled: the bonus and the boost wait for it.
+var masterpieces_unveiled: Dictionary = {}
+## The crowd that floods in when a Masterpiece is unveiled (for a while).
+var masterpiece_crowd_left: float = 0.0
+var masterpiece_crowd_visitors: int = 0
 ## One-time explainer hints the player has already seen (saved).
 var hints_seen: Dictionary = {}
 var pending_unveils: Dictionary = {}
@@ -98,7 +114,8 @@ var catalog: Array[Dictionary] = [
 	{"id": "workshop", "cat": "Museum", "tier": 3, "name": "Cleaning Cart", "desc": "The cart climbs each dirt level faster.", "unlock_name": "Cleaning Cart", "unlock_desc": "Drag the cart onto an exhibit to slowly clean its dirty bones. The exhibit is closed and earns nothing while the cart is there. Drag it to the parking bay to reopen everything.", "unlock_action": "Unlock", "cost": 30000, "scale": 2.2, "max": 3, "optional": true},
 	{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4, "name": "Box Office", "desc": "Tickets pay more.", "cost": 120000, "scale": 1.90, "max": 6},
 	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors: +20% of your crowd per rank.", "cost": 140000, "scale": 1.75, "max": 5},
-	{"id": "blockbuster_hours", "cat": "Museum", "tier": 4, "name": "Encore Rush", "desc": "Unveiling rushes last longer.", "cost": 130000, "scale": 1.7, "max": 4},
+	{"id": "masterpiece_prestige", "cat": "Museum", "tier": 4, "name": "Masterpiece Prestige", "desc": "Unveiled Masterpieces draw far more visitors.", "cost": 120000, "scale": 1.75, "max": 4},
+	{"id": "masterpiece_renown", "cat": "Museum", "tier": 4, "name": "Critics' Acclaim", "desc": "Every unveiled Masterpiece brings more visitors to the whole museum.", "cost": 140000, "scale": 1.75, "max": 4},
 	{"id": "blockbuster_feature", "cat": "Museum", "tier": 4, "name": "Marquee", "desc": "The featured stand pays even more.", "cost": 150000, "scale": 1.65, "max": 2},
 ]
 
@@ -130,6 +147,8 @@ func _ready() -> void:
 		"integrity_hit_cost": Tuning.integrity_hit_cost,
 		"unveil_spike_seconds": Tuning.unveil_spike_seconds,
 		"unveil_rush_strength": Tuning.unveil_rush_strength,
+		"masterpiece_mult": Tuning.masterpiece_mult,
+		"masterpiece_renown": Tuning.masterpiece_renown,
 		"spotlight_mult": 1.0,
 	}
 	for item in catalog:
@@ -151,6 +170,11 @@ func _process(delta: float) -> void:
 		unveil_spike_left = maxf(0.0, unveil_spike_left - delta)
 		if unveil_spike_left <= 0.0:
 			_clear_unveil_rush()
+			hall_changed.emit()
+	if masterpiece_crowd_left > 0.0:
+		masterpiece_crowd_left = maxf(0.0, masterpiece_crowd_left - delta)
+		if masterpiece_crowd_left <= 0.0:
+			masterpiece_crowd_visitors = 0
 			hall_changed.emit()
 
 
@@ -443,6 +467,8 @@ func _tuning_snapshot() -> Dictionary:
 		"integrity_hit_cost": Tuning.integrity_hit_cost,
 		"unveil_spike_seconds": Tuning.unveil_spike_seconds,
 		"unveil_rush_strength": Tuning.unveil_rush_strength,
+		"masterpiece_mult": Tuning.masterpiece_mult,
+		"masterpiece_renown": Tuning.masterpiece_renown,
 		"spotlight_mult": Tuning.spotlight_mult,
 		"matrix_hands_quality": Tuning.matrix_hands_quality,
 		"matrix_hands_pay": Tuning.matrix_hands_pay,
@@ -549,10 +575,14 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			if cash < 0.01:
 				return pct
 			return _join_effects(PackedStringArray(["+$%.2f / sec" % cash, pct]))
-		"unveil_time", "blockbuster_hours":
+		"unveil_time":
 			return "Crowd surge on unveil +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
 		"unveil_crowd":
 			return _pct_delta_line("+%d%% visitors on unveil", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
+		"masterpiece_prestige":
+			return "Unveiled Masterpieces draw x%s" % _mult_text(float(at["masterpiece_mult"]))
+		"masterpiece_renown":
+			return "+%d%% visitors per unveiled Masterpiece" % int(round(float(at["masterpiece_renown"]) * 100.0))
 		"workshop":
 			var secs: int = prep_cart_seconds(int(at["workshop"]))
 			if secs <= 0:
@@ -1014,8 +1044,10 @@ func upgrade_feel_line(id: String) -> String:
 			return "Tickets pay more"
 		"blockbuster_crowd":
 			return "More visitors"
-		"blockbuster_hours":
-			return "Unveils last longer"
+		"masterpiece_prestige":
+			return "Masterpieces draw more visitors"
+		"masterpiece_renown":
+			return "Masterpieces lift the whole museum"
 		"blockbuster_feature":
 			return "Featured stand pays more"
 		_:
@@ -1124,8 +1156,10 @@ func apply_upgrades() -> void:
 	Tuning.passive_miner_owned = false
 	Tuning.integrity_hit_cost = 0.0
 	Tuning.condition_luck = 0.12 * (_lv("shovel_soft") + _lv("pick_soft"))
-	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time") + 6.0 * _lv("blockbuster_hours")
+	Tuning.unveil_spike_seconds = float(_bases["unveil_spike_seconds"]) + 6.0 * _lv("unveil_time")
 	Tuning.unveil_rush_strength = float(_bases["unveil_rush_strength"]) + 0.25 * _lv("unveil_crowd")
+	Tuning.masterpiece_mult = float(_bases["masterpiece_mult"]) + 0.5 * _lv("masterpiece_prestige")
+	Tuning.masterpiece_renown = float(_bases["masterpiece_renown"]) + 0.03 * _lv("masterpiece_renown")
 	Tuning.spotlight_mult = float(_bases["spotlight_mult"]) + _lv("spotlight") + _lv("blockbuster_feature")
 
 
@@ -1220,7 +1254,7 @@ func install_find(piece_id: String, display_name: String, cleanliness: float, cl
 	var was_master: bool = stand_id != "" and stand_is_masterpiece(stand_id)
 	var note: String = _install_piece(piece_id, display_name, cleanliness, clean, clampi(condition, 1, 5))
 	if stand_id != "" and not was_master and stand_is_masterpiece(stand_id):
-		call_deferred("_award_masterpiece", stand_id)
+		call_deferred("_announce_masterpiece", stand_id)
 	if stand_id != "" and not was_complete and stand_is_complete(stand_id):
 		var bonus: int = skeleton_bonus(stand_id)
 		add_money(bonus)
@@ -1278,11 +1312,53 @@ func masterpiece_bonus(stand_id: String) -> int:
 	return int(round(maxf(from_bones, from_income)))
 
 
-func _award_masterpiece(stand_id: String) -> void:
+## A stand that is complete with every bone Perfect and clean is a Masterpiece
+## the moment it is finished, but it only pays (and only draws x2.5) once the
+## player unveils it. "Ready" = waiting for that click; "active" = unveiled.
+func stand_masterpiece_ready(stand_id: String) -> bool:
+	return stand_is_masterpiece(stand_id) and not bool(masterpieces_unveiled.get(stand_id, false))
+
+
+func stand_masterpiece_active(stand_id: String) -> bool:
+	return stand_is_masterpiece(stand_id) and bool(masterpieces_unveiled.get(stand_id, false))
+
+
+func has_ready_masterpiece() -> bool:
+	for stand_id in DINO_STANDS:
+		if stand_masterpiece_ready(stand_id):
+			return true
+	return false
+
+
+func _announce_masterpiece(stand_id: String) -> void:
+	if not stand_masterpiece_ready(stand_id):
+		return
+	hall_changed.emit()
+	masterpiece_ready.emit(stand_id)
+
+
+## The unveil: pays the bonus, turns the Masterpiece boost on and brings a crowd.
+func unveil_masterpiece(stand_id: String) -> int:
+	if not stand_masterpiece_ready(stand_id):
+		return 0
+	masterpieces_unveiled[stand_id] = true
 	var bonus: int = masterpiece_bonus(stand_id)
 	add_money(bonus)
+	_start_masterpiece_crowd()
+	collection_changed.emit()
 	hall_changed.emit()
 	masterpiece_completed.emit(stand_id, bonus)
+	return bonus
+
+
+func _start_masterpiece_crowd() -> void:
+	var crowd: int = maxi(Tuning.masterpiece_crowd_min, int(round(float(museum_visitors_base()) * Tuning.masterpiece_crowd_frac)))
+	masterpiece_crowd_visitors = maxi(masterpiece_crowd_visitors if masterpiece_crowd_left > 0.0 else 0, crowd)
+	masterpiece_crowd_left = Tuning.masterpiece_crowd_seconds
+
+
+func masterpiece_crowd_size() -> int:
+	return masterpiece_crowd_visitors if masterpiece_crowd_left > 0.0 else 0
 
 
 ## Cleaning Cart (id "workshop" for old saves): drag it onto an exhibit and it
@@ -1421,7 +1497,7 @@ func _tick_cleaner(delta: float) -> void:
 	piece["cleanliness"] = 1.0
 	cleaner_finished_name = str(piece.get("name", id))
 	if not was_master and stand_is_masterpiece(stand_id):
-		_award_masterpiece(stand_id)
+		_announce_masterpiece(stand_id)
 	collection_changed.emit()
 	hall_changed.emit()
 	cleaner_finished.emit(id)
@@ -1920,7 +1996,7 @@ func stand_visitors(stand_id: String, force_clean: bool = false) -> int:
 		total += piece_visitors(str(piece_id), force_clean)
 	if stand_id != "" and stand_is_complete(stand_id):
 		total = int(round(float(total) * Tuning.complete_stand_mult))
-		if stand_is_masterpiece(stand_id):
+		if stand_masterpiece_active(stand_id):
 			total = int(round(float(total) * Tuning.masterpiece_mult))
 	if stand_id != "" and stand_id == featured_stand_id:
 		total = int(round(float(total) * Tuning.spotlight_mult))
@@ -1928,7 +2004,18 @@ func stand_visitors(stand_id: String, force_clean: bool = false) -> int:
 
 
 func museum_visitors_base() -> int:
-	return int(round(float(_museum_visitors_raw()) * Tuning.visitor_mult))
+	return int(round(float(_museum_visitors_raw()) * Tuning.visitor_mult * masterpiece_renown_mult()))
+
+
+## Critics' Acclaim: each unveiled Masterpiece adds a share to the whole crowd.
+func masterpiece_renown_mult() -> float:
+	if Tuning.masterpiece_renown <= 0.0:
+		return 1.0
+	var unveiled: int = 0
+	for stand_id in DINO_STANDS:
+		if stand_masterpiece_active(stand_id):
+			unveiled += 1
+	return 1.0 + Tuning.masterpiece_renown * float(unveiled)
 
 
 func _museum_visitors_raw() -> int:
@@ -1943,10 +2030,14 @@ func _museum_visitors_raw() -> int:
 	return total
 
 
-func surge_visitors() -> int:
+func _rush_surge_visitors() -> int:
 	if unveil_spike_left <= 0.0 or unveil_rush_stacks <= 0:
 		return 0
 	return int(round(float(unveil_rush_stacks) * unveil_rush_unit * Tuning.unveil_rush_strength))
+
+
+func surge_visitors() -> int:
+	return _rush_surge_visitors() + masterpiece_crowd_size()
 
 
 func museum_visitors() -> int:
@@ -1954,7 +2045,8 @@ func museum_visitors() -> int:
 
 
 func visitor_sprite_count() -> int:
-	return _packed_visitor_sprites(museum_visitors_base()) + surge_visitors()
+	## The unveiling crowd can be hundreds of visitors; only some are drawn as walkers.
+	return _packed_visitor_sprites(museum_visitors_base()) + _rush_surge_visitors() + mini(masterpiece_crowd_size(), Tuning.masterpiece_crowd_max_sprites)
 
 
 func _packed_visitor_sprites(n: int) -> int:
@@ -1968,6 +2060,8 @@ func unveil_rush_rate() -> float:
 
 
 func unveil_rush_line() -> String:
+	if masterpiece_crowd_left > 0.0 and masterpiece_crowd_visitors > 0:
+		return "Masterpiece unveiling · +%d visitors · %ds" % [masterpiece_crowd_size(), maxi(1, int(ceili(masterpiece_crowd_left)))]
 	var extra: int = surge_visitors()
 	if extra <= 0:
 		return ""
@@ -2064,6 +2158,9 @@ func reset_progress(path: String = SAVE_PATH) -> void:
 	hints_seen.clear()
 	featured_stand_id = ""
 	cleaner_stand_id = ""
+	masterpieces_unveiled.clear()
+	masterpiece_crowd_left = 0.0
+	masterpiece_crowd_visitors = 0
 	pending_unveils.clear()
 	pending_notices.clear()
 	last_unlock_title = ""
@@ -2124,6 +2221,9 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"precision_on": precision_on,
 		"featured_stand_id": featured_stand_id,
 		"cleaner_stand_id": cleaner_stand_id,
+		"masterpieces_unveiled": masterpieces_unveiled.duplicate(),
+		"masterpiece_crowd_left": masterpiece_crowd_left,
+		"masterpiece_crowd_visitors": masterpiece_crowd_visitors,
 		"pending_unveils": pending_unveils.duplicate(),
 		"pending_notices": pending_notices.duplicate(true),
 		"unveil_spike_left": unveil_spike_left,
@@ -2175,6 +2275,20 @@ func load_game(path: String = SAVE_PATH) -> bool:
 	precision_on = bool(data.get("precision_on", false))
 	featured_stand_id = str(data.get("featured_stand_id", ""))
 	cleaner_stand_id = str(data.get("cleaner_stand_id", ""))
+	masterpiece_crowd_left = float(data.get("masterpiece_crowd_left", 0.0))
+	masterpiece_crowd_visitors = int(data.get("masterpiece_crowd_visitors", 0)) if masterpiece_crowd_left > 0.0 else 0
+	masterpieces_unveiled.clear()
+	var raw_unveiled: Variant = data.get("masterpieces_unveiled", null)
+	if raw_unveiled is Dictionary:
+		for raw_id in raw_unveiled:
+			if bool(raw_unveiled[raw_id]):
+				masterpieces_unveiled[str(raw_id)] = true
+	else:
+		## A save from before the unveil ceremony: its Masterpieces were paid
+		## when they were finished, so they count as unveiled.
+		for stand_id in DINO_STANDS:
+			if stand_is_masterpiece(stand_id):
+				masterpieces_unveiled[stand_id] = true
 	pending_unveils.clear()
 	var raw_unveils: Dictionary = data.get("pending_unveils", {})
 	for raw_id in raw_unveils:

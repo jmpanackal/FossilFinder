@@ -507,7 +507,8 @@ func _test_existing_shop_reaches_millions_before_apex() -> void:
 		"pick_titan": true,
 		"blockbuster_ticket": true,
 		"blockbuster_crowd": true,
-		"blockbuster_hours": true,
+		"masterpiece_prestige": true,
+		"masterpiece_renown": true,
 		"blockbuster_feature": true,
 		"hands_consolidant": true,
 		"hands_resin": true,
@@ -536,7 +537,8 @@ func _test_apex_chapters_exist_and_gate() -> void:
 		{"id": "pick_titan", "cat": "Pickaxe", "tier": 3},
 		{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4},
 		{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4},
-		{"id": "blockbuster_hours", "cat": "Museum", "tier": 4},
+		{"id": "masterpiece_prestige", "cat": "Museum", "tier": 4},
+		{"id": "masterpiece_renown", "cat": "Museum", "tier": 4},
 		{"id": "blockbuster_feature", "cat": "Museum", "tier": 4},
 	]
 	for raw in rows:
@@ -636,16 +638,16 @@ func _test_apex_ranks_add_power() -> void:
 	_max_chapter("Museum", 1)
 	var donation: float = float(TN.donation_mult)
 	var visitors: int = int(TN.visitor_flat)
-	var unveil: float = float(TN.unveil_spike_seconds)
+	var master: float = float(TN.masterpiece_mult)
 	var featured: float = float(TN.spotlight_mult)
 	GS.levels["blockbuster_ticket"] = 1
 	GS.levels["blockbuster_crowd"] = 1
-	GS.levels["blockbuster_hours"] = 1
+	GS.levels["masterpiece_prestige"] = 1
 	GS.levels["blockbuster_feature"] = 1
 	GS.apply_upgrades()
 	_assert(float(TN.donation_mult) > donation, "Blockbuster raises the ticket")
 	_assert(float(TN.visitor_mult) > 1.0, "Blockbuster draws more visitors")
-	_assert(float(TN.unveil_spike_seconds) > unveil, "Blockbuster lengthens unveil")
+	_assert(float(TN.masterpiece_mult) > master, "Blockbuster makes Masterpieces draw more")
 	_assert(float(TN.spotlight_mult) > featured, "Blockbuster raises featured")
 	GS.levels["blockbuster_feature"] = int(_item("blockbuster_feature").get("max", 2))
 	GS.apply_upgrades()

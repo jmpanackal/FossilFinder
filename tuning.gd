@@ -227,6 +227,14 @@ var fame_per_income: float = 0.5
 var masterpiece_min_condition: int = 5
 var masterpiece_mult: float = 2.5
 var masterpiece_bonus_mult: float = 8.0
+## Masterpiece unveiling: the crowd that rushes in is this share of your
+## visitors (at least masterpiece_crowd_min) and stays masterpiece_crowd_seconds.
+var masterpiece_crowd_frac: float = 0.5
+var masterpiece_crowd_seconds: float = 45.0
+var masterpiece_crowd_min: int = 20
+var masterpiece_crowd_max_sprites: int = 40
+## Critics' Acclaim: extra whole-museum visitors per unveiled Masterpiece.
+var masterpiece_renown: float = 0.0
 ## Masterpiece cash is also at least this many seconds of museum income, so
 ## it stays huge late in the game.
 var masterpiece_income_seconds: float = 300.0

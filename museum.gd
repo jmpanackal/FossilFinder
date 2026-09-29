@@ -12,6 +12,8 @@ const CLICK_SLOP := 10.0
 const ZOOM_STEP := 0.12
 const CLOSE_STAND := Vector2(480, 250)
 const CART_SCROLL_SPEED := 900.0
+const SHAKE_TIME := 0.7
+const SHAKE_PIXELS := 12.0
 
 var _visitors: Label
 var _visitors_cap: Label
@@ -34,6 +36,7 @@ var _press_pad: Vector2 = Vector2.ZERO
 var _moved: float = 0.0
 ## Pressing on the Cleaning Cart: a drag moves the cart, a click parks it.
 var _cart_press: bool = false
+var _shake_t: float = 0.0
 var _banner_life: float = 0.0
 
 
@@ -108,6 +111,13 @@ func _process(delta: float) -> void:
 		_canvas.tick(delta)
 	if _canvas.cleaner_dragging:
 		_autoscroll_for_cart(delta)
+	if _shake_t > 0.0:
+		_shake_t = maxf(0.0, _shake_t - delta)
+		if _shake_t > 0.0:
+			var amount: float = SHAKE_PIXELS * (_shake_t / SHAKE_TIME)
+			_canvas.position = _pan + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * amount
+		else:
+			_apply_pan()
 	if _banner != null and _banner.visible:
 		_banner.modulate.a = clampf(_banner_life / 0.35, 0.0, 1.0) if _banner_life < 0.35 else 1.0
 		_banner_life -= delta
@@ -416,6 +426,9 @@ func _click_hall(pad_pos: Vector2) -> void:
 	if GameState.stand_has_pending_unveil(stand_id):
 		_unveil_stand(stand_id)
 		return
+	if GameState.stand_masterpiece_ready(stand_id):
+		_unveil_masterpiece(stand_id)
+		return
 	if GameState.stand_is_filled(stand_id):
 		GameState.set_featured_stand(stand_id)
 		if _canvas.has_method("play_feature_pop"):
@@ -423,6 +436,21 @@ func _click_hall(pad_pos: Vector2) -> void:
 		Sfx.play("ui")
 		_refresh()
 		return
+
+
+## The big one: bonus cash, a rush of visitors, fanfare, shake, rays and confetti.
+func _unveil_masterpiece(stand_id: String) -> void:
+	var title: String = GameState.stand_title(stand_id)
+	var bonus: int = GameState.unveil_masterpiece(stand_id)
+	if bonus <= 0:
+		return
+	if _canvas.has_method("play_masterpiece_unveil"):
+		_canvas.play_masterpiece_unveil(stand_id)
+	Sfx.play("masterpiece")
+	_shake_t = SHAKE_TIME
+	_spawn_float("+%s" % Ui.money_text(float(bonus)), stand_id, 48)
+	_toast("%s Masterpiece unveiled!" % title, "+%s  ·  %d visitors rush in" % [Ui.money_text(float(bonus)), GameState.masterpiece_crowd_size()])
+	_refresh()
 
 
 func _unveil_stand(stand_id: String) -> void:
@@ -445,13 +473,13 @@ func _unveil_stand(stand_id: String) -> void:
 	_refresh()
 
 
-func _spawn_float(text: String, stand_id: String) -> void:
+func _spawn_float(text: String, stand_id: String, size: int = 28) -> void:
 	var floater: Node2D = FloatingTextScene.new()
 	var stand: Rect2 = Rect2()
 	if _canvas.has_method("stand_rect"):
 		stand = _canvas.stand_rect(stand_id)
 	floater.position = stand.get_center() if stand.size != Vector2.ZERO else Vector2(1000, 700)
-	floater.setup(text, Ui.GOLD, 28)
+	floater.setup(text, Ui.GOLD, size)
 	_canvas.add_child(floater)
 
 

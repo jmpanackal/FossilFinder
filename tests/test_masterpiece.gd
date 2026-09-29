@@ -9,6 +9,7 @@ var _passed: int = 0
 var GS: Node
 var TN: Node
 var _masters: Array = []
+var _ready_stands: Array = []
 
 
 func _init() -> void:
@@ -19,6 +20,7 @@ func _run() -> void:
 	GS = root.get_node("GameState")
 	TN = root.get_node("Tuning")
 	GS.masterpiece_completed.connect(func(stand_id: String, bonus: int) -> void: _masters.append([stand_id, bonus]))
+	GS.masterpiece_ready.connect(func(stand_id: String) -> void: _ready_stands.append(stand_id))
 	_test_cart_needs_the_upgrade()
 	_test_cart_closes_its_exhibit()
 	_test_cart_cleans_dirtiest_bone_slowly()
@@ -29,6 +31,10 @@ func _run() -> void:
 	_test_parked_cart_does_nothing()
 	_test_cart_ranks_clean_faster()
 	_test_cart_position_saves()
+	await _test_masterpiece_waits_for_the_unveil()
+	_test_unveil_brings_a_crowd()
+	_test_masterpiece_upgrades_keep_paying()
+	_test_masterpiece_unveil_survives_saving()
 	_test_cleanup_crew_is_gone_and_refunded()
 	await _test_masterpiece_needs_complete_and_great()
 	await _test_cart_can_finish_a_masterpiece()
@@ -46,11 +52,15 @@ func _reset() -> void:
 	GS.pending_unveils.clear()
 	GS.featured_stand_id = ""
 	GS.cleaner_stand_id = ""
+	GS.masterpieces_unveiled.clear()
+	GS.masterpiece_crowd_left = 0.0
+	GS.masterpiece_crowd_visitors = 0
 	GS.money = 0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
 	GS.apply_upgrades()
 	_masters.clear()
+	_ready_stands.clear()
 
 
 func _fill_stand(stand: String, condition: int) -> void:
@@ -237,6 +247,115 @@ func _test_cleanup_crew_is_gone_and_refunded() -> void:
 	_reset()
 
 
+func _perfect_velociraptor_ready() -> void:
+	_reset()
+	_fill_stand("velociraptor", 5)
+	GS.pending_unveils.clear()
+
+
+func _test_masterpiece_waits_for_the_unveil() -> void:
+	## Finishing a Masterpiece makes it ready. The bonus and the x2.5 draw only
+	## start when the player unveils it.
+	_reset()
+	_fill_stand("velociraptor", 3)
+	GS.pending_unveils.clear()
+	for id in GS.stand_piece_ids("velociraptor"):
+		GS.install_find(id, id, 1.0, true, 5)
+	await process_frame
+	var money: int = int(GS.money)
+	var before: int = int(GS.stand_visitors("velociraptor"))
+	_assert(bool(GS.stand_masterpiece_ready("velociraptor")), "a finished Perfect stand is ready to unveil")
+	_assert(not bool(GS.stand_masterpiece_active("velociraptor")), "but its boost is not active yet")
+	_assert(int(GS.money) == money and _masters.is_empty(), "nothing is paid before the unveil")
+	_assert(GS.has_ready_masterpiece(), "the hall knows a Masterpiece is waiting")
+	var bonus: int = int(GS.unveil_masterpiece("velociraptor"))
+	_assert(bonus > 0 and int(GS.money) >= money + bonus, "the unveil pays the bonus")
+	_assert(not bool(GS.stand_masterpiece_ready("velociraptor")) and bool(GS.stand_masterpiece_active("velociraptor")), "an unveiled Masterpiece is active")
+	_assert(int(GS.stand_visitors("velociraptor")) > int(float(before) * 2.3), "the x2.5 draw starts at the unveil")
+	_assert(int(GS.unveil_masterpiece("velociraptor")) == 0, "a Masterpiece can only be unveiled once")
+	_assert(not GS.has_ready_masterpiece(), "nothing is waiting any more")
+	_assert(int(GS.unveil_masterpiece("t_rex")) == 0, "an unfinished stand cannot be unveiled")
+
+
+func _test_unveil_brings_a_crowd() -> void:
+	_perfect_velociraptor_ready()
+	var base: int = int(GS.museum_visitors_base())
+	GS.unveil_masterpiece("velociraptor")
+	_assert(float(GS.masterpiece_crowd_left) > 0.0 and int(GS.masterpiece_crowd_visitors) >= int(TN.masterpiece_crowd_min), "a crowd rushes in")
+	_assert(int(GS.museum_visitors()) > int(GS.museum_visitors_base()), "the crowd adds visitors on top of the museum's usual ones")
+	_assert(str(GS.unveil_rush_line()).begins_with("Masterpiece unveiling"), "the header says a Masterpiece unveiling is under way")
+	_assert(int(GS.visitor_sprite_count()) <= int(GS._packed_visitor_sprites(GS.museum_visitors_base())) + int(TN.masterpiece_crowd_max_sprites), "a huge crowd does not draw hundreds of walkers")
+	var income: float = float(GS.museum_income())
+	GS._process(float(GS.masterpiece_crowd_left) + 1.0)
+	_assert(is_equal_approx(float(GS.masterpiece_crowd_left), 0.0) and int(GS.masterpiece_crowd_visitors) == 0, "the crowd leaves")
+	_assert(int(GS.museum_visitors()) == int(GS.museum_visitors_base()), "the museum goes back to its usual crowd")
+	_assert(float(GS.museum_income()) < income, "and its usual income")
+	_assert(base > 0, "there was a crowd to begin with")
+
+
+func _test_masterpiece_upgrades_keep_paying() -> void:
+	## Only five stands can be Masterpieces, so the upgrades are for owning them,
+	## not for the one-off unveil: they help all game once a Masterpiece is unveiled.
+	_perfect_velociraptor_ready()
+	GS.unveil_masterpiece("velociraptor")
+	GS.masterpiece_crowd_left = 0.0
+	GS.masterpiece_crowd_visitors = 0
+	var stand_before: int = int(GS.stand_visitors("velociraptor"))
+	var museum_before: int = int(GS.museum_visitors_base())
+	GS.levels["masterpiece_prestige"] = 2
+	GS.apply_upgrades()
+	_assert(is_equal_approx(float(TN.masterpiece_mult), 3.5), "two ranks of Masterpiece Prestige make a Masterpiece draw x3.5")
+	_assert(int(GS.stand_visitors("velociraptor")) > stand_before, "Masterpiece Prestige raises an unveiled Masterpiece's crowd")
+	var after_prestige: int = int(GS.museum_visitors_base())
+	GS.levels["masterpiece_renown"] = 2
+	GS.apply_upgrades()
+	_assert(int(GS.museum_visitors_base()) > after_prestige, "Critics' Acclaim lifts the whole museum once a Masterpiece is unveiled")
+	_assert(is_equal_approx(float(GS.masterpiece_renown_mult()), 1.06), "two ranks with one Masterpiece is +6%")
+	_assert(museum_before > 0, "there was a museum to lift")
+	## A Masterpiece that is only ready (not unveiled) does not count.
+	_perfect_velociraptor_ready()
+	GS.levels["masterpiece_renown"] = 4
+	GS.apply_upgrades()
+	_assert(is_equal_approx(float(GS.masterpiece_renown_mult()), 1.0), "a Masterpiece waiting to be unveiled adds nothing yet")
+	for id in ["masterpiece_prestige", "masterpiece_renown"]:
+		var item: Dictionary = GS._item(id)
+		_assert(not item.is_empty() and str(item["cat"]) == "Museum" and int(item["tier"]) == 4, "%s is a Museum IV upgrade" % id)
+		_assert(str(GS.shop_effect_line(id)) != "", "%s explains its effect" % id)
+	for id in ["gala_payout", "gala_crowd", "gala_hours", "blockbuster_hours"]:
+		_assert(GS._item(id).is_empty(), "%s is gone" % id)
+		_assert(int(GS.retired_refund({id: 1})) > 0, "%s ranks are refunded" % id)
+	_reset()
+
+
+func _test_masterpiece_unveil_survives_saving() -> void:
+	_perfect_velociraptor_ready()
+	var path: String = "user://test_masterpiece_save.json"
+	GS.save_game(path)
+	GS.masterpieces_unveiled.clear()
+	GS.load_game(path)
+	_assert(bool(GS.stand_masterpiece_ready("velociraptor")), "a Masterpiece that was never unveiled is still waiting after loading")
+	GS.unveil_masterpiece("velociraptor")
+	GS.save_game(path)
+	GS.masterpieces_unveiled.clear()
+	GS.masterpiece_crowd_left = 0.0
+	GS.load_game(path)
+	_assert(bool(GS.stand_masterpiece_active("velociraptor")), "an unveiled Masterpiece stays unveiled")
+	_assert(float(GS.masterpiece_crowd_left) > 0.0 and int(GS.masterpiece_crowd_visitors) > 0, "a running Masterpiece crowd is saved")
+	## A save from before the ceremony has no record: its Masterpieces were paid already.
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = JSON.parse_string(file.get_as_text())
+	file.close()
+	data.erase("masterpieces_unveiled")
+	var out: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	out.store_string(JSON.stringify(data))
+	out.close()
+	GS.masterpieces_unveiled.clear()
+	GS.load_game(path)
+	_assert(bool(GS.stand_masterpiece_active("velociraptor")), "an old save's Masterpiece counts as already unveiled")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_reset()
+
+
 func _test_cart_position_saves() -> void:
 	_reset()
 	_own_cart(1)
@@ -263,9 +382,12 @@ func _test_masterpiece_needs_complete_and_great() -> void:
 		GS.install_find(id, id, 1.0, true, 5)
 	await process_frame
 	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect makes a Masterpiece")
-	_assert(_masters.size() == 1 and str(_masters[0][0]) == "velociraptor", "the Masterpiece is celebrated once")
+	_assert(_ready_stands == ["velociraptor"], "the Masterpiece is announced once, as ready to unveil")
+	_assert(_masters.is_empty(), "nothing is paid until it is unveiled")
+	GS.unveil_masterpiece("velociraptor")
+	_assert(_masters.size() == 1 and str(_masters[0][0]) == "velociraptor", "the unveil is celebrated once")
 	_assert(int(_masters[0][1]) > 0 if not _masters.is_empty() else false, "it pays a bonus")
-	_assert(int(GS.stand_visitors("velociraptor")) > plain * 2, "a Masterpiece of Perfect bones draws far more")
+	_assert(int(GS.stand_visitors("velociraptor")) > plain * 2, "an unveiled Masterpiece of Perfect bones draws far more")
 
 
 func _test_cart_can_finish_a_masterpiece() -> void:
@@ -276,6 +398,7 @@ func _test_cart_can_finish_a_masterpiece() -> void:
 	await process_frame
 	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "all Perfect, clean bones make a Masterpiece")
 	_masters.clear()
+	_ready_stands.clear()
 	var ids: PackedStringArray = GS.stand_piece_ids("velociraptor")
 	var piece: Dictionary = GS.pieces[ids[0]]
 	piece["clean"] = false
@@ -287,7 +410,7 @@ func _test_cart_can_finish_a_masterpiece() -> void:
 	GS.set_cleaner_stand("velociraptor")
 	GS._tick_cleaner(5000.0)
 	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the Cleaning Cart cleaning it completes the Masterpiece")
-	_assert(_masters.size() == 1, "and it is celebrated")
+	_assert(_ready_stands == ["velociraptor"], "and it is announced as ready to unveil")
 	piece = GS.pieces[ids[0]]
 	piece["condition"] = 4
 	GS.pieces[ids[0]] = piece

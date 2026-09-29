@@ -44,6 +44,7 @@ func _ready() -> void:
 	GameState.progress_reset.connect(_on_progress_reset)
 	GameState.skeleton_completed.connect(_on_skeleton_completed)
 	GameState.masterpiece_completed.connect(_on_masterpiece_completed)
+	GameState.masterpiece_ready.connect(_on_masterpiece_ready)
 	_sync_view()
 	dig_site.layer_cleared.connect(_on_layer_cleared)
 	dig_site.fossil_cell_exposed.connect(_on_fossil_exposed)
@@ -430,14 +431,20 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 		_spawn_loot_fly(Matrix.icon_kind(find), origin, float(i) * 0.045, int(find.get("rarity", 0)))
 
 
-func _on_masterpiece_completed(stand_id: String, bonus: int) -> void:
-	var title_text: String = "%s Masterpiece!" % GameState.stand_title(stand_id)
-	var sub: String = "Every bone Perfect and clean: +$%d, visitors x%s more" % [bonus, GameState._mult_text(Tuning.masterpiece_mult)]
+func _on_masterpiece_ready(stand_id: String) -> void:
+	## Finished and flawless: it now waits in the museum for its unveiling.
+	var title_text: String = "%s is a Masterpiece!" % GameState.stand_title(stand_id)
+	var sub: String = "Every bone Perfect and clean. Open the museum and click it to unveil."
 	if hud != null and hud.visible and hud.has_method("celebrate"):
 		hud.celebrate(-1, title_text, sub, 5, 3)
 	elif toast != null and toast.has_method("show_toast"):
 		toast.show_toast(title_text, sub, 5)
 	Sfx.play("unveil")
+
+
+func _on_masterpiece_completed(_stand_id: String, _bonus: int) -> void:
+	## The unveil itself is celebrated in the museum (fanfare, shake, confetti).
+	pass
 
 
 func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
