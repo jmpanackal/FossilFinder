@@ -23,6 +23,7 @@ func _run() -> void:
 	_test_never_spawns_in_first_second()
 	_test_at_most_twice_and_not_stacked()
 	_test_cell_stays_in_grid()
+	_test_does_not_spawn_on_empty_dug_cells()
 	_test_cash_burst_is_fat()
 	_test_hands_and_shovel_can_hit()
 	_test_miss_has_no_punish()
@@ -105,6 +106,59 @@ func _test_cell_stays_in_grid() -> void:
 				blocked.append(Vector2i(x, y))
 	var only: Vector2i = Lucky.pick_cell(rng, 5, 4, blocked)
 	_assert(only == Vector2i(2, 1), "lucky cell skips blocked dirt")
+
+
+func _test_does_not_spawn_on_empty_dug_cells() -> void:
+	## A glint on a fully dug void cell has no dirt to strike, so players cannot collect it.
+	var script: GDScript = load("res://dig_site.gd") as GDScript
+	_assert(script != null, "dig_site.gd loads for empty-cell glint rules")
+	if script == null:
+		return
+	var site: Node2D = script.new()
+	root.add_child(site)
+	_assert(site.has_method("_spawn_lucky"), "dig site still spawns matrix glints")
+	if not site.has_method("_spawn_lucky"):
+		site.queue_free()
+		return
+	var grid: Array = site.get("_top_layer")
+	for x in grid.size():
+		var col: Array = grid[x]
+		for y in col.size():
+			col[y] = int(TN.layer_count)
+	site.set("_top_layer", grid)
+	site.set("exposed_cells", {})
+	for _i in 12:
+		site.call("_spawn_lucky")
+		_assert(not bool(site.call("lucky_is_active")), "a fully dug pit never shows a glint")
+		if bool(site.call("lucky_is_active")):
+			break
+	## One diggable cell left: glint may only land there, never on the voids.
+	var keep := Vector2i(1, 1)
+	grid = site.get("_top_layer")
+	grid[keep.x][keep.y] = 0
+	site.set("_top_layer", grid)
+	var landed: bool = false
+	for _i in 24:
+		site.call("_spawn_lucky")
+		if not bool(site.call("lucky_is_active")):
+			continue
+		landed = true
+		_assert(site.get("_lucky_cell") == keep, "glint only lands on diggable dirt")
+		site.set("_lucky_cell", Vector2i(-1, -1))
+		site.set("_lucky_left", 0.0)
+	_assert(landed, "a leftover dirt cell can still host a glint")
+	## A glint that somehow sits on a void clears instead of teasing the player.
+	site.set("_lucky_cell", Vector2i(0, 0))
+	site.set("_lucky_left", float(TN.lucky_duration))
+	grid = site.get("_top_layer")
+	grid[0][0] = int(TN.layer_count)
+	site.set("_top_layer", grid)
+	if site.has_method("_clear_lucky_if_empty"):
+		site.call("_clear_lucky_if_empty")
+	elif site.has_method("_tick_lucky"):
+		site.call("_tick_lucky", 0.0)
+	_assert(not bool(site.call("lucky_is_active")), "a glint on an empty dug cell clears itself")
+	site.queue_free()
 
 
 func _test_cash_burst_is_fat() -> void:

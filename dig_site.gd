@@ -214,6 +214,7 @@ func _reset_lucky() -> void:
 func _tick_lucky(delta: float) -> void:
 	if _lucky_flee > 0.0:
 		_lucky_flee = maxf(0.0, _lucky_flee - delta * 3.5)
+	_clear_lucky_if_empty()
 	if not input_enabled:
 		if _lucky_cell.x >= 0:
 			_burrow_lucky()
@@ -238,10 +239,24 @@ func _spawn_lucky() -> void:
 	var blocked: Array[Vector2i] = []
 	for cell in exposed_cells:
 		blocked.append(cell)
+	## Fully dug voids have no dirt left to strike — a glint there cannot be collected.
+	if not _top_layer.is_empty():
+		for x in Tuning.grid_w:
+			for y in Tuning.grid_h:
+				if int(_top_layer[x][y]) >= Tuning.layer_count:
+					blocked.append(Vector2i(x, y))
 	_lucky_cell = Lucky.pick_cell(rng, Tuning.grid_w, Tuning.grid_h, blocked)
 	if _lucky_cell.x < 0:
 		return
 	_lucky_left = Tuning.lucky_duration
+
+
+func _clear_lucky_if_empty() -> void:
+	if _lucky_cell.x < 0:
+		return
+	if not _in_bounds(_lucky_cell) or int(_top_layer[_lucky_cell.x][_lucky_cell.y]) >= Tuning.layer_count:
+		_lucky_cell = Vector2i(-1, -1)
+		_lucky_left = 0.0
 
 
 func _burrow_lucky() -> void:
