@@ -1702,6 +1702,17 @@ func stand_region_clean(stand_id: String, region: String) -> bool:
 	return false
 
 
+## How many of a stand's bones are on display out of how many it needs: x = have, y = need.
+func stand_progress(stand_id: String) -> Vector2i:
+	var have: int = 0
+	var need: int = 0
+	for piece_id in stand_piece_ids(stand_id):
+		var quota: int = piece_need(str(piece_id))
+		need += quota
+		have += mini(piece_count(str(piece_id)), quota)
+	return Vector2i(have, need)
+
+
 func stand_is_complete(stand_id: String) -> bool:
 	var ids: PackedStringArray = stand_piece_ids(stand_id)
 	if ids.is_empty():

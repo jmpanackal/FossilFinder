@@ -11,14 +11,18 @@ const StarRating := preload("res://star_rating.gd")
 const SummaryFindRowScript := preload("res://summary_find_row.gd")
 
 const PANEL_W := 600.0
+## The finds table needs room for its columns.
+const WIDE_PANEL_W := 860.0
 const BOX_PAD := 14.0
-const PANEL_MAX_H := 560.0
+const PANEL_MAX_H := 620.0
 const FINDS_MAX_H := 280.0
 
 var _dim: ColorRect
 var _panel: Panel
 var _box: VBoxContainer
 var _title: Label
+var _rule: ColorRect
+var _pay_caption: Label
 var _pay: Label
 var _breakdown: Label
 var _body: Label
@@ -29,6 +33,10 @@ var _stars
 var _button: Button
 var _museum_btn: Button
 var _shop_btn: Button
+var _tip: Label
+var _tip_wrap: Control
+var _panel_w: float = PANEL_W
+var _placing_marks: bool = false
 
 
 func _ready() -> void:
@@ -71,12 +79,27 @@ func _ready() -> void:
 	Ui.apply_title(_title)
 	_box.add_child(_title)
 
+	## A short brass rule and a quiet caption give the total a small ceremony.
+	_rule = ColorRect.new()
+	_rule.color = Color(Ui.GOLD.r, Ui.GOLD.g, Ui.GOLD.b, 0.6)
+	_rule.custom_minimum_size = Vector2(150, 2)
+	_rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box.add_child(_rule)
+
+	_pay_caption = Label.new()
+	_pay_caption.text = "EARNED THIS SHIFT"
+	_pay_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pay_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(_pay_caption, 12, Ui.MUTED)
+	_box.add_child(_pay_caption)
+
 	_pay = Label.new()
 	_pay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pay.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_pay.clip_text = false
 	Ui.apply_wallet(_pay)
-	_pay.add_theme_font_size_override("font_size", 32)
+	_pay.add_theme_font_size_override("font_size", 46)
 	_box.add_child(_pay)
 
 	_breakdown = Label.new()
@@ -84,6 +107,17 @@ func _ready() -> void:
 	_breakdown.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_breakdown.clip_text = false
 	Ui.apply_caption(_breakdown)
+	var pill := StyleBoxFlat.new()
+	pill.bg_color = Color("3A2C20")
+	pill.border_color = Ui.LINE
+	pill.set_border_width_all(1)
+	pill.set_corner_radius_all(12)
+	pill.content_margin_left = 16.0
+	pill.content_margin_right = 16.0
+	pill.content_margin_top = 4.0
+	pill.content_margin_bottom = 4.0
+	_breakdown.add_theme_stylebox_override("normal", pill)
+	_breakdown.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_box.add_child(_breakdown)
 
 	_body = Label.new()
@@ -113,9 +147,9 @@ func _ready() -> void:
 
 	_button = Button.new()
 	_button.text = "Dig again"
-	_button.custom_minimum_size = Vector2(0, 52)
+	_button.custom_minimum_size = Vector2(0, 58)
 	_button.clip_text = false
-	_button.add_theme_font_size_override("font_size", 22)
+	_button.add_theme_font_size_override("font_size", 24)
 	Ui.apply_button(_button, true)
 	_button.pressed.connect(_on_dig_again)
 	_box.add_child(_button)
@@ -128,6 +162,23 @@ func _ready() -> void:
 	extras.add_child(_museum_btn)
 	extras.add_child(_shop_btn)
 
+	## Tips for this screen show here, in the card, not in a toast under the dim.
+	## The wrapper has a fixed size we compute, so the card never depends on how a
+	## wrapping label measures itself before it has been laid out.
+	_tip_wrap = Control.new()
+	_tip_wrap.visible = false
+	_tip_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box.add_child(_tip_wrap)
+	_tip = Label.new()
+	_tip.visible = false
+	_tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tip.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_label(_tip, 13, Ui.MUTED)
+	_tip_wrap.add_child(_tip)
+	_tip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
 
 func show_summary(fossil_pay: int, finds_pay: int, fossil_line: String, stars: int = 0, finds: Array = []) -> void:
 	var shift_pay: int = fossil_pay + finds_pay
@@ -138,9 +189,41 @@ func show_summary(fossil_pay: int, finds_pay: int, fossil_line: String, stars: i
 	if _stars.has_method("set_rating"):
 		_stars.set_rating(stars)
 	_stars.visible = stars > 0
+	_tip.visible = false
+	_tip_wrap.visible = false
+	_tip.text = ""
 	_fit_panel()
 	visible = true
 	_button.grab_focus()
+	call_deferred("_play_intro")
+
+
+## The card eases in and the total gives one small pop.
+func _play_intro() -> void:
+	if not visible or _panel == null:
+		return
+	_panel.pivot_offset = _panel.size * 0.5
+	_panel.modulate.a = 0.0
+	_panel.scale = Vector2(0.94, 0.94)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(_panel, "modulate:a", 1.0, 0.18)
+	tw.tween_property(_panel, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_pay.pivot_offset = _pay.size * 0.5
+	_pay.scale = Vector2(1.22, 1.22)
+	var pop := create_tween()
+	pop.tween_interval(0.10)
+	pop.tween_property(_pay, "scale", Vector2.ONE, 0.30).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## A tip for this screen, shown inside the card until the shift summary closes.
+func show_tip(_title_text: String, text: String) -> void:
+	if _tip == null:
+		return
+	_tip.text = "TIP  ·  %s" % text
+	_tip.visible = true
+	_tip_wrap.visible = true
+	_fit_panel()
 
 
 static func pay_headline(shift_pay: int) -> String:
@@ -189,6 +272,8 @@ func _apply_finds(finds: Array, fossil_line: String) -> void:
 		if line.is_empty() or seen.has(line):
 			continue
 		seen.append(line)
+		if _find_rows.is_empty():
+			_finds_box.add_child(SummaryFindRowScript.make_header())
 		var row: Control = SummaryFindRowScript.new() as Control
 		_finds_box.add_child(row)
 		if row.has_method("apply_find"):
@@ -203,6 +288,7 @@ func _apply_finds(finds: Array, fossil_line: String) -> void:
 
 
 func _fit_panel() -> void:
+	_panel_w = WIDE_PANEL_W if not _find_rows.is_empty() else PANEL_W
 	_fit_copy(_title)
 	_fit_copy(_pay)
 	_fit_copy(_breakdown)
@@ -210,6 +296,7 @@ func _fit_panel() -> void:
 	_fit_copy(_button, 28.0)
 	_fit_copy(_museum_btn, 48.0)
 	_fit_copy(_shop_btn, 48.0)
+	_fit_tip()
 	_place_nav_marks()
 	if _find_rows.is_empty():
 		_finds_scroll.visible = false
@@ -219,21 +306,41 @@ func _fit_panel() -> void:
 	else:
 		_finds_box.visible = true
 		_finds_scroll.visible = true
+		## The list gets whatever height the rest of the card leaves (up to its own
+		## cap) and scrolls beyond that, so the buttons and tip are never pushed off.
 		var list_h: float = _finds_box.get_combined_minimum_size().y
-		var shown: float = minf(list_h, FINDS_MAX_H)
+		_finds_scroll.custom_minimum_size = Vector2.ZERO
+		var other_h: float = _box.get_combined_minimum_size().y
+		var room: float = PANEL_MAX_H - BOX_PAD * 2.0 - other_h
+		var cap: float = clampf(room, 120.0, FINDS_MAX_H)
+		var shown: float = minf(list_h, cap)
 		_finds_scroll.custom_minimum_size = Vector2(0.0, shown)
 		_finds_scroll.vertical_scroll_mode = (
 			ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
-			if list_h > FINDS_MAX_H + 0.5
+			if list_h > cap + 0.5
 			else ScrollContainer.SCROLL_MODE_DISABLED
 		)
 	var content_h: float = _box.get_combined_minimum_size().y
 	var height: float = clampf(content_h + BOX_PAD * 2.0, 180.0, PANEL_MAX_H)
 	var half: float = height * 0.5
-	_panel.offset_left = -PANEL_W * 0.5
-	_panel.offset_right = PANEL_W * 0.5
+	_panel.offset_left = -_panel_w * 0.5
+	_panel.offset_right = _panel_w * 0.5
 	_panel.offset_top = -half
 	_panel.offset_bottom = half
+
+
+## A wrapped label only knows its height once it is laid out; measure it here so
+## the card is tall enough the first time.
+func _fit_tip() -> void:
+	if _tip == null or _tip_wrap == null or not _tip_wrap.visible:
+		return
+	var inner_w: float = _panel_w - BOX_PAD * 2.0
+	var font: Font = _tip.get_theme_font("font")
+	var sized: int = _tip.get_theme_font_size("font_size")
+	var wrapped_h: float = float(sized) + 6.0
+	if font != null:
+		wrapped_h = font.get_multiline_string_size(_tip.text, HORIZONTAL_ALIGNMENT_CENTER, inner_w, sized).y + 8.0
+	_tip_wrap.custom_minimum_size = Vector2(inner_w, wrapped_h)
 
 
 func _fit_copy(control: Control, extra_x: float = 0.0) -> void:
@@ -246,7 +353,7 @@ func _fit_copy(control: Control, extra_x: float = 0.0) -> void:
 	var width: float = extra_x
 	if font != null:
 		width += font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
-	var inner_w: float = PANEL_W - BOX_PAD * 2.0
+	var inner_w: float = _panel_w - BOX_PAD * 2.0
 	if control is Label:
 		var label: Label = control as Label
 		if width > inner_w:
@@ -271,14 +378,51 @@ static func join_find_lines(lines: PackedStringArray) -> String:
 
 func hide_summary() -> void:
 	visible = false
+	if _panel != null:
+		_panel.modulate.a = 1.0
+		_panel.scale = Vector2.ONE
+	if _pay != null:
+		_pay.scale = Vector2.ONE
+	if _tip != null:
+		_tip.visible = false
+		_tip_wrap.visible = false
+		_tip.text = ""
 
 
 func _place_nav_marks() -> void:
+	## Re-centring changes a button's minimum width, which can fire `resized`
+	## again; the guard keeps that from re-entering.
+	if _placing_marks:
+		return
+	_placing_marks = true
 	for raw in [_museum_btn, _shop_btn]:
 		var btn: Button = raw as Button
 		if btn == null:
 			continue
-		ShopIcon.place_left_of_label(btn, btn.get_node_or_null("ActionMark") as Control)
+		var mark: Control = btn.get_node_or_null("ActionMark") as Control
+		if mark == null:
+			continue
+		Ui.place_icon_left_of_label(btn, mark)
+		_center_glyph_and_word(btn, mark)
+	_placing_marks = false
+
+
+## Centre the glyph and the word as one group in the button (the glyph still
+## sits left of the word with the shared 8px gap).
+func _center_glyph_and_word(btn: Button, mark: Control) -> void:
+	var font: Font = btn.get_theme_font("font")
+	var sized: int = btn.get_theme_font_size("font_size")
+	if font == null:
+		return
+	var text_w: float = font.get_string_size(btn.text, HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
+	var group_w: float = mark.size.x + Ui.ICON_GAP + text_w
+	var start: float = maxf((btn.size.x - group_w) * 0.5, 12.0)
+	var pad_l: float = start + mark.size.x + Ui.ICON_GAP
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var box: StyleBox = btn.get_theme_stylebox(state)
+		if box != null:
+			box.content_margin_left = pad_l
+	mark.position.x = start
 
 
 func _small_nav(text: String, cb: Callable) -> Button:
@@ -292,6 +436,7 @@ func _small_nav(text: String, cb: Callable) -> Button:
 		Sfx.play("ui")
 		cb.call()
 	)
+	button.resized.connect(_place_nav_marks)
 	var glyph: String = ShopIcon.glyph_for_action(text)
 	if not glyph.is_empty():
 		var mark: Control = ShopIcon.new()

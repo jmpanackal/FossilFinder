@@ -27,6 +27,12 @@ func _run() -> void:
 	_test_shift_over_nav_reuses_header_glyphs()
 	_test_summary_dim_is_a_full_rect_modal()
 	_test_shift_over_does_not_leave_a_white_pit()
+	await _test_nav_glyph_and_word_are_centered_together()
+	_test_tips_show_inside_the_card()
+	_test_refreshed_card_pieces()
+	_test_finds_are_table_columns()
+	_test_a_long_haul_scrolls_instead_of_pushing_the_buttons_off()
+	await _test_a_tip_does_not_inflate_the_card()
 	print("shift_summary %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -94,7 +100,7 @@ func _test_summary_finds_show_icon_and_label() -> void:
 	var panel: Node = script.new()
 	root.add_child(panel)
 	var finds: Array = [
-		{"name": "Triceratops Brow Horns", "piece_id": "triceratops_brow_horns", "grade": "Well preserved", "dirt": "", "fate": ""},
+		{"name": "Triceratops Brow Horns", "piece_id": "triceratops_brow_horns", "grade": "Well preserved", "stars": 4, "dirt": "", "fate": ""},
 		{"name": "Triceratops Vertebra", "piece_id": "triceratops_vertebra", "grade": "Well preserved", "dirt": "", "fate": "sold extra"},
 		{"name": "Stegosaurus Plate", "piece_id": "stegosaurus_plate", "grade": "Well preserved", "dirt": "", "fate": "1/3 on display"},
 	]
@@ -114,10 +120,11 @@ func _test_summary_finds_show_icon_and_label() -> void:
 		var last_label: Label = last.get("_label") as Label if last != null else null
 		_assert(first_icon != null, "first find shows the bone doodle")
 		_assert(first_label != null and first_label.text.find("Triceratops Brow Horns") >= 0, "first find keeps its name")
-		_assert(first_label != null and first_label.text.find("Well preserved") >= 0, "first find keeps its grade")
+		_assert(int(first.get("condition")) == 4, "first find keeps its condition (as stars)")
 		_assert(last.get("_icon") != null, "last find shows the bone doodle")
 		_assert(last_label != null and last_label.text.find("Stegosaurus Plate") >= 0, "last find keeps its name")
-		_assert(last_label != null and last_label.text.find("1/3 on display") >= 0, "last find keeps its fate")
+		_assert(str(last.get("set_text")) == "1/3", "last find keeps its set progress")
+		_assert(str(rows[1].get("status")) == "duplicate", "a sold extra is marked as a duplicate")
 	_assert(not bool(panel._body.visible) or str(panel._body.text).is_empty(), "finds are rows, not a wall of names")
 	var row_src: String = FileAccess.get_file_as_string("res://summary_find_row.gd")
 	_assert(not row_src.is_empty(), "summary_find_row.gd paints each find")
@@ -254,6 +261,138 @@ func _test_shift_over_nav_reuses_header_glyphs() -> void:
 	_assert(_action_glyph(upgrades) == "wrench", "shift-over Upgrades uses the same wrench mark")
 	_assert_action_icon_spec(museum, "shift-over Museum")
 	_assert_action_icon_spec(upgrades, "shift-over Upgrades")
+	panel.free()
+
+
+func _test_nav_glyph_and_word_are_centered_together() -> void:
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(0, 0, "Left in the ground.", 0)
+	for _i in 4:
+		await process_frame
+	for name in ["Museum", "Upgrades"]:
+		var button: Button = _find_button(panel, name)
+		var mark: Control = _find_shop_icon(button) as Control
+		_assert(button != null and mark != null and button.size.x > 100.0, "%s button is laid out" % name)
+		if button == null or mark == null or button.size.x <= 100.0:
+			continue
+		var font: Font = button.get_theme_font("font")
+		var sized: int = button.get_theme_font_size("font_size")
+		var text_w: float = font.get_string_size(str(button.text), HORIZONTAL_ALIGNMENT_LEFT, -1, sized).x
+		var group_left: float = mark.position.x
+		var group_right: float = _button_text_left(button) + text_w
+		var off: float = ((group_left + group_right) * 0.5) - button.size.x * 0.5
+		_assert(absf(off) <= 3.0, "%s glyph and word are centered together in the button (off by %.1f)" % [name, off])
+		_assert_action_icon_spec(button, "centered " + name)
+	panel.free()
+
+
+func _test_tips_show_inside_the_card() -> void:
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(0, 0, "Left in the ground.", 0)
+	var card: Control = panel._panel as Control
+	var before: float = card.offset_bottom - card.offset_top
+	_assert(not bool(panel._tip.visible), "no tip until one is asked for")
+	panel.show_tip("What next?", "Spend your money in Upgrades. Bones you found go on display in the Museum.")
+	_assert(bool(panel._tip.visible) and str(panel._tip.text).begins_with("TIP"), "a tip shows inside the card")
+	_assert(str(panel._tip.text).find("Spend your money") >= 0, "with its words")
+	_assert(card.offset_bottom - card.offset_top > before, "the card grows to make room for it")
+	panel.hide_summary()
+	_assert(not bool(panel._tip.visible), "closing the summary clears the tip")
+	panel.show_summary(0, 0, "Left in the ground.", 0)
+	_assert(not bool(panel._tip.visible), "and a new summary starts without one")
+	panel.free()
+
+
+func _table_entries() -> Array:
+	return [
+		{"name": "Triceratops Tooth", "piece_id": "triceratops_tooth", "stars": 2, "condition": 2, "cleanliness": 0.1, "fate": "New · 1/5", "stand_title": "Triceratops", "stand_have": 3, "stand_need": 11},
+		{"name": "Triceratops Skull", "piece_id": "triceratops_skull", "stars": 5, "condition": 5, "cleanliness": 1.0, "fate": "New · 1/1", "stand_title": "Triceratops", "stand_have": 4, "stand_need": 11},
+		{"name": "T. rex Femur", "piece_id": "t_rex_femur", "stars": 4, "condition": 4, "cleanliness": 0.7, "fate": "Upgrade · Great", "stand_title": "T. rex", "stand_have": 11, "stand_need": 11},
+		{"name": "T. rex Jaw", "piece_id": "t_rex_jaw", "stars": 3, "condition": 3, "cleanliness": 0.4, "fate": "Duplicate · 1/1", "stand_title": "T. rex", "stand_have": 11, "stand_need": 11},
+	]
+
+
+func _test_finds_are_table_columns() -> void:
+	## Each bone is a row of columns: icon, name, condition stars, a 4-step
+	## cleanliness meter, a status chip and how complete its dinosaur is.
+	var row_script: GDScript = load("res://summary_find_row.gd") as GDScript
+	_assert(int(row_script.dirt_level(0.0)) == 0 and int(row_script.dirt_level(0.3)) == 1 and int(row_script.dirt_level(0.7)) == 2 and int(row_script.dirt_level(0.98)) == 3, "cleanliness maps to Caked, Dirty, Dusty, Clean")
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(30, 60, "", 4, _table_entries())
+	var rows: Array = panel.get("_find_rows")
+	_assert(rows.size() == 4, "four bones make four rows")
+	var tooth: Control = rows[0] as Control
+	var skull: Control = rows[1] as Control
+	var femur: Control = rows[2] as Control
+	var jaw: Control = rows[3] as Control
+	_assert(int(tooth.get("condition")) == 2 and int(skull.get("condition")) == 5, "each row shows its own star rating")
+	_assert(str(tooth.get("status")) == "new" and str(tooth.get("set_text")) == "1/5", "a new bone in a set shows NEW with its set count")
+	_assert(str(skull.get("status")) == "new" and str(skull.get("set_text")) == "1/1", "a new single bone shows NEW")
+	_assert(str(femur.get("status")) == "upgrade", "a better copy shows UPGRADE")
+	_assert(str(jaw.get("status")) == "duplicate", "an extra copy shows DUPLICATE")
+	_assert(is_equal_approx(float(tooth.get("cleanliness")), 0.1) and is_equal_approx(float(skull.get("cleanliness")), 1.0), "each row keeps how clean the bone was")
+	_assert(str(tooth.get("stand_title")) == "Triceratops" and int(tooth.get("stand_have")) == 3 and int(tooth.get("stand_need")) == 11, "each row knows how complete its dinosaur is")
+	## A header labels the columns above the rows.
+	var head: Node = panel._finds_box.get_child(0)
+	var captions: PackedStringArray = PackedStringArray()
+	for child in head.get_children():
+		captions.append(str((child as Label).text))
+	_assert(captions.has("CONDITION") and captions.has("CLEANLINESS") and captions.has("STATUS") and captions.has("DINOSAUR"), "a header names the columns")
+	## The card widens for the table and stays compact without one.
+	var card: Control = panel._panel as Control
+	_assert(card.offset_right - card.offset_left >= 800.0, "the card is wide enough for the columns")
+	_assert(float(row_script.ROW_W) <= card.offset_right - card.offset_left - 28.0, "a row fits inside the card")
+	panel.show_summary(0, 0, "Left in the ground.", 0)
+	_assert(card.offset_right - card.offset_left < 700.0, "an empty shift keeps the compact card")
+	panel.free()
+
+
+func _test_a_long_haul_scrolls_instead_of_pushing_the_buttons_off() -> void:
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	var entries: Array = []
+	for i in 9:
+		entries.append({"name": "Bone %d" % i, "piece_id": "triceratops_tooth", "stars": 3, "condition": 3, "cleanliness": 0.5, "fate": "New · 1/5", "stand_title": "Triceratops", "stand_have": 2, "stand_need": 11})
+	panel.show_summary(30, 60, "", 4, entries)
+	panel.show_tip("What next?", "Spend your money in Upgrades. Bones you found go on display in the Museum.")
+	var card: Control = panel._panel as Control
+	var height: float = card.offset_bottom - card.offset_top
+	var content_h: float = (panel._box as Control).get_combined_minimum_size().y
+	_assert(height <= float(panel.PANEL_MAX_H) + 0.5, "a long haul stays within the card's maximum height")
+	_assert(content_h + 28.0 <= height + 1.0, "and all of it fits: buttons and tip are not pushed off (%.0f in %.0f)" % [content_h + 28.0, height])
+	_assert(panel._finds_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_ALWAYS, "the list scrolls instead")
+	panel.free()
+
+
+func _test_a_tip_does_not_inflate_the_card() -> void:
+	## Regression: a wrapping tip label, measured before it had a width, wrapped
+	## every letter and made the card hundreds of pixels too tall.
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(20, 40, "Left in the ground.", 0)
+	panel.show_tip("What next?", "Spend your money in Upgrades. Bones you found go on display in the Museum.")
+	for _i in 4:
+		await process_frame
+	var card: Control = panel._panel as Control
+	var height: float = card.offset_bottom - card.offset_top
+	var content_h: float = (panel._box as Control).get_combined_minimum_size().y
+	_assert(height <= content_h + 48.0, "the card hugs its content with a tip (%.0f for %.0f)" % [height, content_h])
+	_assert(height < 480.0, "and is nowhere near full height")
+	panel.free()
+
+
+func _test_refreshed_card_pieces() -> void:
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(20, 30, "Tooth", 0)
+	_assert(str(panel._pay_caption.text) == "EARNED THIS SHIFT", "the total has a caption")
+	_assert(panel._rule != null and panel._rule.custom_minimum_size.y >= 2.0, "a brass rule sits under the title")
+	_assert(panel._pay.get_theme_font_size("font_size") >= 40, "the shift total is the biggest thing on the card")
+	_assert(panel._breakdown.size_flags_horizontal == Control.SIZE_SHRINK_CENTER, "the split hugs its words as a pill")
+	_assert(panel._button.custom_minimum_size.y >= 56.0, "Dig again is a big button")
 	panel.free()
 
 

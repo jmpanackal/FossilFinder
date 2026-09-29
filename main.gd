@@ -696,6 +696,9 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 		"cleanliness": cleanliness,
 		"dirt": dirt,
 		"fate": _extract_fate,
+		"stand_title": GameState.stand_title(stand_id),
+		"stand_have": progress.x,
+		"stand_need": progress.y,
 	})
 	if hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
 		hud.set_find_cards(dig_site.live_find_cards())

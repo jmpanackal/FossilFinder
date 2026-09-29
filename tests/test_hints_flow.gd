@@ -53,6 +53,15 @@ func _run() -> void:
 	_assert(H.is_pending("collect") and not bool(H.seen("collect")), "a second tip waits while the first is showing")
 
 	main._end_round()
+	## On the shift-over screen a tip goes inside the card (a toast would sit under
+	## its dim overlay), and it never lands as a toast there.
+	Engine.time_scale = 12.0
+	for _i in 120:
+		await _frames(20)
+		if bool(main.summary._tip.visible):
+			break
+	Engine.time_scale = 1.0
+	_assert(bool(main.summary._tip.visible) and str(main.summary._tip.text).begins_with("TIP"), "a tip on the shift-over screen shows inside the card")
 	main.show_screen("museum")
 	await _frames(4)
 	_assert(H.is_pending("museum") or bool(H.seen("museum")), "opening the museum asks for its tip")
