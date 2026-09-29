@@ -517,7 +517,7 @@ func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
 	var first: bool = GameState.take_hint("kind_%d" % kind)
 	if kind != Tuning.BONE_OPAL and not first:
 		return
-	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Worth far more. Get it out before it crumbles!"
+	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Always Great or Perfect, worth 2.5x. Brush, then plaster it before it crumbles!"
 	if first and not Tuning.cast_owned():
 		sub += " Only a Plaster Cast (Hands upgrade) lifts it out safely."
 	elif first:

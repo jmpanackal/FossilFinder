@@ -579,7 +579,7 @@ func _try_place_find(data: FossilDataScript) -> bool:
 			"layer": layer,
 			"cells": cells,
 			"integrity": 1.0,
-			"condition": Tuning.roll_opal_condition() if kind == Tuning.BONE_OPAL else Tuning.roll_condition(null, Tuning.depth_frac(layer) * Tuning.depth_condition_luck),
+			"condition": _roll_find_condition(kind, layer),
 			"kind": kind,
 			"air": 0.0,
 			"crumbled": 0,
@@ -591,6 +591,16 @@ func _try_place_find(data: FossilDataScript) -> bool:
 		})
 		return true
 	return false
+
+
+func _roll_find_condition(kind: int, layer: int) -> int:
+	if kind == Tuning.BONE_OPAL:
+		return Tuning.roll_opal_condition()
+	var cond: int = Tuning.roll_condition(null, Tuning.depth_frac(layer) * Tuning.depth_condition_luck)
+	## A Perfect bone you never had to save should be rare.
+	if kind == Tuning.BONE_SOLID and cond >= Tuning.CONDITION_PERFECT and randf() >= Tuning.solid_perfect_keep:
+		cond = Tuning.CONDITION_PERFECT - 1
+	return cond
 
 
 ## Bigger, pricier bones sit deeper in their range, so the best finds wait at
@@ -1193,7 +1203,20 @@ func _find_in_air(find: Dictionary) -> bool:
 func find_is_crumbling(find: Dictionary) -> bool:
 	if find.is_empty() or bool(find.get("extracted", false)) or bool(find.get("cast", false)):
 		return false
-	return Tuning.bone_crumbles(int(find.get("kind", 0))) and _find_in_air(find)
+	return Tuning.bone_crumbles(int(find.get("kind", 0))) and _find_half_exposed(find)
+
+
+## Big bones only start drying once at least half of them is in the open air,
+## so the clock doesn't run out while you're still digging the rest.
+func _find_half_exposed(find: Dictionary) -> bool:
+	var cells: Dictionary = find.get("cells", {})
+	if cells.is_empty():
+		return false
+	var open: int = 0
+	for cell in cells:
+		if exposed_cells.has(cell):
+			open += 1
+	return open * 2 >= cells.size()
 
 
 ## Seconds until this bone crumbles again (INF when it is safe).
@@ -2241,7 +2264,7 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		if left == INF:
 			continue
 		var kind: int = int(find.get("kind", 0))
-		var span: float = Tuning.crumble_step[kind] if float(find.get("air", 0.0)) >= Tuning.crumble_first[kind] else Tuning.crumble_first[kind]
+		var span: float = Tuning.crumble_step_s(kind) if float(find.get("air", 0.0)) >= Tuning.crumble_first_s(kind) else Tuning.crumble_first_s(kind)
 		var frac: float = clampf(left / maxf(span, 0.1), 0.0, 1.0)
 		_draw_spreading_cracks(c, find, 1.0 - frac)
 		var urgent: bool = left <= 3.0

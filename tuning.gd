@@ -288,8 +288,8 @@ const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Opal"]
 ## Plain-language one-liners shown the first time each kind turns up.
 const BONE_KIND_HINTS: PackedStringArray = [
 	"",
-	"It dries out in open air: loses a star every 10s once uncovered, until it is plastered.",
-	"Bone that turned into opal, a rainbow gemstone. Worth 2.5x, but it cracks as it dries: loses a star every 6s once uncovered.",
+	"It dries out in open air: once half dug out it loses a star every 10s, until it is plastered.",
+	"Bone turned to opal, a rainbow gem: always Great or Perfect, worth 2.5x. Once half dug out it loses a star every 6s until plastered.",
 ]
 ## Solid / Fragile / Opal odds. Before Plaster Cast, crumbly bones (Opal
 ## especially) are rare so they don't feel unfair; owning it makes Opal a
@@ -301,6 +301,9 @@ var bone_kind_weights_no_cast: PackedFloat32Array = [86.0, 14.0, 0.0]
 ## Opal only forms in the best-kept bone: always Great or Perfect, so it is
 ## always worth the race to plaster it.
 var opal_perfect_chance: float = 0.4
+## Perfect is special: a solid bone (nothing to plaster) that rolls Perfect
+## only keeps it this often, else it comes out Great.
+var solid_perfect_keep: float = 0.25
 
 
 func roll_opal_condition(rng: RandomNumberGenerator = null) -> int:
@@ -341,19 +344,31 @@ func roll_bone_kind(rng: RandomNumberGenerator = null) -> int:
 
 
 ## How many crumbles a bone of this kind has taken after `seconds` in open air.
+## Wet Burlap (Hands II) keeps exposed bones damp: every crumble takes longer.
+var crumble_slow: float = 1.0
+
+
+func crumble_first_s(kind: int) -> float:
+	return crumble_first[kind] * crumble_slow
+
+
+func crumble_step_s(kind: int) -> float:
+	return maxf(crumble_step[kind] * crumble_slow, 0.1)
+
+
 func crumbles_after(kind: int, seconds: float) -> int:
-	if not bone_crumbles(kind) or seconds < crumble_first[kind]:
+	if not bone_crumbles(kind) or seconds < crumble_first_s(kind):
 		return 0
-	return 1 + int(floor((seconds - crumble_first[kind]) / maxf(crumble_step[kind], 0.1)))
+	return 1 + int(floor((seconds - crumble_first_s(kind)) / crumble_step_s(kind)))
 
 
 func seconds_to_next_crumble(kind: int, seconds: float) -> float:
 	if not bone_crumbles(kind):
 		return INF
-	if seconds < crumble_first[kind]:
-		return crumble_first[kind] - seconds
-	var into: float = fmod(seconds - crumble_first[kind], maxf(crumble_step[kind], 0.1))
-	return crumble_step[kind] - into
+	if seconds < crumble_first_s(kind):
+		return crumble_first_s(kind) - seconds
+	var into: float = fmod(seconds - crumble_first_s(kind), crumble_step_s(kind))
+	return crumble_step_s(kind) - into
 
 
 func cast_owned() -> bool:

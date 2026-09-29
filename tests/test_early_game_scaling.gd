@@ -333,7 +333,7 @@ func _test_pick_and_brush_require_prior_tools() -> void:
 	_assert(str(GS.lock_reason("pick_click")).contains("Shovel"), "pick lock names the shovel")
 	_assert(bool(GS.buy("shovel_click")), "shovel unlocks pick")
 	_assert(bool(GS.can_buy("pick_click")), "pick is buyable after shovel")
-	_assert(not bool(GS.can_buy("brush_speed")), "brush waits for the pick")
+	_assert(bool(GS.can_buy("brush_speed")), "brush is buyable right after the shovel, no pick needed")
 	_assert(bool(GS.buy("pick_click")), "pick purchase succeeds")
 	_assert(bool(GS.can_buy("brush_speed")), "brush is buyable after pick")
 

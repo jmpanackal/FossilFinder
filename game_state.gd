@@ -46,6 +46,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "hands_hold", "cat": "Hands", "tier": 1, "name": "Steady Hands", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 36, "scale": 1.65, "max": 4},
 	{"id": "hands_sense", "cat": "Hands", "tier": 1, "name": "Bone Sense", "desc": "Feel for buried bone farther away.", "unlock_name": "Bone Sense", "unlock_desc": "Digging by hand marks buried bone in nearby cells.", "unlock_action": "Unlock", "cost": 60, "scale": 1.9, "max": 4},
 	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Wrap crumbling bones faster, before they lose stars.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a dug-out Fragile or Opal bone to wrap it in plaster, like a cast on a broken arm, and lift it out. Its stars stop dropping. Brush it first: it leaves as clean as it is.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
+	{"id": "hands_burlap", "cat": "Hands", "tier": 2, "name": "Wet Burlap", "desc": "Keeps dug-out Fragile and Opal bones damp: more time before each lost star.", "unlock_name": "Wet Burlap", "unlock_desc": "Drape damp cloth over crumbling bones: they take longer to lose each star, so you have more time to brush and plaster.", "unlock_action": "Unlock", "cost": 2200, "scale": 1.9, "max": 4, "requires": "hands_cast"},
 	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds and more $. With Bone Sense, a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
 	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt much harder (holding a bit harder too).", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
@@ -60,7 +61,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 4500, "scale": 1.95, "max": 6},
 	{"id": "pick_soft", "cat": "Pickaxe", "tier": 2, "name": "Gentle Picking", "desc": "Careful strikes mean more bones come up in great shape.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "pick_titan", "cat": "Pickaxe", "tier": 3, "name": "Titan Pick", "desc": "The heaviest pick. Clay and rock give faster.", "cost": 80000, "scale": 1.7, "max": 6},
-	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting goes faster and the bristles reach the next bone cell.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "pick_click"},
+	{"id": "brush_speed", "cat": "Brush", "tier": 1, "name": "Softer Bristles", "desc": "Dusting goes faster and the bristles reach the next bone cell.", "unlock_name": "Brush", "unlock_desc": "A slow brush. Clean bones sell for more.", "cost": 250, "scale": 1.85, "max": 5, "requires": "shovel_click"},
 	{"id": "brush_master", "cat": "Brush", "tier": 2, "name": "Master Brush", "desc": "Faster dusting and a much wider sweep.", "cost": 3500, "scale": 1.95, "max": 6},
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
 	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Small finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
@@ -420,6 +421,7 @@ func _tuning_snapshot() -> Dictionary:
 		"donation": Tuning.donation_base * Tuning.donation_mult + Tuning.donation_flat,
 		"visitor_flat": Tuning.visitor_flat,
 		"visitor_mult": Tuning.visitor_mult,
+		"crumble_slow": Tuning.crumble_slow,
 		"dirty_income_factor": Tuning.dirty_income_factor,
 		"site_size_rank": Tuning.site_size_rank,
 		"extra_find_slots": Tuning.extra_find_slots,
@@ -447,6 +449,8 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _pct_over_line("+%d%% click harvest", float(zero["hands_click_mult"]), float(at["hands_click_mult"]))
 		"hands_hold", "hands_swift", "shovel_hold":
 			return _pct_faster_line("Hold digs %d%% faster", float(zero["shovel_hold_tick_rate"]), float(at["shovel_hold_tick_rate"]))
+		"hands_burlap":
+			return _pct_delta_line("+%d%% time before a bone crumbles", float(zero["crumble_slow"]), float(at["crumble_slow"]))
 		"hands_cast":
 			var before: int = int(zero["cast_rank"])
 			var after: int = int(at["cast_rank"])
@@ -688,6 +692,8 @@ func shop_hero_stats(cat: String) -> Array:
 			add.call("Hold speed", ("%.1f/s" % Tuning.shovel_hold_tick_rate) if _lv("hands_hold") > 0.0 else "Locked")
 			add.call("Bone sense", ("%.1f cells" % Tuning.hands_sense_radius) if Tuning.hands_sense_radius > 0.0 else "Locked")
 			add.call("Plaster", ("%.1fs" % Tuning.cast_hold_seconds()) if Tuning.cast_owned() else "Locked")
+			if _lv("hands_burlap") > 0.0:
+				add.call("Crumble time", "x%.2f" % Tuning.crumble_slow)
 		"Shovel":
 			if not owns_tool(Tuning.TOOL_SHOVEL):
 				add.call("Shovel", "Locked")
@@ -1070,6 +1076,7 @@ func apply_upgrades() -> void:
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
 	Tuning.brush_reach_px = 5.0 * brush_ranks + 7.0 * _lv("brush_master")
 	Tuning.cast_rank = int(_lv("hands_cast"))
+	Tuning.crumble_slow = 1.0 + 0.35 * _lv("hands_burlap")
 	var sense: float = _lv("hands_sense")
 	Tuning.hands_sense_radius = 0.0 if sense <= 0.0 else 0.75 + 0.5 * sense + 0.45 * _lv("hands_craft")
 	Tuning.round_seconds = float(_bases["round_seconds"]) + 6.0 * _lv("round_time") + 8.0 * _lv("round_marathon")

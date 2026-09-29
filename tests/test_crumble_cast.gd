@@ -28,6 +28,9 @@ func _run() -> void:
 	_test_cast_upgrade_is_faster_per_rank()
 	_test_brushing_alone_does_not_save_a_crumbly_bone()
 	_test_plain_names_and_hints()
+	_test_half_exposed_starts_the_clock()
+	_test_wet_burlap_slows_crumbling()
+	_test_solid_perfect_is_rare()
 	_reset()
 	print("crumble_cast %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -217,6 +220,45 @@ func _test_brushing_alone_does_not_save_a_crumbly_bone() -> void:
 	site.call("cast_find", 0)
 	_assert(bool(site.finds[0]["extracted"]) and bool(site.finds[0]["cast"]), "plastering lifts it out")
 	_assert(bool(site.finds[0]["extracted_clean"]), "brushed first, it leaves clean")
+	site.queue_free()
+
+
+func _test_half_exposed_starts_the_clock() -> void:
+	_reset()
+	var site := _site_with(TN.BONE_FRAGILE, 5)
+	var cells: Array = (site.finds[0]["cells"] as Dictionary).keys()
+	if cells.size() >= 3:
+		site.call("_reveal_fossil_cell", cells[0])
+		_assert(not bool(site.call("find_is_crumbling", site.finds[0])), "one corner of a big bone does not start the clock")
+	for i in int(ceil(float(cells.size()) / 2.0)):
+		site.call("_reveal_fossil_cell", cells[i])
+	_assert(bool(site.call("find_is_crumbling", site.finds[0])), "half dug out, it starts to crumble")
+	site.queue_free()
+
+
+func _test_wet_burlap_slows_crumbling() -> void:
+	_reset()
+	var plain: float = float(TN.crumble_first_s(TN.BONE_FRAGILE))
+	GS.levels["hands_cast"] = 1
+	GS.levels["hands_burlap"] = 2
+	GS.apply_upgrades()
+	_assert(float(TN.crumble_first_s(TN.BONE_FRAGILE)) > plain * 1.5, "Wet Burlap gives more time before a star is lost")
+	_assert(str(GS.shop_effect_line("hands_burlap")).contains("time"), "shop line says it buys time")
+	_reset()
+
+
+func _test_solid_perfect_is_rare() -> void:
+	_reset()
+	var site := _site_with(TN.BONE_SOLID)
+	var perfect: int = 0
+	for i in 600:
+		if int(site.call("_roll_find_condition", TN.BONE_SOLID, 20)) == 5:
+			perfect += 1
+	_assert(perfect < 60, "a Perfect bone that never needed plaster is rare")
+	var opal_low: int = 5
+	for i in 200:
+		opal_low = mini(opal_low, int(site.call("_roll_find_condition", TN.BONE_OPAL, 5)))
+	_assert(opal_low >= 4, "opal is always Great or Perfect")
 	site.queue_free()
 
 
