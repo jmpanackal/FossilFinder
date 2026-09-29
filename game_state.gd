@@ -6,6 +6,8 @@ const UiStyle := preload("res://ui_style.gd")
 signal collection_changed
 signal upgrades_changed
 signal hall_changed
+## The Cleaning Cart finished a bone.
+signal cleaner_finished(piece_id: String)
 signal progress_reset
 signal skeleton_completed(stand_id: String, bonus: int)
 ## Complete stand where every bone is Perfect.
@@ -29,6 +31,9 @@ var pending_notices: Array = []
 var last_unlock_title: String = ""
 var last_unlocked_ids: Array[String] = []
 var featured_stand_id: String = ""
+## Stand the Cleaning Cart is parked at ("" = parked in the bay).
+var cleaner_stand_id: String = ""
+var cleaner_finished_name: String = ""
 ## One-time explainer hints the player has already seen (saved).
 var hints_seen: Dictionary = {}
 var pending_unveils: Dictionary = {}
@@ -81,7 +86,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "benches", "cat": "Museum", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 450, "scale": 2.0, "max": 5},
 	{"id": "unveil_time", "cat": "Museum", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 200, "scale": 1.85, "max": 4},
 	{"id": "unveil_crowd", "cat": "Museum", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes bring more people.", "cost": 220, "scale": 1.85, "max": 4},
-	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Prep Lab", "desc": "Cleans more dirty bones after each shift.", "unlock_name": "Prep Lab", "unlock_desc": "Dirty bones on display earn less and can't make a Masterpiece. After each shift, your prep lab cleans a dirty bone so it earns full income.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
+	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Cleaning Cart", "desc": "The cart climbs each dirt level faster.", "unlock_name": "Cleaning Cart", "unlock_desc": "Drag the cart onto an exhibit to slowly clean its dirty bones. The exhibit is closed and earns nothing while the cart is there. Drag it to the parking bay to reopen everything.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
 	{"id": "glass_case", "cat": "Museum", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 1000, "scale": 1.85, "max": 6},
 	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
 	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
@@ -130,6 +135,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if cleaner_stand_id != "":
+		_tick_cleaner(delta)
 	var rate: float = museum_income()
 	if rate > 0.0:
 		_income_accum += rate * delta
@@ -543,8 +550,10 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 		"unveil_crowd":
 			return _pct_delta_line("+%d%% visitors on unveil", float(zero["unveil_rush_strength"]), float(at["unveil_rush_strength"]))
 		"workshop":
-			var jobs: int = prep_lab_jobs(int(at["workshop"]))
-			return "Cleans %d dirty bone%s per shift" % [jobs, "" if jobs == 1 else "s"]
+			var secs: int = prep_cart_seconds(int(at["workshop"]))
+			if secs <= 0:
+				return "No cart yet"
+			return "Cleans one dirt level per %ds" % secs
 		"restoration":
 			return _pct_delta_line("+%d%% dirty exhibit income", float(zero["dirty_income_factor"]), float(at["dirty_income_factor"]))
 		_:
@@ -729,7 +738,7 @@ func shop_hero_stats(cat: String) -> Array:
 			add.call("Income", UiStyle.money_text(museum_income()) + "/s")
 			add.call("Visitors", str(museum_visitors()))
 			add.call("Museum fame", "x%.1f" % fame_mult())
-			add.call("Cleaned/shift", str(prep_lab_jobs(int(_lv("workshop")))))
+			add.call("Cleaning cart", "%ds / level" % prep_cart_seconds(int(_lv("workshop"))) if _lv("workshop") > 0.0 else "none")
 	return out
 
 
@@ -1252,8 +1261,12 @@ func stand_is_masterpiece(stand_id: String) -> bool:
 	return true
 
 
+## Clean = flagged clean, or brushed past the same 96% the hover card calls "Clean".
 func piece_is_clean(piece_id: String) -> bool:
-	return has_piece(piece_id) and bool((pieces[piece_id] as Dictionary).get("clean", false))
+	if not has_piece(piece_id):
+		return false
+	var piece: Dictionary = pieces[piece_id]
+	return bool(piece.get("clean", false)) or float(piece.get("cleanliness", 0.0)) >= Tuning.clean_extract_threshold
 
 
 func masterpiece_bonus(stand_id: String) -> int:
@@ -1271,43 +1284,130 @@ func _award_masterpiece(stand_id: String) -> void:
 	masterpiece_completed.emit(stand_id, bonus)
 
 
-## Repair Workshop: after a shift, raise the weakest bones on display by one
-## star each (never past Great). Returns what was repaired, for the summary.
-## Prep Lab (id "workshop" for old saves): after each shift, clean the dirty
-## bones on display, dirtiest first. Stars only come from the field.
-func prep_lab_jobs(rank: int) -> int:
-	return [0, 1, 2, 4][clampi(rank, 0, 3)]
+## Cleaning Cart (id "workshop" for old saves): drag it onto an exhibit and it
+## slowly cleans that exhibit's dirtiest bone. The exhibit is closed (earns
+## nothing) the whole time. Parked (cleaner_stand_id == "") it does nothing.
+func prep_cart_seconds(rank: int = -1) -> int:
+	if rank < 0:
+		rank = int(_lv("workshop"))
+	return int(Tuning.cart_level_seconds[clampi(rank, 0, Tuning.cart_level_seconds.size() - 1)])
 
 
-func run_workshop() -> Array:
-	var cleaned: Array = []
-	for _job in prep_lab_jobs(int(_lv("workshop"))):
-		var pick: String = ""
-		var dirtiest: float = 2.0
-		for piece_id in pieces:
-			var id: String = str(piece_id)
-			var piece: Dictionary = pieces[id]
-			if bool(piece.get("clean", false)):
-				continue
-			var c: float = float(piece.get("cleanliness", 0.0))
-			if c < dirtiest:
-				dirtiest = c
-				pick = id
-		if pick.is_empty():
-			break
-		var stand_id: String = stand_for_piece(pick)
-		var was_master: bool = stand_is_masterpiece(stand_id)
-		var piece: Dictionary = pieces[pick]
-		piece["clean"] = true
-		piece["cleanliness"] = 1.0
-		pieces[pick] = piece
-		cleaned.append({"piece_id": pick, "name": str(piece.get("name", pick))})
-		if not was_master and stand_is_masterpiece(stand_id):
-			_award_masterpiece(stand_id)
-	if not cleaned.is_empty():
-		collection_changed.emit()
-		hall_changed.emit()
-	return cleaned
+## Dirt levels match the hover card's words: Caked < 25% <= Dirty < 60% <=
+## Dusty < 96% <= Clean. Returns [bottom, top] of the level a bone is in.
+## (An Array, not a Vector2: Vector2 is 32-bit and 0.96 would round below the
+## real threshold, so a bone could never finish its last level.)
+func dirt_level_span(cleanliness: float) -> Array:
+	var edges: Array[float] = [0.0, 0.25, 0.6, Tuning.clean_extract_threshold]
+	for i in range(edges.size() - 1):
+		if cleanliness < edges[i + 1]:
+			return [edges[i], edges[i + 1]]
+	return [edges[edges.size() - 1], 1.0]
+
+
+## What the cart is doing right now, for the overlay: the level it is moving
+## the bone out of and into, how far through that level it is, and time left.
+func prep_cart_level_info(piece_id: String) -> Dictionary:
+	if not has_piece(piece_id):
+		return {}
+	var c: float = piece_cleanliness(piece_id)
+	var span: Array = dirt_level_span(c)
+	var low: float = span[0]
+	var high: float = span[1]
+	var secs: float = float(prep_cart_seconds())
+	var width: float = maxf(high - low, 0.001)
+	return {
+		"from": c,
+		"to": high,
+		"progress": clampf((c - low) / width, 0.0, 1.0),
+		"seconds_left": (high - c) / width * secs,
+	}
+
+
+func prep_cart_owned() -> bool:
+	return int(_lv("workshop")) > 0
+
+
+func stand_dirty_pieces(stand_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	for piece_id in pieces:
+		var id: String = str(piece_id)
+		if stand_for_piece(id) == stand_id and not piece_is_clean(id):
+			out.append(id)
+	return out
+
+
+## The bone the cart is working on: the dirtiest one on its stand.
+func prep_cart_target() -> String:
+	if not stand_is_being_cleaned(cleaner_stand_id):
+		return ""
+	var pick: String = ""
+	var dirtiest: float = 2.0
+	for id in stand_dirty_pieces(cleaner_stand_id):
+		var c: float = float((pieces[id] as Dictionary).get("cleanliness", 0.0))
+		if c < dirtiest:
+			dirtiest = c
+			pick = id
+	return pick
+
+
+## Closed for cleaning: the cart is here and there is dirt for it to work on.
+func stand_is_being_cleaned(stand_id: String) -> bool:
+	if stand_id.is_empty() or stand_id != cleaner_stand_id or not prep_cart_owned():
+		return false
+	if stand_has_pending_unveil(stand_id):
+		return false
+	return not stand_dirty_pieces(stand_id).is_empty()
+
+
+func set_cleaner_stand(stand_id: String) -> bool:
+	if stand_id != "" and (not prep_cart_owned() or not stand_is_filled(stand_id)):
+		return false
+	if cleaner_stand_id == stand_id:
+		return true
+	cleaner_stand_id = stand_id
+	hall_changed.emit()
+	return true
+
+
+func _tick_cleaner(delta: float) -> void:
+	var id: String = prep_cart_target()
+	if id.is_empty():
+		return
+	var piece: Dictionary = pieces[id]
+	var c: float = float(piece.get("cleanliness", 0.0))
+	var per_level: float = float(prep_cart_seconds())
+	if per_level <= 0.0:
+		return
+	## Each dirt level takes the same time to climb, however wide it is.
+	var budget: float = delta
+	var steps: int = 0
+	while budget > 0.0 and c < Tuning.clean_extract_threshold and steps < 8:
+		steps += 1
+		var span: Array = dirt_level_span(c)
+		var low: float = span[0]
+		var high: float = span[1]
+		var rate: float = (high - low) / per_level
+		var needed: float = (high - c) / rate
+		if needed > budget:
+			c += rate * budget
+			budget = 0.0
+		else:
+			c = high
+			budget -= needed
+	if c < Tuning.clean_extract_threshold:
+		piece["cleanliness"] = c
+		return
+	var stand_id: String = stand_for_piece(id)
+	var was_master: bool = stand_is_masterpiece(stand_id)
+	piece["clean"] = true
+	piece["cleanliness"] = 1.0
+	cleaner_finished_name = str(piece.get("name", id))
+	if not was_master and stand_is_masterpiece(stand_id):
+		_award_masterpiece(stand_id)
+	collection_changed.emit()
+	hall_changed.emit()
+	cleaner_finished.emit(id)
 
 
 ## The finished-skeleton payout: the stand's full bone value, doubled.
@@ -1766,6 +1866,8 @@ func stand_size_scale(stand_id: String) -> float:
 
 
 func stand_visitors(stand_id: String, force_clean: bool = false) -> int:
+	if stand_is_being_cleaned(stand_id):
+		return 0
 	var total: int = 0
 	for piece_id in pieces:
 		if stand_for_piece(str(piece_id)) != stand_id:
@@ -1916,6 +2018,7 @@ func reset_progress(path: String = SAVE_PATH) -> void:
 	pieces.clear()
 	hints_seen.clear()
 	featured_stand_id = ""
+	cleaner_stand_id = ""
 	pending_unveils.clear()
 	pending_notices.clear()
 	last_unlock_title = ""
@@ -1965,6 +2068,7 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"hints_seen": hints_seen.duplicate(),
 		"precision_on": precision_on,
 		"featured_stand_id": featured_stand_id,
+		"cleaner_stand_id": cleaner_stand_id,
 		"pending_unveils": pending_unveils.duplicate(),
 		"pending_notices": pending_notices.duplicate(true),
 		"unveil_spike_left": unveil_spike_left,
@@ -2014,6 +2118,7 @@ func load_game(path: String = SAVE_PATH) -> bool:
 			hints_seen[str(raw_id)] = true
 	precision_on = bool(data.get("precision_on", false))
 	featured_stand_id = str(data.get("featured_stand_id", ""))
+	cleaner_stand_id = str(data.get("cleaner_stand_id", ""))
 	pending_unveils.clear()
 	var raw_unveils: Dictionary = data.get("pending_unveils", {})
 	for raw_id in raw_unveils:

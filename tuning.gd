@@ -236,7 +236,10 @@ var masterpiece_income_seconds: float = 300.0
 var stand_target_units: float = 9.0
 var stand_size_edge: float = 0.15
 ## Repair Workshop never repairs past this condition (Perfect only comes from the ground).
-var workshop_max_condition: int = 4
+## Cleaning Cart: seconds to raise a bone ONE dirt level (Caked -> Dirty ->
+## Dusty -> Clean) by rank (0 = not owned). Slow on purpose: brushing in the
+## dig stays the fast way. The exhibit earns nothing while it works.
+var cart_level_seconds: PackedInt32Array = [0, 200, 120, 60]
 var extra_complete_set_chance: float = 0.22
 var dirt_money_bonus: float = 0.0
 var rock_money_bonus: float = 0.0

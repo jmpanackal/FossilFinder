@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Repair Workshop fixes bones on display after shifts (up to Great);
-## a complete stand with every bone Perfect becomes a Masterpiece.
+## The Cleaning Cart slowly cleans one exhibit's dirty bones (closing it);
+## a complete stand with every bone Perfect and clean becomes a Masterpiece.
 ## Run: godot --headless --path <project> -s res://tests/test_masterpiece.gd
 
 var _failed: int = 0
@@ -19,12 +19,15 @@ func _run() -> void:
 	GS = root.get_node("GameState")
 	TN = root.get_node("Tuning")
 	GS.masterpiece_completed.connect(func(stand_id: String, bonus: int) -> void: _masters.append([stand_id, bonus]))
-	_test_workshop_needs_the_upgrade()
-	_test_workshop_repairs_the_weakest_bone()
-	_test_workshop_never_passes_great()
-	_test_workshop_ranks_repair_more()
+	_test_cart_needs_the_upgrade()
+	_test_cart_closes_its_exhibit()
+	_test_cart_cleans_dirtiest_bone_slowly()
+	_test_cart_climbs_one_level_per_interval()
+	_test_parked_cart_does_nothing()
+	_test_cart_ranks_clean_faster()
+	_test_cart_position_saves()
 	await _test_masterpiece_needs_complete_and_great()
-	await _test_workshop_can_finish_a_masterpiece()
+	await _test_cart_can_finish_a_masterpiece()
 	_test_region_condition_is_the_weakest_bone()
 	_test_fame_scales_bone_value_with_income()
 	_test_find_card_says_new_or_duplicate()
@@ -38,6 +41,7 @@ func _reset() -> void:
 	GS.pieces.clear()
 	GS.pending_unveils.clear()
 	GS.featured_stand_id = ""
+	GS.cleaner_stand_id = ""
 	GS.money = 0
 	for item in GS.catalog:
 		GS.levels[item["id"]] = 0
@@ -51,48 +55,111 @@ func _fill_stand(stand: String, condition: int) -> void:
 			GS.install_find(id, id, 1.0, true, condition)
 
 
-func _test_workshop_needs_the_upgrade() -> void:
+func _own_cart(rank: int) -> void:
+	GS.levels["workshop"] = rank
+	GS.apply_upgrades()
+
+
+func _test_cart_needs_the_upgrade() -> void:
 	_reset()
 	GS.install_find("t_rex_skull", "T. rex Skull", 0.3, false, 3)
-	_assert(GS.run_workshop().is_empty(), "no cleaning without the Prep Lab")
+	_assert(not bool(GS.set_cleaner_stand("t_rex")), "the cart cannot be placed before buying it")
+	GS.cleaner_stand_id = "t_rex"
+	_assert(not bool(GS.stand_is_being_cleaned("t_rex")), "an unowned cart closes nothing")
+	GS._tick_cleaner(100.0)
 	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "the bone stays dirty")
 
 
-func _test_workshop_repairs_the_weakest_bone() -> void:
-	## Prep Lab cleans the dirtiest bone on display; stars don't change.
+func _test_cart_closes_its_exhibit() -> void:
 	_reset()
-	GS.levels["workshop"] = 1
-	GS.apply_upgrades()
+	_own_cart(1)
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.3, false, 3)
+	GS.install_find("triceratops_skull", "Triceratops Skull", 0.3, false, 3)
+	GS.pending_unveils.clear()
+	var open_income: float = float(GS.stand_income("t_rex"))
+	_assert(open_income > 0.0, "an open exhibit earns")
+	_assert(bool(GS.set_cleaner_stand("t_rex")), "the cart can be placed on a filled exhibit")
+	_assert(bool(GS.stand_is_being_cleaned("t_rex")), "a dirty exhibit with the cart is closed")
+	_assert(is_equal_approx(float(GS.stand_income("t_rex")), 0.0), "a closed exhibit earns nothing")
+	_assert(float(GS.stand_income("triceratops")) > 0.0, "other exhibits keep earning")
+	_assert(not bool(GS.set_cleaner_stand("stegosaurus")), "the cart cannot go to an empty exhibit")
+	_assert(bool(GS.set_cleaner_stand("")), "the cart can be parked")
+	_assert(is_equal_approx(float(GS.stand_income("t_rex")), open_income), "parking reopens the exhibit")
+
+
+func _test_cart_cleans_dirtiest_bone_slowly() -> void:
+	_reset()
+	_own_cart(1)
 	GS.install_find("t_rex_skull", "T. rex Skull", 0.6, false, 3)
 	GS.install_find("t_rex_jaw", "T. rex Jaw", 0.2, false, 2)
-	var dirty_income: int = int(GS.piece_visitors("t_rex_jaw"))
-	var cleaned: Array = GS.run_workshop()
-	_assert(cleaned.size() == 1, "rank 1 cleans one bone per shift")
-	_assert(str(cleaned[0]["piece_id"]) == "t_rex_jaw", "the dirtiest bone is cleaned first")
-	_assert(bool(GS.piece_is_clean("t_rex_jaw")), "it is clean now")
-	_assert(int(GS.piece_condition("t_rex_jaw")) == 2, "its stars do not change")
-	_assert(int(GS.piece_visitors("t_rex_jaw")) > dirty_income, "a cleaned bone earns more")
-	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "other bones wait their turn")
+	GS.pending_unveils.clear()
+	GS.set_cleaner_stand("t_rex")
+	_assert(str(GS.prep_cart_target()) == "t_rex_jaw", "the dirtiest bone is cleaned first")
+	GS._tick_cleaner(10.0)
+	var progress: float = float(GS.piece_cleanliness("t_rex_jaw"))
+	_assert(progress > 0.2 and progress < 0.25, "cleaning is gradual, not instant")
+	_assert(not bool(GS.piece_is_clean("t_rex_jaw")), "a bone is not clean after a few seconds")
+	_assert(is_equal_approx(float(GS.piece_cleanliness("t_rex_skull")), 0.6), "only the target bone is worked on")
+	GS._tick_cleaner(1000.0)
+	_assert(bool(GS.piece_is_clean("t_rex_jaw")), "it ends up clean")
+	_assert(int(GS.piece_condition("t_rex_jaw")) == 2, "stars do not change")
+	_assert(str(GS.prep_cart_target()) == "t_rex_skull", "the cart moves on to the next dirty bone")
+	GS._tick_cleaner(1000.0)
+	_assert(bool(GS.piece_is_clean("t_rex_skull")), "every dirty bone gets done")
+	_assert(not bool(GS.stand_is_being_cleaned("t_rex")), "the exhibit reopens on its own once spotless")
+	_assert(float(GS.stand_income("t_rex")) > 0.0, "and earns again")
+	_assert(str(GS.cleaner_stand_id) == "t_rex", "the cart stays put until moved")
 
 
-func _test_workshop_never_passes_great() -> void:
+func _test_cart_climbs_one_level_per_interval() -> void:
+	## A level takes the rank's seconds however wide it is: 200s takes a Caked
+	## bone to Dirty (25%), not to spotless.
 	_reset()
-	GS.levels["workshop"] = 3
-	GS.apply_upgrades()
-	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 4)
-	_assert(GS.run_workshop().is_empty(), "clean bones are left alone")
-	_assert(int(GS.piece_condition("t_rex_skull")) == 4, "stars only come from the field")
+	_own_cart(1)
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.0, false, 3)
+	GS.pending_unveils.clear()
+	GS.set_cleaner_stand("t_rex")
+	var secs: float = float(GS.prep_cart_seconds(1))
+	GS._tick_cleaner(secs - 1.0)
+	_assert(float(GS.piece_cleanliness("t_rex_skull")) < 0.25, "just under one interval is still Caked")
+	GS._tick_cleaner(2.0)
+	var c: float = float(GS.piece_cleanliness("t_rex_skull"))
+	_assert(c >= 0.25 and c < 0.6, "one interval raises it exactly one level, to Dirty")
+	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "it is nowhere near clean yet")
+	var info: Dictionary = GS.prep_cart_level_info("t_rex_skull")
+	_assert(float(info["to"]) > 0.59 and float(info["to"]) < 0.61, "the overlay shows it heading for Dusty")
+	GS._tick_cleaner(secs * 2.0)
+	_assert(bool(GS.piece_is_clean("t_rex_skull")), "three intervals clean a Caked bone")
 
 
-func _test_workshop_ranks_repair_more() -> void:
+func _test_parked_cart_does_nothing() -> void:
 	_reset()
-	GS.levels["workshop"] = 3
-	GS.apply_upgrades()
-	for id in ["t_rex_skull", "t_rex_jaw", "t_rex_femur", "t_rex_tail", "t_rex_ribcage"]:
-		GS.install_find(id, id, 0.3, false, 3)
-	var cleaned: Array = GS.run_workshop()
-	_assert(cleaned.size() == 4, "rank 3 cleans four bones per shift")
-	_assert(str(GS.shop_effect_line("workshop")).contains("Clean"), "shop line says it cleans")
+	_own_cart(3)
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.3, false, 3)
+	GS._tick_cleaner(500.0)
+	_assert(not bool(GS.piece_is_clean("t_rex_skull")), "a parked cart cleans nothing")
+	_assert(is_equal_approx(float(GS.piece_cleanliness("t_rex_skull")), 0.3), "and leaves dirt alone")
+
+
+func _test_cart_ranks_clean_faster() -> void:
+	_reset()
+	_assert(GS.prep_cart_seconds(1) > GS.prep_cart_seconds(2) and GS.prep_cart_seconds(2) > GS.prep_cart_seconds(3), "higher ranks clean faster")
+	_own_cart(3)
+	_assert(str(GS.shop_effect_line("workshop")).contains("Cleans"), "shop line says how fast it cleans")
+
+
+func _test_cart_position_saves() -> void:
+	_reset()
+	_own_cart(1)
+	GS.install_find("t_rex_skull", "T. rex Skull", 0.3, false, 3)
+	GS.pending_unveils.clear()
+	GS.set_cleaner_stand("t_rex")
+	var path: String = "user://test_cart_save.json"
+	GS.save_game(path)
+	GS.cleaner_stand_id = ""
+	GS.load_game(path)
+	_assert(str(GS.cleaner_stand_id) == "t_rex", "the cart's exhibit is saved")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _test_masterpiece_needs_complete_and_great() -> void:
@@ -112,9 +179,9 @@ func _test_masterpiece_needs_complete_and_great() -> void:
 	_assert(int(GS.stand_visitors("velociraptor")) > plain * 2, "a Masterpiece of Perfect bones draws far more")
 
 
-func _test_workshop_can_finish_a_masterpiece() -> void:
+func _test_cart_can_finish_a_masterpiece() -> void:
 	## A Masterpiece needs every bone Perfect AND clean: one dirty bone blocks
-	## it, and the Prep Lab cleaning it finishes the Masterpiece.
+	## it, and the Cleaning Cart cleaning it finishes the Masterpiece.
 	_reset()
 	_fill_stand("velociraptor", 5)
 	await process_frame
@@ -126,10 +193,11 @@ func _test_workshop_can_finish_a_masterpiece() -> void:
 	piece["cleanliness"] = 0.4
 	GS.pieces[ids[0]] = piece
 	_assert(not bool(GS.stand_is_masterpiece("velociraptor")), "one dirty bone blocks the Masterpiece")
-	GS.levels["workshop"] = 1
-	GS.apply_upgrades()
-	GS.run_workshop()
-	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the Prep Lab cleaning it completes the Masterpiece")
+	_own_cart(1)
+	GS.pending_unveils.clear()
+	GS.set_cleaner_stand("velociraptor")
+	GS._tick_cleaner(1000.0)
+	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the Cleaning Cart cleaning it completes the Masterpiece")
 	_assert(_masters.size() == 1, "and it is celebrated")
 	piece = GS.pieces[ids[0]]
 	piece["condition"] = 4

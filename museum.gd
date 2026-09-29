@@ -11,6 +11,7 @@ const OVERSCROLL := 48.0
 const CLICK_SLOP := 10.0
 const ZOOM_STEP := 0.12
 const CLOSE_STAND := Vector2(480, 250)
+const CART_SCROLL_SPEED := 900.0
 
 var _visitors: Label
 var _visitors_cap: Label
@@ -31,6 +32,8 @@ var _dragging: bool = false
 var _pressing: bool = false
 var _press_pad: Vector2 = Vector2.ZERO
 var _moved: float = 0.0
+## Pressing on the Cleaning Cart: a drag moves the cart, a click parks it.
+var _cart_press: bool = false
 var _banner_life: float = 0.0
 
 
@@ -92,6 +95,7 @@ func _ready() -> void:
 	GameState.money_changed.connect(_on_money_changed)
 	visibility_changed.connect(_on_money_changed)
 	GameState.hall_changed.connect(_refresh)
+	GameState.cleaner_finished.connect(_on_cleaner_finished)
 	Settings.menu_toggled.connect(_on_settings_toggled)
 	get_viewport().size_changed.connect(_on_view_resized)
 	_refresh()
@@ -102,6 +106,8 @@ func _process(delta: float) -> void:
 		return
 	if _canvas.has_method("tick"):
 		_canvas.tick(delta)
+	if _canvas.cleaner_dragging:
+		_autoscroll_for_cart(delta)
 	if _banner != null and _banner.visible:
 		_banner.modulate.a = clampf(_banner_life / 0.35, 0.0, 1.0) if _banner_life < 0.35 else 1.0
 		_banner_life -= delta
@@ -258,6 +264,12 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _pressing:
 		var mm: InputEventMouseMotion = event
 		_moved += mm.relative.length()
+		if _cart_press:
+			if _moved >= CLICK_SLOP:
+				_canvas.cleaner_dragging = true
+				_canvas.cleaner_drag_pos = _pad_to_hall(_pad.get_local_mouse_position())
+				_canvas.queue_redraw()
+			return
 		if not _dragging and _moved >= CLICK_SLOP:
 			_dragging = true
 			_pad.mouse_default_cursor_shape = Control.CURSOR_MOVE
@@ -290,6 +302,7 @@ func _on_hall_gui_input(event: InputEvent) -> void:
 			_dragging = false
 			_moved = 0.0
 			_press_pad = mb.position
+			_cart_press = _canvas.has_method("cleaner_hit") and bool(_canvas.cleaner_hit(_pad_to_hall(mb.position)))
 			_pad.accept_event()
 		else:
 			_finish_press()
@@ -323,10 +336,68 @@ func _update_star_tip(pad_pos: Vector2) -> void:
 
 
 func _finish_press() -> void:
-	if _pressing and not _dragging:
+	if _cart_press:
+		_finish_cart_press()
+	elif _pressing and not _dragging:
 		_click_hall(_press_pad)
 	_end_drag()
 	_pressing = false
+
+
+## Dragging the cart near an edge of the hall scrolls the view, so it can
+## reach exhibits that are off screen.
+func _autoscroll_for_cart(delta: float) -> void:
+	var p: Vector2 = _pad.get_local_mouse_position()
+	var size: Vector2 = _pad.size
+	var edge: float = 90.0
+	var v := Vector2.ZERO
+	if p.y < edge:
+		v.y = (edge - p.y) / edge
+	elif p.y > size.y - edge:
+		v.y = -(p.y - (size.y - edge)) / edge
+	if p.x < edge:
+		v.x = (edge - p.x) / edge
+	elif p.x > size.x - edge:
+		v.x = -(p.x - (size.x - edge)) / edge
+	v = v.limit_length(1.0)
+	if v == Vector2.ZERO:
+		return
+	_pan = _clamp_pan(_pan + v * CART_SCROLL_SPEED * delta)
+	_apply_pan()
+	_canvas.cleaner_drag_pos = _pad_to_hall(p)
+	_canvas.queue_redraw()
+
+
+func _finish_cart_press() -> void:
+	_cart_press = false
+	var was_dragged: bool = bool(_canvas.cleaner_dragging)
+	var drop_pos: Vector2 = _canvas.cleaner_drag_pos
+	_canvas.cleaner_dragging = false
+	if was_dragged:
+		_place_cart(str(_canvas.cleaner_drop_target(drop_pos)))
+	elif GameState.cleaner_stand_id != "":
+		_place_cart("")
+	_canvas.queue_redraw()
+
+
+func _place_cart(stand_id: String) -> void:
+	GameState.set_cleaner_stand(stand_id)
+	Sfx.play("ui")
+	if stand_id.is_empty():
+		_toast("Cleaning cart parked", "Every exhibit is open")
+	elif GameState.stand_is_being_cleaned(stand_id):
+		_toast("Cleaning cart at %s" % GameState.stand_title(stand_id), "Closed while it cleans · no income")
+	else:
+		_toast("Cleaning cart at %s" % GameState.stand_title(stand_id), "Nothing dirty here")
+	_refresh()
+
+
+func _on_cleaner_finished(_piece_id: String) -> void:
+	var stand_id: String = GameState.cleaner_stand_id
+	if GameState.stand_is_being_cleaned(stand_id):
+		_toast("Bone cleaned", "%s · next dirty bone" % GameState.cleaner_finished_name)
+	else:
+		_toast("Bone cleaned", "%s · exhibit reopens" % GameState.cleaner_finished_name)
 
 
 func _end_drag() -> void:

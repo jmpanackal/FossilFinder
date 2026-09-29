@@ -389,18 +389,6 @@ func _end_round() -> void:
 			_last_fossil_stars = maxi(_last_fossil_stars, int(entry["stars"]))
 		_last_fossil_line = Summary.join_find_lines(names)
 	_show_summary()
-	_run_workshop()
-
-
-func _run_workshop() -> void:
-	## Prep Lab: clean dirty bones on display after each shift.
-	var cleaned: Array = GameState.run_workshop()
-	if cleaned.is_empty() or toast == null or not toast.has_method("show_toast"):
-		return
-	var names: PackedStringArray = []
-	for raw in cleaned:
-		names.append(str((raw as Dictionary)["name"]))
-	toast.show_toast("Prep lab cleaned %d bone%s" % [cleaned.size(), "" if cleaned.size() == 1 else "s"], ", ".join(names) + ": full income now")
 
 
 func _show_summary() -> void:

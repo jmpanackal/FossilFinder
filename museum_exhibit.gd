@@ -2,6 +2,7 @@ extends Node2D
 
 const Ui := preload("res://ui_style.gd")
 const ArtCatalogScript := preload("res://art_catalog.gd")
+const StarTipScript := preload("res://star_tip.gd")
 
 const HALL := Vector2(2000, 1480)
 const FLOOR := Color("3C2C20")
@@ -54,11 +55,17 @@ const HALL_GIFT_SOUTH_RECT := Rect2(1120, 1420, 140, 40)
 const HALL_CART_RECT := Rect2(16, 478, 72, 36)
 const HALL_CART_SOUTH_RECT := Rect2(80, 1420, 72, 36)
 const HALL_BUNTING_RECT := Rect2(810, 4, 380, 28)
+## Cleaning Cart: its parking bay (parked = every exhibit earns normally).
+const CLEANER_PARK := Rect2(520, 1386, 104, 62)
 
 var flash_stand_id: String = ""
 var flash_t: float = 0.0
 var pop_t: float = 0.0
 var _crowd_t: float = 0.0
+var _clean_t: float = 0.0
+## Set by museum.gd while the player drags the Cleaning Cart (hall coordinates).
+var cleaner_dragging: bool = false
+var cleaner_drag_pos: Vector2 = Vector2.ZERO
 var _guests: Array = []
 ## Guests walk every frame; the hall does not. They draw on their own layer so
 ## the ~2000x1480 hall only re-records when an exhibit actually changes.
@@ -90,6 +97,11 @@ func tick(delta: float) -> void:
 	if pop_t > 0.0:
 		pop_t = maxf(0.0, pop_t - delta / 0.35)
 		dirty = true
+	if GameState.stand_is_being_cleaned(GameState.cleaner_stand_id):
+		_clean_t += delta
+		if _clean_t >= 0.25:
+			_clean_t = 0.0
+			dirty = true
 	if visitor_sprite_count() > 0:
 		_crowd_t += delta
 		_step_guests(delta)
@@ -163,6 +175,7 @@ func _draw() -> void:
 	_draw_sauropod_bay()
 	_draw_raptor_bay()
 	_draw_stego_bay()
+	_draw_prep_cart()
 	if _guest_layer == null:
 		_draw_visitors()
 	else:
@@ -268,6 +281,114 @@ func _draw_gift_prop(counter: Rect2, dress: bool) -> void:
 		var stack := Rect2(counter.end.x - 40.0, counter.position.y - 18.0, 28.0, 18.0)
 		draw_rect(stack, Color("6A3A2A"))
 		draw_rect(Rect2(stack.position.x + 4.0, stack.position.y - 8.0, 20.0, 8.0), Color("8A4A32"))
+
+
+## --- Cleaning Cart -----------------------------------------------------------
+
+func cleaner_visible() -> bool:
+	return GameState.prep_cart_owned()
+
+
+## Where the cart is drawn: under the cursor while dragged, on its exhibit
+## when stationed, otherwise in the parking bay.
+func cleaner_rect() -> Rect2:
+	if not cleaner_visible():
+		return Rect2()
+	if cleaner_dragging:
+		return Rect2(cleaner_drag_pos - CLEANER_PARK.size * 0.5, CLEANER_PARK.size)
+	var id: String = GameState.cleaner_stand_id
+	if id != "" and STAND_LAYOUT.has(id):
+		var stand: Rect2 = stand_rect(id)
+		## In front of the exhibit (south of its plaque), never on top of the bones.
+		return Rect2(Vector2(stand.position.x + 30.0, stand.end.y + 34.0), CLEANER_PARK.size)
+	return CLEANER_PARK
+
+
+func cleaner_hit(hall_pos: Vector2) -> bool:
+	var rect: Rect2 = cleaner_rect()
+	return rect.size != Vector2.ZERO and rect.grow(6.0).has_point(hall_pos)
+
+
+## The exhibit a dropped cart would go to ("" = the bay, i.e. parked).
+func cleaner_drop_target(hall_pos: Vector2) -> String:
+	var id: String = stand_id_at(hall_pos)
+	if id != "" and GameState.stand_is_filled(id) and not GameState.stand_has_pending_unveil(id):
+		return id
+	return ""
+
+
+func _draw_prep_cart() -> void:
+	var rect: Rect2 = cleaner_rect()
+	if rect.size == Vector2.ZERO:
+		return
+	var at_stand: bool = GameState.cleaner_stand_id != "" and not cleaner_dragging
+	var bay: Rect2 = CLEANER_PARK
+	draw_rect(bay.grow(8.0), Color(0.05, 0.03, 0.02, 0.35))
+	draw_rect(bay.grow(8.0), Color("8A6A28"), false, 2.0)
+	_draw_label(Vector2(bay.get_center().x, bay.end.y + 26.0), "PARKING", 12, Color("C8B080"))
+	if cleaner_dragging:
+		var target: String = cleaner_drop_target(cleaner_drag_pos)
+		if target != "":
+			draw_rect(stand_rect(target).grow(6.0), Color("FFE08A"), false, 5.0)
+	var working: bool = at_stand and GameState.stand_is_being_cleaned(GameState.cleaner_stand_id)
+	var body := Rect2(rect.position.x, rect.position.y + 20.0, rect.size.x, 26.0)
+	draw_rect(body, Color("4A4030"))
+	draw_rect(Rect2(body.position.x, body.position.y, body.size.x, 7.0), Color("6A5A40"))
+	draw_rect(body, Color("E4B75A"), false, 2.0)
+	draw_line(Vector2(body.position.x, body.position.y + 4.0), Vector2(body.position.x - 10.0, rect.position.y + 2.0), Color("C9A056"), 3.0)
+	var bucket := Rect2(body.position.x + 12.0, body.position.y - 14.0, 24.0, 16.0)
+	draw_rect(bucket, Color("4A5A6A"))
+	draw_rect(Rect2(bucket.position.x - 2.0, bucket.position.y, bucket.size.x + 4.0, 4.0), Color("6A7A8A"))
+	var scrub: float = 0.0
+	if working:
+		scrub = 5.0 if int(Time.get_ticks_msec() / 250) % 2 == 0 else -5.0
+	var brush := Rect2(body.position.x + 50.0 + scrub, body.position.y - 8.0, 26.0, 8.0)
+	draw_rect(brush, Color("C8A060"))
+	draw_rect(Rect2(brush.position.x, brush.end.y, brush.size.x, 5.0), Color("F0E4C8"))
+	draw_circle(Vector2(body.position.x + 16.0, body.end.y + 4.0), 8.0, Color("2A2418"))
+	draw_circle(Vector2(body.end.x - 16.0, body.end.y + 4.0), 8.0, Color("2A2418"))
+	var caption: String = "CLEANING CART"
+	if cleaner_dragging:
+		caption = "DROP ON AN EXHIBIT" if cleaner_drop_target(cleaner_drag_pos) != "" else "DROP TO PARK"
+	elif at_stand:
+		if working:
+			caption = "CLEANING"
+		elif GameState.stand_has_pending_unveil(GameState.cleaner_stand_id):
+			caption = "UNVEIL FIRST"
+		else:
+			caption = "ALL CLEAN"
+	_draw_label(Vector2(rect.get_center().x, rect.position.y - 4.0), caption, 12, Color("FFE08A"))
+
+
+func _draw_closed_overlay(stand_id: String, stand: Rect2) -> void:
+	if not GameState.stand_is_being_cleaned(stand_id):
+		return
+	draw_rect(stand, Color(0.05, 0.03, 0.02, 0.66))
+	draw_rect(stand, Color("8A6A28"), false, 3.0)
+	var center: Vector2 = stand.get_center()
+	var target: String = GameState.prep_cart_target()
+	var info: Dictionary = GameState.prep_cart_level_info(target)
+	var left: int = GameState.stand_dirty_pieces(stand_id).size()
+	var from_pct: float = float(info.get("from", 0.0))
+	var to_pct: float = float(info.get("to", 1.0))
+	var secs: int = int(ceil(float(info.get("seconds_left", 0.0))))
+	_draw_label(center + Vector2(0.0, -40.0), "CLOSED FOR CLEANING", 26, Color("FFE08A"))
+	_draw_label(center + Vector2(0.0, -14.0), "Cleaning: %s" % _short_bone_name(target, GameState.stand_title(stand_id)), 18, Color("F0E4C8"))
+	_draw_label(center + Vector2(-70.0, 12.0), StarTipScript.dirt_word(from_pct), 18, StarTipScript.dirt_color(from_pct))
+	_draw_label(center + Vector2(0.0, 12.0), "->", 18, Color("F0E4C8"))
+	_draw_label(center + Vector2(70.0, 12.0), StarTipScript.dirt_word(to_pct), 18, StarTipScript.dirt_color(to_pct))
+	var bar := Rect2(center.x - 120.0, center.y + 22.0, 240.0, 12.0)
+	draw_rect(bar, Color("2C2118"))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(float(info.get("progress", 0.0)), 0.0, 1.0), bar.size.y)), StarTipScript.dirt_color(to_pct))
+	draw_rect(bar, Ui.GOLD, false, 1.2)
+	_draw_label(center + Vector2(0.0, 56.0), "%s left on this level · %d dirty bone%s waiting" % [_clock(secs), left, "" if left == 1 else "s"], 14, Color("C8B080"))
+	_draw_label(center + Vector2(0.0, 76.0), "drag the cart away to reopen", 12, Color("C8B080"))
+
+
+func _clock(seconds: int) -> String:
+	if seconds >= 60:
+		return "%d:%02d" % [seconds / 60, seconds % 60]
+	return "%ds" % seconds
 
 
 func _draw_cleanup_cart() -> void:
@@ -655,6 +776,8 @@ func dwell_seconds(stand_id: String) -> float:
 
 
 func stand_rate_line(stand_id: String) -> String:
+	if GameState.stand_is_being_cleaned(stand_id):
+		return "Closed · cleaning"
 	return "$%.2f / sec" % GameState.stand_income(stand_id)
 
 
@@ -729,7 +852,7 @@ func _plan_guest(guest: Dictionary) -> void:
 func _pick_stops() -> PackedStringArray:
 	var filled: Array = []
 	for stand_id in STAND_LAYOUT:
-		if GameState.stand_is_filled(str(stand_id)):
+		if GameState.stand_is_filled(str(stand_id)) and not GameState.stand_is_being_cleaned(str(stand_id)):
 			filled.append(str(stand_id))
 	if filled.is_empty():
 		return PackedStringArray()
@@ -1331,6 +1454,7 @@ func _draw_stand_finish(stand_id: String, stand: Rect2) -> void:
 	if flash_t > 0.0 and flash_stand_id == stand_id:
 		draw_rect(stand, Color(1.0, 0.86, 0.40, 0.55 * flash_t))
 		draw_rect(stand.grow(10.0), Color(1.0, 0.92, 0.55, 0.28 * flash_t), false, 6.0)
+	_draw_closed_overlay(stand_id, stand)
 	_draw_stand_rate(stand_id)
 
 
@@ -1451,6 +1575,8 @@ func stand_condition_info(stand_id: String) -> Dictionary:
 
 func _stand_boosts(stand_id: String) -> String:
 	var parts: PackedStringArray = []
+	if GameState.stand_is_being_cleaned(stand_id):
+		parts.append("Closed while the cleaning cart cleans")
 	if GameState.stand_is_complete(stand_id):
 		parts.append("Complete x%s" % GameState._mult_text(Tuning.complete_stand_mult))
 	if GameState.stand_is_masterpiece(stand_id):
