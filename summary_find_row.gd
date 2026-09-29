@@ -58,7 +58,7 @@ func _init() -> void:
 	row.add_child(_icon)
 	_label = Label.new()
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -93,9 +93,15 @@ static func make_header() -> Control:
 		label.text = str(pair[0])
 		label.custom_minimum_size = Vector2(float(pair[1]), 0)
 		label.clip_text = false
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		Ui.apply_label(label, 11, Ui.MUTED)
 		head.add_child(label)
 	return head
+
+
+## Left edge that centres something `content_w` wide in a column `cell_w` wide.
+static func centered_x(cell_w: float, content_w: float) -> float:
+	return maxf((cell_w - content_w) * 0.5, 0.0)
 
 
 ## 0 Caked, 1 Dirty, 2 Dusty, 3 Clean: the same words and edges as the museum card.
@@ -180,43 +186,61 @@ static func _star_points(center: Vector2, r: float) -> PackedVector2Array:
 
 
 func _draw_condition(cell: Control) -> void:
+	## Stars, and the condition word centred under them; the pair is centred in
+	## the column both ways.
+	var font: Font = Ui.display_font()
 	var r: float = 7.0
 	var step: float = 17.0
-	var x0: float = r + 2.0
-	var y: float = cell.size.y * 0.36
+	var stars_w: float = step * 4.0 + r * 2.0
+	var word: String = Tuning.condition_name(condition) if condition > 0 else ""
+	var word_size: int = 11
+	var gap: float = 3.0 if not word.is_empty() else 0.0
+	var word_h: float = font.get_height(word_size) if not word.is_empty() else 0.0
+	var block_h: float = r * 2.0 + gap + word_h
+	var y0: float = maxf((cell.size.y - block_h) * 0.5, 0.0)
+	var x0: float = centered_x(cell.size.x, stars_w) + r
 	for i in 5:
-		var pts: PackedVector2Array = _star_points(Vector2(x0 + step * float(i), y), r)
+		var pts: PackedVector2Array = _star_points(Vector2(x0 + step * float(i), y0 + r), r)
 		if i < condition:
 			cell.draw_colored_polygon(pts, Ui.GOLD)
 		else:
 			var closed: PackedVector2Array = pts.duplicate()
 			closed.append(pts[0])
 			cell.draw_polyline(closed, Color("6A523C"), 1.3)
-	if condition > 0:
-		var font: Font = Ui.display_font()
-		cell.draw_string(font, Vector2(2.0, cell.size.y - 3.0), Tuning.condition_name(condition), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Ui.MUTED)
+	if not word.is_empty():
+		var tw: float = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, word_size).x
+		cell.draw_string(font, Vector2(centered_x(cell.size.x, tw), y0 + r * 2.0 + gap + font.get_ascent(word_size)), word, HORIZONTAL_ALIGNMENT_LEFT, -1, word_size, Ui.MUTED)
 
 
 func _draw_dirt(cell: Control) -> void:
+	## The four-step meter with its word centred under it, centred in the column.
+	var font: Font = Ui.display_font()
 	var level: int = dirt_level(cleanliness)
 	var tint: Color = StarTipScript.dirt_color(cleanliness)
 	var seg_w: float = 15.0
 	var seg_h: float = 9.0
 	var gap: float = 3.0
-	var y: float = cell.size.y * 0.5 - seg_h * 0.5
+	var meter_w: float = seg_w * 4.0 + gap * 3.0
+	var word: String = StarTipScript.dirt_word(cleanliness)
+	var word_size: int = 12
+	var word_h: float = font.get_height(word_size)
+	var block_h: float = seg_h + 4.0 + word_h
+	var y0: float = maxf((cell.size.y - block_h) * 0.5, 0.0)
+	var x0: float = centered_x(cell.size.x, meter_w)
 	for i in 4:
-		var rect := Rect2(2.0 + (seg_w + gap) * float(i), y, seg_w, seg_h)
+		var rect := Rect2(x0 + (seg_w + gap) * float(i), y0, seg_w, seg_h)
 		if i <= level:
 			cell.draw_rect(rect, tint)
 		else:
 			cell.draw_rect(rect, Color("2E241A"))
 			cell.draw_rect(rect, Color("5A4632"), false, 1.0)
-	var font: Font = Ui.display_font()
-	var word: String = StarTipScript.dirt_word(cleanliness)
-	cell.draw_string(font, Vector2(2.0 + (seg_w + gap) * 4.0 + 4.0, y + seg_h), word, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
+	var tw: float = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, word_size).x
+	cell.draw_string(font, Vector2(centered_x(cell.size.x, tw), y0 + seg_h + 4.0 + font.get_ascent(word_size)), word, HORIZONTAL_ALIGNMENT_LEFT, -1, word_size, tint)
 
 
 func _draw_status(cell: Control) -> void:
+	## NEW / DUPLICATE / UPGRADE, centred in the column. Only the Dinosaur column
+	## shows a count, so a row never has two different denominators.
 	if status.is_empty():
 		return
 	var text: String = "NEW"
@@ -230,30 +254,47 @@ func _draw_status(cell: Control) -> void:
 		text = "UPGRADE"
 		back = Color("5A4420")
 		ink = Color("FFE08A")
-	elif not set_text.is_empty():
-		text = "NEW · %s" % set_text
 	var font: Font = Ui.display_font()
-	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 18.0
+	var text_size: int = 12
+	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size).x
+	var w: float = minf(tw + 20.0, cell.size.x)
 	var h: float = 20.0
-	var rect := Rect2(0.0, cell.size.y * 0.5 - h * 0.5, minf(w, cell.size.x), h)
+	var rect := Rect2(centered_x(cell.size.x, w), maxf((cell.size.y - h) * 0.5, 0.0), w, h)
 	var box := StyleBoxFlat.new()
 	box.bg_color = back
 	box.border_color = ink.darkened(0.35)
 	box.set_border_width_all(1)
 	box.set_corner_radius_all(10)
 	cell.draw_style_box(box, rect)
-	cell.draw_string(font, Vector2(rect.position.x + 9.0, rect.position.y + 14.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ink)
+	var baseline: float = rect.position.y + (h - font.get_height(text_size)) * 0.5 + font.get_ascent(text_size)
+	cell.draw_string(font, Vector2(rect.position.x + (w - tw) * 0.5, baseline), text, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size, ink)
 
 
 func _draw_dino(cell: Control) -> void:
+	## Like the other columns: the visual on top, the label centred under it. The
+	## bar itself is centred in the column (so the heading, the bar and the name
+	## share one centre); its count hangs off the right of the bar.
 	if stand_need <= 0:
 		return
 	var font: Font = Ui.display_font()
-	cell.draw_string(font, Vector2(2.0, cell.size.y * 0.5 - 1.0), stand_title, HORIZONTAL_ALIGNMENT_LEFT, cell.size.x - 4.0, 12, Ui.MUTED)
-	var bar := Rect2(2.0, cell.size.y * 0.5 + 5.0, cell.size.x - 46.0, 7.0)
+	var size: int = 12
+	var line_h: float = font.get_height(size)
+	var gap: float = 3.0
+	var block_h: float = line_h + gap + line_h
+	var y0: float = maxf((cell.size.y - block_h) * 0.5, 0.0)
+	var count: String = "%d/%d" % [stand_have, stand_need]
+	var bar_w: float = 76.0
+	var bar_h: float = 7.0
+	var bar := Rect2(centered_x(cell.size.x, bar_w), y0 + (line_h - bar_h) * 0.5, bar_w, bar_h)
 	cell.draw_rect(bar, Color("2E241A"))
 	var frac: float = clampf(float(stand_have) / float(maxi(stand_need, 1)), 0.0, 1.0)
 	var done: bool = stand_have >= stand_need
 	cell.draw_rect(Rect2(bar.position, Vector2(bar.size.x * frac, bar.size.y)), Color("A8E07A") if done else Ui.GOLD)
 	cell.draw_rect(bar, Color("5A4632"), false, 1.0)
-	cell.draw_string(font, Vector2(bar.end.x + 6.0, bar.end.y + 1.0), "%d/%d" % [stand_have, stand_need], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Ui.INK)
+	cell.draw_string(font, Vector2(bar.end.x + 6.0, y0 + font.get_ascent(size)), count, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Ui.INK)
+	## The name sits under the bar, centred on the column (and so on the bar).
+	## "3/11" alone reads like the status column's "3/4" (copies of this one bone), so the label says what is counted.
+	var caption: String = "%s bones" % stand_title
+	var name_w: float = font.get_string_size(caption, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var name_x: float = centered_x(cell.size.x, name_w)
+	cell.draw_string(font, Vector2(name_x, y0 + line_h + gap + font.get_ascent(size)), caption, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Ui.MUTED)

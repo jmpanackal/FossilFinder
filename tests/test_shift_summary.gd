@@ -33,6 +33,7 @@ func _run() -> void:
 	_test_finds_are_table_columns()
 	_test_a_long_haul_scrolls_instead_of_pushing_the_buttons_off()
 	await _test_a_tip_does_not_inflate_the_card()
+	await _test_the_card_animates_in_without_a_flash()
 	print("shift_summary %d passed, %d failed" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -139,17 +140,17 @@ func _test_summary_finds_show_icon_and_label() -> void:
 func _test_empty_shift_has_no_find_icons() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	var rows: Array = panel.get("_find_rows") if panel.get("_find_rows") != null else []
 	_assert(rows.is_empty(), "an empty shift has no fossil icons")
-	_assert(str(panel._body.text) == "Left in the ground.", "empty shift still says left in the ground")
+	_assert(str(panel._body.text) == "No fossils found.", "empty shift says no fossils found")
 	panel.free()
 
 
 func _test_empty_haul_card_hugs_actions() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	var card: Control = panel._panel as Control
 	var finds: Control = panel._finds_box as Control
 	var rows: Array = panel.get("_find_rows") if panel.get("_find_rows") != null else []
@@ -173,7 +174,7 @@ func _test_filled_haul_lists_finds_and_grows() -> void:
 	var script: GDScript = load("res://summary.gd") as GDScript
 	var empty: Node = script.new()
 	root.add_child(empty)
-	empty.show_summary(0, 0, "Left in the ground.", 0)
+	empty.show_summary(0, 0, "No fossils found.", 0)
 	var empty_h: float = _card_height(empty)
 	empty.free()
 	var panel: Node = script.new()
@@ -212,7 +213,7 @@ func _test_filled_haul_lists_finds_and_grows() -> void:
 func _test_shift_over_copy_keeps_word_spaces() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	var title: Label = panel._title as Label
 	var body: Label = panel._body as Label
 	var dig: Button = panel._button as Button
@@ -220,7 +221,7 @@ func _test_shift_over_copy_keeps_word_spaces() -> void:
 	var upgrades: Button = _find_button(panel, "Upgrades")
 	_assert(title != null and str(title.text) == "Shift over", "title is Shift over")
 	_assert(str(title.text).find("Shiftover") < 0, "title is not jammed into Shiftover")
-	_assert(body != null and str(body.text) == "Left in the ground.", "body is Left in the ground.")
+	_assert(body != null and str(body.text) == "No fossils found.", "body is No fossils found.")
 	_assert(str(body.text).find("Leftintheground") < 0, "body is not jammed into Leftintheground")
 	_assert(dig != null and str(dig.text) == "Dig again", "primary action is Dig again")
 	_assert(str(dig.text).find("Digagain") < 0, "Dig again keeps its space")
@@ -231,7 +232,7 @@ func _test_shift_over_copy_keeps_word_spaces() -> void:
 		_assert(_copy_fits(title), "Shift over is wide enough to keep its space")
 	if body != null:
 		_assert(not body.clip_text, "body does not clip its spaces")
-		_assert(_copy_fits(body), "Left in the ground. is wide enough to keep its spaces")
+		_assert(_copy_fits(body), "No fossils found. is wide enough to keep its spaces")
 	if dig != null:
 		_assert(not dig.clip_text, "Dig again does not clip its space")
 		_assert(_copy_fits(dig), "Dig again is wide enough to keep its space")
@@ -247,7 +248,7 @@ func _test_shift_over_copy_keeps_word_spaces() -> void:
 func _test_shift_over_nav_reuses_header_glyphs() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	var dig: Button = panel._button as Button
 	var museum: Button = _find_button(panel, "Museum")
 	var upgrades: Button = _find_button(panel, "Upgrades")
@@ -267,7 +268,7 @@ func _test_shift_over_nav_reuses_header_glyphs() -> void:
 func _test_nav_glyph_and_word_are_centered_together() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	for _i in 4:
 		await process_frame
 	for name in ["Museum", "Upgrades"]:
@@ -290,7 +291,7 @@ func _test_nav_glyph_and_word_are_centered_together() -> void:
 func _test_tips_show_inside_the_card() -> void:
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	var card: Control = panel._panel as Control
 	var before: float = card.offset_bottom - card.offset_top
 	_assert(not bool(panel._tip.visible), "no tip until one is asked for")
@@ -300,7 +301,7 @@ func _test_tips_show_inside_the_card() -> void:
 	_assert(card.offset_bottom - card.offset_top > before, "the card grows to make room for it")
 	panel.hide_summary()
 	_assert(not bool(panel._tip.visible), "closing the summary clears the tip")
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	_assert(not bool(panel._tip.visible), "and a new summary starts without one")
 	panel.free()
 
@@ -329,8 +330,8 @@ func _test_finds_are_table_columns() -> void:
 	var femur: Control = rows[2] as Control
 	var jaw: Control = rows[3] as Control
 	_assert(int(tooth.get("condition")) == 2 and int(skull.get("condition")) == 5, "each row shows its own star rating")
-	_assert(str(tooth.get("status")) == "new" and str(tooth.get("set_text")) == "1/5", "a new bone in a set shows NEW with its set count")
-	_assert(str(skull.get("status")) == "new" and str(skull.get("set_text")) == "1/1", "a new single bone shows NEW")
+	_assert(str(tooth.get("status")) == "new", "a new bone in a set shows NEW (the chip carries no second count: only the Dinosaur column has a denominator)")
+	_assert(str(skull.get("status")) == "new", "a new single bone shows NEW")
 	_assert(str(femur.get("status")) == "upgrade", "a better copy shows UPGRADE")
 	_assert(str(jaw.get("status")) == "duplicate", "an extra copy shows DUPLICATE")
 	_assert(is_equal_approx(float(tooth.get("cleanliness")), 0.1) and is_equal_approx(float(skull.get("cleanliness")), 1.0), "each row keeps how clean the bone was")
@@ -341,11 +342,18 @@ func _test_finds_are_table_columns() -> void:
 	for child in head.get_children():
 		captions.append(str((child as Label).text))
 	_assert(captions.has("CONDITION") and captions.has("CLEANLINESS") and captions.has("STATUS") and captions.has("DINOSAUR"), "a header names the columns")
+	for child in head.get_children():
+		var cap: Label = child as Label
+		if str(cap.text) in ["BONE", "CONDITION", "CLEANLINESS", "STATUS", "DINOSAUR"]:
+			_assert(cap.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "the %s caption is centred over its column" % str(cap.text))
+	_assert((rows[0].get("_label") as Label).horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "bone names are centred in their column, under the centred BONE caption")
+	_assert(is_equal_approx(float(row_script.centered_x(100.0, 40.0)), 30.0), "content is centred in a column: (100 - 40) / 2")
+	_assert(is_equal_approx(float(row_script.centered_x(50.0, 80.0)), 0.0), "content wider than the column starts at its edge instead of going negative")
 	## The card widens for the table and stays compact without one.
 	var card: Control = panel._panel as Control
 	_assert(card.offset_right - card.offset_left >= 800.0, "the card is wide enough for the columns")
 	_assert(float(row_script.ROW_W) <= card.offset_right - card.offset_left - 28.0, "a row fits inside the card")
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	_assert(card.offset_right - card.offset_left < 700.0, "an empty shift keeps the compact card")
 	panel.free()
 
@@ -372,7 +380,7 @@ func _test_a_tip_does_not_inflate_the_card() -> void:
 	## every letter and made the card hundreds of pixels too tall.
 	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
 	root.add_child(panel)
-	panel.show_summary(20, 40, "Left in the ground.", 0)
+	panel.show_summary(20, 40, "No fossils found.", 0)
 	panel.show_tip("What next?", "Spend your money in Upgrades. Bones you found go on display in the Museum.")
 	for _i in 4:
 		await process_frame
@@ -381,6 +389,36 @@ func _test_a_tip_does_not_inflate_the_card() -> void:
 	var content_h: float = (panel._box as Control).get_combined_minimum_size().y
 	_assert(height <= content_h + 48.0, "the card hugs its content with a tip (%.0f for %.0f)" % [height, content_h])
 	_assert(height < 480.0, "and is nowhere near full height")
+	panel.free()
+
+
+func _test_the_card_animates_in_without_a_flash() -> void:
+	## Regression: the intro used to start a frame late, so the finished card showed
+	## for one frame, vanished and faded in. The start state is now set before it is shown.
+	var panel: Node = (load("res://summary.gd") as GDScript).new() as Node
+	root.add_child(panel)
+	panel.show_summary(20, 40, "No fossils found.", 0)
+	var card: Control = panel._panel as Control
+	_assert(card.modulate.a < 0.05, "the card starts invisible (no flash of the finished card)")
+	_assert(card.scale.x < 1.0, "and starts slightly smaller, ready to settle")
+	_assert(panel._dim.modulate.a < 0.05, "the dim fades in with the card, it does not pop")
+	var half_w: float = float(panel._panel_w) * 0.5
+	var half_h: float = (card.offset_bottom - card.offset_top) * 0.5
+	_assert(absf(card.pivot_offset.x - half_w) <= 1.0 and absf(card.pivot_offset.y - half_h) <= 1.0, "it scales from its own centre, not a corner")
+	Engine.time_scale = 12.0
+	for _i in 120:
+		await process_frame
+		if card.modulate.a >= 0.999 and card.scale.x >= 0.999:
+			break
+	Engine.time_scale = 1.0
+	_assert(card.modulate.a >= 0.999 and absf(card.scale.x - 1.0) <= 0.002, "it settles fully opaque at its real size")
+	_assert(panel._dim.modulate.a >= 0.999 and absf(panel._pay.scale.x - 1.0) <= 0.002, "the dim and the total settle too")
+	panel.hide_summary()
+	_assert(card.modulate.a >= 0.999 and panel._dim.modulate.a >= 0.999, "closing the card resets it for next time")
+	## Showing twice quickly must not leave two animations fighting.
+	panel.show_summary(1, 1, "x", 0)
+	panel.show_summary(2, 2, "x", 0)
+	_assert(card.modulate.a < 0.05, "a second show restarts the animation cleanly")
 	panel.free()
 
 
@@ -485,10 +523,10 @@ func _test_summary_dim_is_a_full_rect_modal() -> void:
 		_assert(is_equal_approx(dim.anchor_left, 0.0) and is_equal_approx(dim.anchor_right, 1.0), "dim stretches horizontally")
 		_assert(is_equal_approx(dim.anchor_top, 0.0) and is_equal_approx(dim.anchor_bottom, 1.0), "dim stretches vertically")
 		_assert(dim.get_parent() is Control, "dim lives under a full-rect Control, not a bare CanvasLayer")
-	panel.show_summary(0, 0, "Left in the ground.", 0)
+	panel.show_summary(0, 0, "No fossils found.", 0)
 	_assert(bool(panel.visible), "summary can show the shift-over card")
 	_assert(str(panel._pay.text) == "$0", "empty shift still shows one money number")
-	_assert(str(panel._body.text) == "Left in the ground.", "left-in-ground is one line")
+	_assert(str(panel._body.text) == "No fossils found.", "no-fossils line is one line")
 	_assert(not bool(panel._stars.visible), "left-in-ground has no star row")
 	panel.free()
 

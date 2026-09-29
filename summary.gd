@@ -37,6 +37,7 @@ var _tip: Label
 var _tip_wrap: Control
 var _panel_w: float = PANEL_W
 var _placing_marks: bool = false
+var _intro: Tween
 
 
 func _ready() -> void:
@@ -188,32 +189,39 @@ func show_summary(fossil_pay: int, finds_pay: int, fossil_line: String, stars: i
 	_apply_finds(finds, fossil_line)
 	if _stars.has_method("set_rating"):
 		_stars.set_rating(stars)
-	_stars.visible = stars > 0
+	## With a finds table every row already shows its own stars.
+	_stars.visible = stars > 0 and _find_rows.is_empty()
 	_tip.visible = false
 	_tip_wrap.visible = false
 	_tip.text = ""
 	_fit_panel()
+	_start_intro()
 	visible = true
 	_button.grab_focus()
-	call_deferred("_play_intro")
 
 
-## The card eases in and the total gives one small pop.
-func _play_intro() -> void:
-	if not visible or _panel == null:
+## The card eases in (fade + a small settle), the dim fades with it, and the
+## total gives one small pop. The starting state is set before the card is shown,
+## so there is never a frame of the finished card; pivots come from the card's
+## known size, not from a layout that may not have happened yet.
+func _start_intro() -> void:
+	if _panel == null:
 		return
-	_panel.pivot_offset = _panel.size * 0.5
+	if _intro != null and _intro.is_valid():
+		_intro.kill()
+	var half := Vector2(_panel_w * 0.5, (_panel.offset_bottom - _panel.offset_top) * 0.5)
+	_panel.pivot_offset = half
 	_panel.modulate.a = 0.0
-	_panel.scale = Vector2(0.94, 0.94)
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(_panel, "modulate:a", 1.0, 0.18)
-	tw.tween_property(_panel, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_pay.pivot_offset = _pay.size * 0.5
-	_pay.scale = Vector2(1.22, 1.22)
-	var pop := create_tween()
-	pop.tween_interval(0.10)
-	pop.tween_property(_pay, "scale", Vector2.ONE, 0.30).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_panel.scale = Vector2(0.95, 0.95)
+	_dim.modulate.a = 0.0
+	_pay.pivot_offset = Vector2((_panel_w - BOX_PAD * 2.0) * 0.5, _pay.get_combined_minimum_size().y * 0.5)
+	_pay.scale = Vector2(1.14, 1.14)
+	_intro = create_tween()
+	_intro.set_parallel(true)
+	_intro.tween_property(_dim, "modulate:a", 1.0, 0.18)
+	_intro.tween_property(_panel, "modulate:a", 1.0, 0.20).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_intro.tween_property(_panel, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_intro.tween_property(_pay, "scale", Vector2.ONE, 0.34).set_delay(0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 ## A tip for this screen, shown inside the card until the shift summary closes.
@@ -378,9 +386,13 @@ static func join_find_lines(lines: PackedStringArray) -> String:
 
 func hide_summary() -> void:
 	visible = false
+	if _intro != null and _intro.is_valid():
+		_intro.kill()
 	if _panel != null:
 		_panel.modulate.a = 1.0
 		_panel.scale = Vector2.ONE
+	if _dim != null:
+		_dim.modulate.a = 1.0
 	if _pay != null:
 		_pay.scale = Vector2.ONE
 	if _tip != null:

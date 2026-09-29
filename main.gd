@@ -458,7 +458,7 @@ func _end_round() -> void:
 	if dig_site.is_fully_exposed():
 		dig_site.extract_now(false)
 	if _round_finds.is_empty():
-		_last_fossil_line = "Left in the ground."
+		_last_fossil_line = "No fossils found."
 		_last_fossil_stars = 0
 	else:
 		var names: PackedStringArray = []
