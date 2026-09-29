@@ -19,6 +19,8 @@ const RAIL_PAD := 8.0
 const DOCK_W := 120.0
 const TOOL_CARD_H := 110.0
 const TOOL_CARD_MIN_H := 70.0
+const TOOL_GRID_GAP := 8.0
+const LOCKED_ALPHA := 0.38
 const TOOL_CARD_INSET := 6.0
 const TOOL_CARD_INSET_TIGHT := 3.0
 const TOOL_STACK_GAP := 8.0
@@ -37,6 +39,11 @@ const CHIP_MIN_W := 56.0
 ## Cards sit inside the Finds frame, clear of its border.
 const FIND_INSET := 10.0
 const CHIP_GAP := 8.0
+## Finds rail: every card is the same height; extras fold into a summary row.
+const RAIL_CARD_H := 56.0
+const RAIL_CARD_GAP := 6.0
+const SUMMARY_H := 30.0
+const FAME_FOOT_H := 44.0
 ## At this many finds the tray switches to condensed cards (hover for details).
 const CONDENSE_AT := 5
 const WALLET_MONEY_SAMPLE := "$8888888"
@@ -58,7 +65,7 @@ var _clock_caption: Label
 var _menu_btn: Button
 var _end_btn: Button
 var _header_bar: HBoxContainer
-var _tool_rail: VBoxContainer
+var _tool_rail: GridContainer
 var _tools_label: Label
 var _finds_label: Label
 var _tools_frame: Panel
@@ -69,7 +76,7 @@ var _tool_slots: Array[Control] = []
 var _slot_tools: Array[int] = []
 var _hovered_tool: int = -1
 var _headline: String = ""
-var _find_box: HFlowContainer
+var _find_box: VBoxContainer
 var _chips: Array = []
 var _tool_colors := [
 	Color("E4B75A"),
@@ -89,6 +96,16 @@ var _ribbon: Control
 var _fame_label: Control
 var _detail_chip: Control
 var _detail_for: Control
+var _finds_summary: Panel
+var _summary_tip: Label
+var _summary_lines: String = ""
+var _finds_box_h: float = 0.0
+var _tool_info: Panel
+var _tool_info_name: Label
+var _tool_info_role: Label
+var _tool_info_stats: VBoxContainer
+var _tool_info_hint: Label
+var _tool_info_key: String = ""
 
 
 func _ready() -> void:
@@ -97,10 +114,13 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
-	_tool_rail = VBoxContainer.new()
+	## Tools: a 2x2 grid of square cards, then a panel about the tool in hand.
+	_tool_rail = GridContainer.new()
 	_tool_rail.name = "ToolRail"
+	_tool_rail.columns = 2
 	_tool_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_tool_rail.add_theme_constant_override("separation", 6)
+	_tool_rail.add_theme_constant_override("h_separation", int(TOOL_GRID_GAP))
+	_tool_rail.add_theme_constant_override("v_separation", int(TOOL_GRID_GAP))
 	root.add_child(_tool_rail)
 	_add_tool_slot(_tool_rail, Tuning.TOOL_HANDS)
 	_add_tool_slot(_tool_rail, Tuning.TOOL_SHOVEL)
@@ -109,6 +129,7 @@ func _ready() -> void:
 
 	_tools_label = _make_rail_title("ToolsLabel")
 	root.add_child(_tools_label)
+	_build_tool_info(root)
 
 	_clock = Control.new()
 	_clock.set_script(ClockFace)
@@ -148,13 +169,12 @@ func _ready() -> void:
 	_fame_label.visible = false
 	root.add_child(_fame_label)
 
-	_find_box = HFlowContainer.new()
+	_find_box = VBoxContainer.new()
 	_find_box.name = "FindTray"
 	_find_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_find_box.clip_contents = true
-	_find_box.alignment = FlowContainer.ALIGNMENT_CENTER
-	_find_box.add_theme_constant_override("h_separation", int(CHIP_GAP))
-	_find_box.add_theme_constant_override("v_separation", 4)
+	_find_box.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_find_box.add_theme_constant_override("separation", int(RAIL_CARD_GAP))
 	_find_box.visible = false
 	root.add_child(_find_box)
 
@@ -179,6 +199,7 @@ func refresh(time_left: float, time_max: float, tool: int, digging: bool, show_f
 	_set_clock_copy(time_left)
 	_set_money_text(false)
 	_highlight_tool(tool)
+	_refresh_tool_info()
 	_apply_tool_flashes()
 	_find_box.visible = show_find or not _chips.is_empty()
 	_layout_if_changed()
@@ -190,8 +211,9 @@ func _refresh_fame() -> void:
 		return
 	var mult: float = GameState.fame_mult() if GameState.has_method("fame_mult") else 1.0
 	_fame_label.call("set_mult", mult)
-	## Hang the medal on the tray's top-right corner, clear of the cards.
-	var at := Vector2(_finds_frame.position.x + _finds_frame.size.x - _fame_label.size.x - 10.0, _finds_frame.position.y - _fame_label.size.y * 0.5)
+	## Centered at the foot of the Finds rail, under the cards.
+	var foot_top: float = _finds_frame.position.y + _finds_frame.size.y - SECTION_PAD - FAME_FOOT_H
+	var at := Vector2(_finds_frame.position.x + (_finds_frame.size.x - _fame_label.size.x) * 0.5, foot_top + (FAME_FOOT_H - _fame_label.size.y) * 0.5).round()
 	if _fame_label.position != at:
 		_fame_label.position = at
 
@@ -229,10 +251,28 @@ func set_find_cards(cards: Array) -> void:
 			shown.append(raw)
 	## Tray order = discovery order, matching the numbers on the bones.
 	shown.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("number", a.get("index", 0))) < int(b.get("number", b.get("index", 0))))
-	var key: String = _cards_signature(shown)
-	if key == _cards_key and _chips.size() == shown.size():
+	_layout_if_changed()
+	var key: String = _cards_signature(shown) + "|%d" % int(_finds_box_h)
+	if key == _cards_key:
 		return
 	_cards_key = key
+	## The rail fits a fixed number of full cards. When there are more finds,
+	## the oldest collected ones fold into one summary row at the bottom;
+	## bones you are still digging or brushing always keep their cards.
+	## Use the laid-out rail height: the VBox itself grows to fit its cards.
+	var box_h: float = _finds_box_h if _finds_box_h > 1.0 else 300.0
+	var capacity: int = maxi(1, int(floor((box_h + RAIL_CARD_GAP) / (RAIL_CARD_H + RAIL_CARD_GAP))))
+	var folded: Array = []
+	if shown.size() > capacity:
+		var room: int = maxi(1, int(floor((box_h - SUMMARY_H) / (RAIL_CARD_H + RAIL_CARD_GAP))))
+		var need: int = shown.size() - room
+		for card in shown:
+			if folded.size() >= need:
+				break
+			if bool(card.get("extracted", false)) or str(card.get("status", "")) == "bagged":
+				folded.append(card)
+		for card in folded:
+			shown.erase(card)
 	while _chips.size() > shown.size():
 		var extra: Node = _chips.pop_back()
 		if extra != null:
@@ -241,13 +281,7 @@ func set_find_cards(cards: Array) -> void:
 		var chip: Control = FindChipScript.new() as Control
 		_find_box.add_child(chip)
 		_chips.append(chip)
-	_layout_if_changed()
-	var tray_w: float = maxf(160.0, _find_box.size.x if _find_box.size.x > 1.0 else Tuning.pit_grid_size().x - FIND_INSET * 2.0)
-	var tray_h: float = _find_box.size.y if _find_box.size.y > 1.0 else 70.0
-	var n: int = shown.size()
-	var each: float = _chip_width_for_count(n, tray_w)
-	var crowded: bool = n >= 4 or each < 220.0
-	var condensed: bool = n >= CONDENSE_AT
+	var tray_w: float = maxf(120.0, _find_box.size.x)
 	for i in shown.size():
 		var card: Dictionary = shown[i]
 		if not card.has("index"):
@@ -255,17 +289,69 @@ func set_find_cards(cards: Array) -> void:
 		var chip: Control = _chips[i] as Control
 		if chip != null and chip.has_method("apply_card"):
 			chip.call("apply_card", card)
-		if chip != null and chip.has_method("fit_tray"):
-			chip.call("fit_tray", each, crowded, condensed, tray_h)
-		if chip != null and not chip.mouse_entered.is_connected(_on_chip_hover):
-			chip.mouse_entered.connect(_on_chip_hover.bind(chip))
-			chip.mouse_exited.connect(_on_chip_unhover.bind(chip))
+		if chip != null and chip.has_method("fit_rail"):
+			chip.call("fit_rail", tray_w, RAIL_CARD_H)
+	_update_finds_summary(folded, tray_w)
 	_apply_headline_to_chips()
-	_find_box.visible = not shown.is_empty()
+	_find_box.visible = not shown.is_empty() or not folded.is_empty()
 	_layout_key = ""
 	_layout_if_changed()
 	if _find_box != null:
 		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
+
+
+## "+4 collected · $1,240" row for folded finds; hover lists them.
+func _update_finds_summary(folded: Array, width: float) -> void:
+	if folded.is_empty():
+		if _finds_summary != null:
+			_finds_summary.visible = false
+		return
+	if _finds_summary == null:
+		_finds_summary = Panel.new()
+		_finds_summary.name = "FindsSummary"
+		_finds_summary.mouse_filter = Control.MOUSE_FILTER_PASS
+		_finds_summary.add_theme_stylebox_override("panel", Ui.tooltip_box())
+		var label := Label.new()
+		label.name = "SummaryLabel"
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		Ui.apply_label(label, 13, Ui.INK)
+		_finds_summary.add_child(label)
+		_finds_summary.mouse_entered.connect(_show_summary_tip)
+		_finds_summary.mouse_exited.connect(func() -> void:
+			if _summary_tip != null:
+				_summary_tip.visible = false)
+		_find_box.add_child(_finds_summary)
+	var total: int = 0
+	var lines: PackedStringArray = []
+	for raw in folded:
+		var card: Dictionary = raw
+		total += int(card.get("value", 0))
+		lines.append("#%d %s  %s  %s" % [int(card.get("number", 0)), str(card.get("name", "Bone")), "★".repeat(int(card.get("stars", 0))), Ui.money_text(int(card.get("value", 0)))])
+	_summary_lines = "\n".join(lines)
+	var label: Label = _finds_summary.get_node("SummaryLabel") as Label
+	label.text = "+%d collected · %s" % [folded.size(), Ui.money_text(total)]
+	_finds_summary.custom_minimum_size = Vector2(width, SUMMARY_H)
+	_finds_summary.visible = true
+	_find_box.move_child(_finds_summary, _find_box.get_child_count() - 1)
+
+
+func _show_summary_tip() -> void:
+	if _summary_tip == null:
+		_summary_tip = Label.new()
+		_summary_tip.name = "SummaryTip"
+		_summary_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_summary_tip.z_index = 20
+		_summary_tip.add_theme_stylebox_override("normal", Ui.tooltip_box())
+		Ui.apply_label(_summary_tip, 13, Ui.INK)
+		_find_box.get_parent().add_child(_summary_tip)
+	_summary_tip.text = _summary_lines
+	_summary_tip.size = _summary_tip.get_combined_minimum_size()
+	var r := Rect2(_finds_summary.global_position, _finds_summary.size)
+	_summary_tip.position = Vector2(r.position.x - _summary_tip.size.x - 8.0, clampf(r.end.y - _summary_tip.size.y, Tuning.hud_h, Tuning.view_h - _summary_tip.size.y - 8.0)).round()
+	_summary_tip.visible = true
 
 
 func _cards_signature(shown: Array) -> String:
@@ -297,7 +383,8 @@ func find_chip_catch_pos(index: int) -> Vector2:
 	var chip: Control = _chip_for_find(index)
 	if chip != null and chip.has_method("catch_pos"):
 		return chip.call("catch_pos")
-	return Vector2(Tuning.view_w * 0.5, Tuning.footer_find_top() + 34.0)
+	var rail: Rect2 = finds_rail_rect()
+	return Vector2(rail.get_center().x, rail.position.y + 60.0)
 
 
 func catch_find(index: int) -> void:
@@ -322,12 +409,8 @@ func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0,
 func ribbon_anchor(index: int) -> Vector2:
 	if _find_box != null:
 		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
-	var anchor_x: float = Tuning.pit_grid_rect().get_center().x
-	var chip: Control = _chip_for_find(index) if index >= 0 else null
-	if chip != null and chip.is_visible_in_tree():
-		anchor_x = chip.global_position.x + chip.size.x * 0.5
-	var top: float = _finds_frame.position.y if _finds_frame != null else Tuning.footer_top()
-	return Vector2(anchor_x, top)
+	## Ribbons own the band under the pit, centered on it.
+	return Vector2(Tuning.pit_grid_rect().get_center().x, rails_bottom() + 6.0)
 
 
 func _on_chip_hover(chip: Control) -> void:
@@ -484,18 +567,14 @@ func _section_title_h(copy_w: float) -> float:
 func _tool_card_size() -> Vector2:
 	var frame_w: float = _section_frame_width()
 	var pit := Tuning.pit_grid_rect()
-	var inner := _section_inner(Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y)))
+	var inner := _section_inner(Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, rails_bottom() - pit.position.y)))
 	return _tool_card_size_in(inner)
 
 
 func _tool_card_size_in(inner: Rect2) -> Vector2:
-	var n: int = _visible_tool_count()
-	var sep: float = 6.0
-	if _tool_rail != null:
-		sep = float(_tool_rail.get_theme_constant("separation"))
-	var avail: float = maxf(inner.size.y - sep * float(maxi(n - 1, 0)), TOOL_CARD_MIN_H)
-	var card_h: float = clampf(floor(avail / float(n)), TOOL_CARD_MIN_H, TOOL_ROW.y)
-	return Vector2(maxf(inner.size.x, 1.0), card_h)
+	## Square cards, two per row.
+	var side: float = floorf((inner.size.x - TOOL_GRID_GAP) * 0.5)
+	return Vector2(maxf(side, 40.0), maxf(side, 40.0))
 
 
 func _visible_tool_count() -> int:
@@ -606,8 +685,8 @@ func _apply_tool_card_size(slot: Control, button: Button, card: Vector2) -> void
 		stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		stack.position = Vector2(inset, inset)
 		stack.size = inner
-		stack.alignment = BoxContainer.ALIGNMENT_BEGIN
-		stack.add_theme_constant_override("separation", int(_tool_stack_gap(card.y)))
+		stack.alignment = BoxContainer.ALIGNMENT_CENTER
+		stack.add_theme_constant_override("separation", int(_tool_stack_gap(card.y)) + 2)
 		var icon: Control = stack.get_node_or_null("ToolIcon") as Control
 		if icon != null:
 			Ui.apply_rail_tool_icon(icon, _tool_icon_px(card.y))
@@ -633,7 +712,7 @@ func _apply_tool_card_size(slot: Control, button: Button, card: Vector2) -> void
 	_place_tool_key(button, card)
 
 
-func _add_tool_slot(parent: VBoxContainer, tool: int) -> void:
+func _add_tool_slot(parent: Container, tool: int) -> void:
 	var card: Vector2 = _tool_card_size()
 	var slot := Control.new()
 	slot.custom_minimum_size = card
@@ -750,6 +829,91 @@ func _place_tool_key(button: Button, card: Vector2) -> void:
 	key.position = Vector2(card.x - key.size.x - 6.0, 4.0)
 
 
+func _build_tool_info(root: Control) -> void:
+	_tool_info = Panel.new()
+	_tool_info.name = "ToolInfo"
+	_tool_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Ui.apply_icon_well(_tool_info, Color("241810"))
+	root.add_child(_tool_info)
+	var box := VBoxContainer.new()
+	box.name = "ToolInfoBox"
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 10
+	box.offset_right = -10
+	box.offset_top = 8
+	box.offset_bottom = -8
+	box.add_theme_constant_override("separation", 4)
+	_tool_info.add_child(box)
+	_tool_info_name = Label.new()
+	_tool_info_name.name = "ToolInfoName"
+	Ui.apply_label(_tool_info_name, 17, Ui.GOLD)
+	box.add_child(_tool_info_name)
+	_tool_info_role = Label.new()
+	_tool_info_role.name = "ToolInfoRole"
+	_tool_info_role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	Ui.apply_label(_tool_info_role, 13, Ui.INK)
+	box.add_child(_tool_info_role)
+	var rule := ColorRect.new()
+	rule.color = Color(Ui.GOLD, 0.25)
+	rule.custom_minimum_size = Vector2(0, 1)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(rule)
+	_tool_info_stats = VBoxContainer.new()
+	_tool_info_stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tool_info_stats.add_theme_constant_override("separation", 2)
+	box.add_child(_tool_info_stats)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(spacer)
+	_tool_info_hint = Label.new()
+	_tool_info_hint.name = "ToolInfoHint"
+	_tool_info_hint.text = "Keys 1-4 switch tools"
+	_tool_info_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Ui.apply_label(_tool_info_hint, 11, Ui.MUTED)
+	box.add_child(_tool_info_hint)
+
+
+## The panel describes the hovered tool, else the one in hand. Rebuilt only
+## when the tool or upgrade levels change.
+func _refresh_tool_info(force: bool = false) -> void:
+	if _tool_info == null:
+		return
+	var tool: int = _hovered_tool if _hovered_tool >= 0 else _equipped_tool
+	var owned: bool = GameState.owns_tool(tool)
+	var key: String = "%d|%s|%d" % [tool, owned, GameState.levels.hash()]
+	if key == _tool_info_key and not force:
+		return
+	_tool_info_key = key
+	_tool_info_name.text = GameState.tool_display_name(tool)
+	_tool_info_role.text = GameState.tool_role_line(tool) if owned else "Unlock it in Upgrades."
+	for child in _tool_info_stats.get_children():
+		child.queue_free()
+	if not owned:
+		return
+	var shown: int = 0
+	for raw in GameState.shop_hero_stats(GameState.tool_display_name(tool)):
+		var stat: Dictionary = raw
+		if str(stat["value"]) == "Locked" or shown >= 4:
+			continue
+		shown += 1
+		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var label := Label.new()
+		label.text = str(stat["label"])
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.clip_text = true
+		Ui.apply_label(label, 11, Ui.MUTED)
+		row.add_child(label)
+		var value := Label.new()
+		value.text = str(stat["value"])
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		Ui.apply_label(value, 12, Ui.INK)
+		row.add_child(value)
+		_tool_info_stats.add_child(row)
+
+
 func _on_tool_hover(tool: int) -> void:
 	_hovered_tool = tool
 	_sync_tool_roles()
@@ -762,11 +926,13 @@ func _on_tool_unhover(tool: int) -> void:
 
 
 func _sync_tool_roles() -> void:
+	## Square cards show icon + name; what a tool does lives in the panel below.
 	for i in _tool_roles.size():
 		var role: Label = _tool_roles[i]
 		if role == null:
 			continue
-		role.visible = i < _tool_slots.size() and _tool_slots[i].visible
+		role.visible = false
+	_refresh_tool_info(true)
 
 
 func _on_tool_pressed(tool: int) -> void:
@@ -785,14 +951,14 @@ func _highlight_tool(tool: int) -> void:
 	for i in _tool_buttons.size():
 		var id: int = _slot_tools[i]
 		var owned: bool = GameState.owns_tool(id)
-		_tool_slots[i].visible = owned
-		if not owned:
-			continue
-		var on: bool = id == tool
-		_tool_buttons[i].disabled = false
+		## Locked tools keep their square (dimmed) so the grid never looks sparse.
+		_tool_slots[i].visible = true
+		var on: bool = owned and id == tool
+		_tool_buttons[i].disabled = not owned
 		Ui.apply_tool_button(_tool_buttons[i], on)
-		_tool_buttons[i].modulate = Color.WHITE
+		_tool_buttons[i].modulate = Color.WHITE if owned else Color(1, 1, 1, LOCKED_ALPHA)
 	_sync_tool_roles()
+	_refresh_tool_info(true)
 	_layout_key = ""
 	_layout_chrome()
 
@@ -800,7 +966,7 @@ func _highlight_tool(tool: int) -> void:
 func _apply_tool_flashes() -> void:
 	for i in _tool_buttons.size():
 		var id: int = _slot_tools[i]
-		if not _tool_slots[i].visible:
+		if not _tool_slots[i].visible or not GameState.owns_tool(id):
 			continue
 		if id >= _tool_flash.size() or _tool_flash[id] <= 0.0:
 			if _tool_buttons[i].modulate != Color.WHITE:
@@ -872,11 +1038,12 @@ func _layout_chrome() -> void:
 		_header_bar.size = Vector2(maxf(header_w, 1.0), HEADER_BTN_H)
 		_header_bar.notification(Container.NOTIFICATION_SORT_CHILDREN)
 	var frame_w: float = _section_frame_width()
-	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, pit.size.y))
+	var tools_frame := Rect2(Vector2(RAIL_PAD, pit.position.y), Vector2(frame_w, rails_bottom() - pit.position.y))
 	_place_section_frame(_tools_frame, tools_frame)
 	_layout_section_title(_tools_label, TOOLS_TITLE, tools_frame)
 	var tools_inner := _section_inner(tools_frame)
 	var card: Vector2 = _tool_card_size_in(tools_inner)
+	var grid_h: float = card.y * 2.0 + TOOL_GRID_GAP
 	if _tool_rail != null:
 		_tool_rail.anchor_left = 0.0
 		_tool_rail.anchor_top = 0.0
@@ -886,24 +1053,41 @@ func _layout_chrome() -> void:
 		for i in _tool_slots.size():
 			var btn: Button = _tool_buttons[i] if i < _tool_buttons.size() else null
 			_apply_tool_card_size(_tool_slots[i], btn, card)
-		_tool_rail.size = Vector2(tools_inner.size.x, tools_inner.size.y)
+		_tool_rail.size = Vector2(tools_inner.size.x, grid_h)
 		_tool_rail.notification(Container.NOTIFICATION_SORT_CHILDREN)
-	var south_bottom: float = Tuning.pit_face_bottom() + Tuning.chunk_front
-	var find_top: float = maxf(Tuning.footer_find_top(), south_bottom + 14.0)
-	var find_bottom: float = Tuning.view_h - 8.0
-	var finds_band := Rect2(Vector2(pit.position.x, find_top), Vector2(maxf(160.0, pit.size.x), maxf(1.0, find_bottom - find_top)))
+	if _tool_info != null:
+		var info_top: float = tools_inner.position.y + grid_h + TOOL_GRID_GAP + 4.0
+		_tool_info.position = Vector2(tools_inner.position.x, info_top)
+		_tool_info.size = Vector2(tools_inner.size.x, maxf(tools_inner.end.y - info_top, 40.0))
+	## Finds rail on the right mirrors the Tools rail; the fame medal sits at
+	## its foot.
+	var finds_band: Rect2 = finds_rail_rect()
 	_place_section_frame(_finds_frame, finds_band)
-	_layout_section_title(_finds_label, FINDS_TITLE, finds_band, 10.0)
-	var finds_top: float = finds_band.position.y + 10.0
+	_layout_section_title(_finds_label, FINDS_TITLE, finds_band)
+	var finds_top: float = finds_band.position.y + SECTION_TITLE_TOP
 	if _finds_label != null:
-		finds_top = _finds_label.position.y + _finds_label.size.y + 6.0
+		finds_top = _finds_label.position.y + _finds_label.size.y + RAIL_LABEL_GAP
+	var finds_bottom: float = finds_band.end.y - SECTION_PAD - FAME_FOOT_H
 	_find_box.anchor_left = 0.0
 	_find_box.anchor_top = 0.0
 	_find_box.anchor_right = 0.0
 	_find_box.anchor_bottom = 0.0
 	_find_box.custom_minimum_size = Vector2(0, 0)
-	_find_box.position = Vector2(finds_band.position.x + FIND_INSET, finds_top)
-	_find_box.size = Vector2(maxf(finds_band.size.x - FIND_INSET * 2.0, 1.0), maxf(find_bottom - finds_top - 8.0, 1.0))
+	_find_box.position = Vector2(finds_band.position.x + SECTION_PAD, finds_top)
+	_finds_box_h = maxf(finds_bottom - finds_top, 1.0)
+	_find_box.size = Vector2(maxf(finds_band.size.x - SECTION_PAD * 2.0, 1.0), _finds_box_h)
+
+
+## Both rails run from the pit's top edge to the bottom of its front face.
+func rails_bottom() -> float:
+	return Tuning.pit_face_bottom() + Tuning.chunk_front
+
+
+func finds_rail_rect() -> Rect2:
+	var pit := Tuning.pit_grid_rect()
+	var left: float = pit.end.x + Tuning.chunk_pad + RAIL_PAD
+	var right: float = Tuning.view_w - RAIL_PAD
+	return Rect2(Vector2(left, pit.position.y), Vector2(maxf(right - left, 120.0), maxf(rails_bottom() - pit.position.y, 120.0)))
 
 
 func _layout_footer() -> void:

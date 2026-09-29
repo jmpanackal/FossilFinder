@@ -60,6 +60,16 @@ func show_toast(title: String, subtitle: String = "", stars: int = 0) -> void:
 	tw.tween_property(_box, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
+## Clear any leftover notice (e.g. one from the museum) when a shift starts:
+## during a dig, news rides the ribbon under the pit instead.
+func dismiss() -> void:
+	_life = 0.0
+	if _box != null:
+		_box.modulate.a = 0.0
+	if _plate != null:
+		_plate.modulate.a = 0.0
+
+
 func is_showing() -> bool:
 	return _box != null and (_life > 0.0 or _box.modulate.a > 0.05)
 

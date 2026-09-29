@@ -159,7 +159,7 @@ func _test_tools_are_a_left_owned_list() -> void:
 		return
 	hud.call("refresh", 40.0, 40.0, TN.TOOL_HANDS, true)
 	var rail: Control = hud.get("_tool_rail") as Control
-	_assert(rail is VBoxContainer, "owned tools are a vertical left list")
+	_assert(rail is GridContainer and int((rail as GridContainer).columns) == 2, "tools are a 2x2 grid of square cards")
 	if rail == null:
 		hud.queue_free()
 		return
@@ -204,7 +204,7 @@ func _test_tools_are_a_left_owned_list() -> void:
 	if roles.size() >= 1:
 		var hands_role: Label = roles[0] as Label
 		_assert(hands_role != null and str(hands_role.text) == "Pick up small finds", "hands keep the harvest role")
-		_assert(hands_role != null and hands_role.visible, "role stays visible in the stacked card")
+		_assert(hands_role != null and not hands_role.visible, "role moved to the hover tip (slim rail)")
 		var buttons: Array = hud.get("_tool_buttons") as Array
 		if hands_role != null and buttons.size() > 0:
 			var card: Button = buttons[0] as Button
@@ -271,7 +271,7 @@ func _test_tool_cards_stay_in_the_gutter() -> void:
 			_assert(rest_names[i].position.is_equal_approx(hover_name.position), "name position does not depend on hover")
 		var role: Label = (hud.get("_tool_roles") as Array)[i] as Label
 		if role != null:
-			_assert(role.visible, "role stays visible without hover")
+			_assert(not role.visible, "slim cards keep the role in the hover tip")
 			_assert(int(role.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "role copy is centered")
 			var role_rect := _control_rect_in_card(role, button)
 			_assert(absf(role_rect.position.x + role_rect.size.x * 0.5 - _card_size(button, slot).x * 0.5) <= 3.0, "role sits in the horizontal center")
@@ -312,7 +312,8 @@ func _test_rail_section_labels() -> void:
 	if first_card != null:
 		_assert(_control_rect(tools).end.y <= _control_rect(first_card).position.y + 0.5, "Tools sits above the first tool card")
 		_assert(_control_rect(first_card).position.y - _control_rect(tools).end.y >= 10.0, "Tools clears the first card corner")
-		_assert(absf((_control_rect(tools).get_center().x) - _control_rect(first_card).get_center().x) <= 8.0, "Tools is centered on the left rail")
+		_assert(absf((_control_rect(tools).get_center().x) - _control_rect(rail).get_center().x) <= 8.0, "Tools is centered on the left rail")
+		_assert(absf(first_card.size.x - first_card.size.y) <= 1.0, "tool cards are square")
 	var tools_frame: Control = hud.get("_tools_frame") as Control
 	if tools_frame != null:
 		_assert(_control_rect(tools).position.y + 0.5 >= tools_frame.position.y + 10.0, "Tools title sits inside the section, not on the rim")
@@ -335,7 +336,7 @@ func _test_rail_section_labels() -> void:
 		_assert(box is StyleBoxFlat and (box as StyleBoxFlat).border_width_left >= 2, "section frames have a visible outline")
 	if tools_frame != null:
 		_assert(absf(tools_frame.position.y - pit.position.y) <= 0.5, "Tools frame lines up with the pit top")
-		_assert(absf(tools_frame.size.y - pit.size.y) <= 0.5, "Tools frame matches the pit height")
+		_assert(absf(tools_frame.size.y - (pit.size.y + float(TN.chunk_front))) <= 0.5, "Tools frame runs the pit's full height")
 		var fill_box: StyleBox = tools_frame.get_theme_stylebox("panel")
 		_assert(fill_box is StyleBoxFlat and _color_is_dark_panel((fill_box as StyleBoxFlat).bg_color), "Tools fill is dark")
 	hud.queue_free()
@@ -442,8 +443,12 @@ func _test_unowned_tools_stay_hidden() -> void:
 		var slot: Control = slots[i] as Control
 		if slot != null and slot.visible:
 			shown += 1
-			_assert(int(slot_tools[i]) == int(TN.TOOL_HANDS), "the only start row is Hands")
-	_assert(shown == 1, "unowned shovel/pick/brush stay hidden")
+		var btn: Button = (hud.get("_tool_buttons") as Array)[i] as Button
+		if int(slot_tools[i]) != int(TN.TOOL_HANDS):
+			_assert(btn != null and btn.disabled and btn.modulate.a < 0.6, "unowned tools show as dim locked squares")
+		else:
+			_assert(btn != null and not btn.disabled, "Hands is usable from the start")
+	_assert(shown == 4, "the grid always shows all four squares")
 	hud.queue_free()
 
 
@@ -821,11 +826,12 @@ func _test_find_chips_sit_under_the_pit() -> void:
 	if find_box == null:
 		hud.queue_free()
 		return
-	_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "chips sit in the reserved find band")
-	_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "chips stay below the dirt")
 	var pit := _pit_rect()
-	_assert(is_equal_approx(find_box.position.x, pit.position.x + 10.0), "chips start at the pit's left edge")
-	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "chips use the full pit width")
+	var rail: Rect2 = hud.call("finds_rail_rect")
+	_assert(find_box.position.x >= pit.end.x + float(TN.chunk_pad) - 0.5, "chips sit in the right rail, beside the pit")
+	_assert(find_box.position.y >= pit.position.y - 0.5, "chips start level with the pit")
+	_assert(find_box.position.y + find_box.size.y <= rail.end.y + 0.5, "chips stay inside the Finds rail")
+	_assert(is_equal_approx(find_box.size.x, rail.size.x - 20.0), "chips use the rail width")
 	var tray_rect := Rect2(find_box.position, find_box.size)
 	_assert(not pit.intersects(tray_rect), "chips do not sit on the pit grid")
 	_assert(hud.get("_work_card") == null, "find chips have no working-find card to overlap")
@@ -871,9 +877,9 @@ func _test_deep_cells_stay_off_finds() -> void:
 		var finds_frame: Control = hud.get("_finds_frame") as Control
 		var find_box: Control = hud.get("_find_box") as Control
 		if finds_frame != null:
-			_assert(last.end.y <= finds_frame.position.y - 2.0, "deep dirt stays off the Finds frame")
+			_assert(last.end.x <= finds_frame.position.x - 2.0, "deep dirt stays off the Finds frame")
 		if find_box != null:
-			_assert(last.end.y <= find_box.position.y - 2.0, "deep dirt stays off the find chips")
+			_assert(last.end.x <= find_box.position.x - 2.0, "deep dirt stays off the find chips")
 		hud.queue_free()
 	site.free()
 
@@ -905,7 +911,7 @@ func _test_finds_section_label() -> void:
 	var pit := _pit_rect()
 	var find_box: Control = hud.get("_find_box") as Control
 	_assert(not pit.intersects(_control_rect(finds)), "Finds label stays off the pit")
-	_assert(_control_rect(finds).position.y + 0.5 >= float(TN.pit_face_bottom()) + float(TN.chunk_front), "Finds sits fully below the south face")
+	_assert(_control_rect(finds).position.x + 0.5 >= pit.end.x + float(TN.chunk_pad), "Finds sits in the right rail, clear of the pit")
 	var finds_frame: Control = hud.get("_finds_frame") as Control
 	if finds_frame != null:
 		_assert(_control_rect(finds).position.y + 0.5 >= finds_frame.position.y + 10.0, "Finds title sits inside the section, not on the rim")
@@ -934,7 +940,7 @@ func _test_find_chips_scale_in_tray() -> void:
 	if one.size() == 1:
 		var lone: Control = one[0] as Control
 		_assert(lone != null and lone.visible and lone.get_parent() == hud.get("_find_box"), "the single chip lives in the tray")
-		_assert(lone.custom_minimum_size.x >= 196.0, "one chip stays a comfortable width")
+		_assert(lone.custom_minimum_size.x >= 160.0, "one chip fills the rail width")
 		_assert(_chip_shows_name_and_price(lone), "one chip still shows a name and $")
 	var packed: Array = [
 		_card("Tooth", "t_rex_tooth", "brush", 5, "Brushed 40%", 80, 0),
@@ -946,14 +952,20 @@ func _test_find_chips_scale_in_tray() -> void:
 	]
 	hud.call("set_find_cards", packed)
 	var chips: Array = _hud_chips(hud)
-	_assert(chips.size() == 6, "six uncovered finds all become tray chips, including scraps")
+	var summary: Control = hud.get("_finds_summary") as Control
+	var folded: int = 0
+	if summary != null and summary.visible:
+		folded = int(str((summary.get_node("SummaryLabel") as Label).text).split(" ")[0].replace("+", ""))
+	_assert(chips.size() + folded == 6, "six finds: cards plus the collected summary account for all six")
+	_assert(folded == 0 or chips.size() >= 4, "only collected extras fold; most finds keep full cards")
 	var find_box: Control = hud.get("_find_box") as Control
 	_assert(find_box != null, "find tray lives on the HUD")
 	if find_box == null:
 		hud.queue_free()
 		return
 	var pit := _pit_rect()
-	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "packed chips still use the 1024 pit band")
+	var rail: Rect2 = hud.call("finds_rail_rect")
+	_assert(is_equal_approx(find_box.size.x, rail.size.x - 20.0), "packed chips use the rail width")
 	_assert(not pit.intersects(Rect2(find_box.position, find_box.size)), "packed tray does not sit on the pit")
 	var used: float = 0.0
 	var row_y: float = -1.0
@@ -962,16 +974,18 @@ func _test_find_chips_scale_in_tray() -> void:
 		_assert(chip != null and chip.visible, "no packed chip is hidden")
 		_assert(chip.get_parent() == find_box, "every packed chip sits in the tray")
 		_assert(chip.custom_minimum_size.x + 0.5 >= 90.0, "packed chips stay readable, not postage stamps")
-		_assert(chip.custom_minimum_size.x + 0.5 < 196.0, "six chips shrink below the comfortable single-find width")
 		_assert(_chip_shows_name_and_price(chip), "packed chips keep icon-name-$ at minimum")
 		_assert(not pit.intersects(_control_rect(chip)), "a packed chip does not overlap the pit")
-		used += chip.custom_minimum_size.x
+		_assert(is_equal_approx(chip.custom_minimum_size.y, float(hud.get("RAIL_CARD_H"))), "every rail card is the same height")
+		used += chip.custom_minimum_size.y
 		if row_y < 0.0:
-			row_y = chip.position.y
+			row_y = chip.position.x
 		else:
-			_assert(absf(chip.position.y - row_y) <= 8.0, "six chips stay on one row")
-	used += 8.0 * 5.0
-	_assert(used <= find_box.size.x + 1.0, "six chips fit in the 1024 band")
+			_assert(absf(chip.position.x - row_y) <= 1.0, "six chips stack in one column")
+	used += 6.0 * float(chips.size() - 1)
+	if folded > 0:
+		used += 6.0 + float(hud.get("SUMMARY_H"))
+	_assert(used <= float(hud.get("_finds_box_h")) + 1.0, "six finds fit in the rail without overflowing")
 	hud.queue_free()
 
 
@@ -1015,18 +1029,20 @@ func _test_hud_stays_off_the_pit() -> void:
 
 func _test_pit_stays_1024_by_400() -> void:
 	_reset()
-	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "layout keeps the 1024px pit")
-	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "layout keeps the 400px pit")
-	_assert(TN.hud_rail_w() >= 176.0, "left rail is wide enough for tool copy")
+	var pit: Vector2 = TN.fitted_pit_size()
+	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, pit.x), "cells fill the fitted pit width")
+	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, pit.y), "cells fill the fitted pit height")
+	_assert(is_equal_approx(TN.hud_rail_w(), TN.finds_rail_w()), "Tools and Finds rails are the same width")
+	_assert(TN.hud_rail_w() + pit.x + float(TN.finds_rail_w()) <= TN.view_w, "pit fits between the two rails")
 
 
 func _test_tools_section_uses_the_wide_left_gutter() -> void:
 	_reset()
 	TN.apply_site_layout()
 	var pit := _pit_rect()
-	_assert(is_equal_approx(pit.size.x, 1024.0), "wider tools do not shrink the 1024px pit")
-	_assert(pit.position.x >= 176.0, "pit shifts right so the left gutter can grow")
-	_assert(TN.view_w - pit.end.x >= 48.0, "right gutter stays a slim empty field")
+	_assert(pit.size.x >= 800.0, "the pit stays large between the rails")
+	_assert(pit.position.x >= TN.hud_rail_w(), "pit starts right of the tools rail")
+	_assert(TN.view_w - pit.end.x >= float(TN.finds_rail_w()), "right side leaves room for the Finds rail")
 	var hud: CanvasLayer = _make_hud()
 	if hud == null:
 		return
@@ -1036,7 +1052,7 @@ func _test_tools_section_uses_the_wide_left_gutter() -> void:
 	if frame == null:
 		hud.queue_free()
 		return
-	_assert(frame.size.x >= 160.0, "Tools section is wider than the old 120px cards")
+	_assert(frame.size.x >= 180.0, "Tools rail is as wide as the Finds rail")
 	_assert(frame.position.x + frame.size.x <= pit.position.x + 0.5, "wide Tools frame stays off the pit grid")
 	var hole_left: float = pit.position.x - float(TN.chunk_pad)
 	var frame_right: float = frame.position.x + frame.size.x
@@ -1492,10 +1508,8 @@ func _assert_rail_card_layout(button: Button, where: String) -> void:
 	_assert(absf(icon_rect.position.x + icon_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s icon is horizontally centered" % where)
 	_assert(int(name.horizontal_alignment) == HORIZONTAL_ALIGNMENT_CENTER, "%s name is centered" % where)
 	_assert(absf(name_rect.position.x + name_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s name sits under the icon" % where)
-	_assert(absf(role_rect.position.x + role_rect.size.x * 0.5 - card.x * 0.5) <= 3.0, "%s role sits under the name" % where)
 	_assert(absf(name_rect.position.y - icon_rect.end.y - gap) <= 2.0, "%s keeps a gap under the icon" % where)
-	_assert(absf(role_rect.position.y - name_rect.end.y - gap) <= 2.0, "%s keeps a gap under the name" % where)
-	_assert(role.visible, "%s role is always on" % where)
+	_assert(not role.visible, "%s role lives in the hover tip" % where)
 	_assert(key_rect.position.y <= 6.0, "%s hotkey sits at the top of the card" % where)
 	_assert(key_rect.end.x >= card.x - 8.0, "%s hotkey sits in the top-right" % where)
 	_assert(key_rect.end.y <= name_rect.position.y + 0.5, "%s hotkey is not in the name row" % where)

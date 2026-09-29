@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Find celebrations live on a ribbon at the top edge of the Finds tray:
+## Find celebrations live on a ribbon in the band under the pit:
 ## visible, off the dig cells, never blocking clicks, and louder for better finds.
 ## Run: godot --headless --path <project> -s res://tests/test_reward_ribbon.gd
 
@@ -55,10 +55,11 @@ func _test_ribbon_follows_its_card(hud: CanvasLayer) -> void:
 	hud.call("set_find_cards", [_card(0, "Tooth"), _card(1, "Claw")])
 	for i in 3:
 		await process_frame
-	var chip: Control = hud.call("_chip_for_find", 0)
-	var chip_x: float = chip.global_position.x + chip.size.x * 0.5
+	## Ribbons own the band under the pit, centered on it, off the Finds rail.
+	var pit_x: float = TN.pit_grid_rect().get_center().x
 	var ribbon_x: float = ribbon.position.x + ribbon.size.x * 0.5
-	_assert(absf(chip_x - ribbon_x) < 2.0, "the ribbon stays over its card after the tray re-flows")
+	_assert(absf(pit_x - ribbon_x) < 2.0 and ribbon.position.y >= TN.pit_face_bottom(), "the ribbon sits centered under the pit")
+	_assert(ribbon.position.y + ribbon.size.y <= TN.view_h, "the ribbon stays on screen")
 
 
 func _assert(ok: bool, label: String) -> void:

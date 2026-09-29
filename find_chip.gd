@@ -44,6 +44,10 @@ var _clean_shown: float = 0.0
 ## Condensed: many finds at once -> icon, stars and price only; hover for the
 ## full card. A colored top strip still says new / duplicate / crumbling.
 var _condensed: bool = false
+## Rail mode: a fixed-height card for the Finds rail (three short rows).
+var _rail: bool = false
+const RAIL_BAR_H := 4.0
+const RAIL_TEXT_X := 38.0
 var _bar_flash: float = 0.0
 ## Brushing raises the price: flash it green so dirt reads as money, not stars.
 var _price_flash: float = 0.0
@@ -242,7 +246,89 @@ func _layout_condensed(w: float, body_h: float) -> void:
 	_price_label.size = Vector2(col_w, row_h)
 
 
+## Finds rail card, always the same height:
+##   [#] Name (full width, one line, shrinks to fit)
+##   [icon] ★★★★☆ ............ $price
+##          status (New for museum · 1/4)
+## with a status-colored strip down the left edge.
+func fit_rail(width: float, height: float) -> void:
+	_rail = true
+	_condensed = false
+	_mini = false
+	_tight = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	custom_minimum_size = Vector2(maxf(width, 120.0), height)
+	size = custom_minimum_size
+	_name_size = 14
+	_meta_size = 10
+	_price_size = 13
+	_stars.custom_minimum_size = Vector2(46.0, 9.0)
+	_apply_stat_lines()
+	_layout()
+
+
+func _layout_rail() -> void:
+	var w: float = maxf(size.x, custom_minimum_size.x)
+	var h: float = maxf(size.y, custom_minimum_size.y)
+	var body_h: float = h - RAIL_BAR_H
+	_bar.position = Vector2(0.0, h - RAIL_BAR_H)
+	_bar.size = Vector2(w, RAIL_BAR_H)
+	## The name runs the full width on top; the icon sits beside rows 2-3.
+	var icon_s: float = 24.0
+	_icon.visible = true
+	_icon.position = Vector2(9.0, 23.0 + (body_h - 23.0 - icon_s) * 0.5)
+	_icon.size = Vector2(icon_s, icon_s)
+	_marker.position = Vector2(3.0, 2.0)
+	_marker.size = Vector2(16.0, 16.0)
+	var left: float = RAIL_TEXT_X
+	var right: float = w - 8.0
+	var col: float = maxf(right - left, 20.0)
+	## Row 1: the name on one line, shrinking until it fits.
+	_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_name_label.clip_text = true
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var name_left: float = 23.0
+	var name_col: float = maxf(right - name_left, 20.0)
+	_shrink_to_fit(_name_label, name_col, 14, 10)
+	_name_label.position = Vector2(name_left, 2.0)
+	_name_label.size = Vector2(name_col, 18.0)
+	## Row 2: stars on the left, price on the right.
+	var font: Font = Ui.display_font()
+	var price_w: float = 0.0
+	if _price_label.visible:
+		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 2.0
+	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_price_label.position = Vector2(right - price_w, 20.0)
+	_price_label.size = Vector2(price_w, 18.0)
+	_grade_label.visible = false
+	_grade_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_grade_row.position = Vector2(left, 21.0)
+	_grade_row.size = Vector2(maxf(col - price_w - 4.0, 10.0), 16.0)
+	## Row 3: what this bone means right now, shrinking to one line.
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_status_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_status_label.clip_text = true
+	_shrink_to_fit(_status_label, col, 11, 9)
+	_status_label.position = Vector2(left, 35.0)
+	_status_label.size = Vector2(col, 15.0)
+	queue_redraw()
+
+
+func _shrink_to_fit(label: Label, room: float, largest: int, smallest: int) -> void:
+	var font: Font = Ui.display_font()
+	var fs: int = largest
+	while fs > smallest and font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > room:
+		fs -= 1
+	if label.get_theme_font_size("font_size") != fs:
+		label.add_theme_font_size_override("font_size", fs)
+
+
 func _layout() -> void:
+	if _rail:
+		_layout_rail()
+		return
 	## [icon] | name (1-2 lines, full width)
 	##        | stars + condition .......... price
 	##        | status
@@ -365,9 +451,15 @@ func _apply_stat_lines() -> void:
 	_grade_label.visible = not _grade_label.text.is_empty() and not _condensed
 	_grade_row.visible = (_grade_label.visible or show_stars) and (not _tight or _condensed) and not _mini
 	_status_label.visible = not _status_label.text.is_empty() and not _tight and not _condensed
+	if _rail:
+		_grade_label.visible = false
+		_grade_row.visible = show_stars
 	_name_label.visible = not _condensed
 	_price_label.visible = not _price_label.text.is_empty()
 	_apply_fonts()
+	if _rail:
+		## Fonts were just reset; re-fit the one-line rows.
+		_layout_rail()
 
 
 func _condition_line(card: Dictionary) -> String:
@@ -549,6 +641,11 @@ func status_color() -> Color:
 
 
 func _draw() -> void:
+	if _rail:
+		## Status strip down the left edge: green new, gold upgrade, red crumbling.
+		var strip: Color = _status_color(_status_label.text) if not _status_label.text.is_empty() else Color(Ui.MUTED, 0.4)
+		draw_rect(Rect2(0.0, 0.0, 4.0, size.y - RAIL_BAR_H), strip)
+		return
 	if _mini:
 		_draw_mini_stars()
 	## Condensed cards keep their status as a colored strip along the top.

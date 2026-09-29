@@ -130,6 +130,8 @@ func _hide_title() -> void:
 
 
 func start_round() -> void:
+	if toast != null and toast.has_method("dismiss"):
+		toast.dismiss()
 	time_left = maxf(Tuning.round_seconds, Tuning.base_round_seconds)
 	round_active = true
 	_timer_armed = false
@@ -664,8 +666,8 @@ func _arm_upgrade_notices() -> void:
 		break
 
 
-## Short news during a dig rides the same ribbon as find celebrations (on the
-## Finds tray edge, off the dig cells). Other screens use the toast plate.
+## Short news during a dig rides the same ribbon as find celebrations (in the
+## band under the pit, one at a time). Other screens use the toast plate.
 func _notify(title_text: String, subtitle: String = "", stars: int = 0, tier: int = 1) -> void:
 	if hud != null and hud.visible and hud.has_method("celebrate"):
 		hud.celebrate(-1, title_text, subtitle, stars, tier)

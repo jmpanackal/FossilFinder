@@ -23,8 +23,21 @@ func hotkey_for_tool(tool: int) -> String:
 			return ""
 
 
+## Left rail (Tools) and right rail (Finds) are the same width so the dig
+## screen stays balanced around the pit.
 func hud_rail_w() -> float:
-	return 184.0
+	return 206.0
+
+
+func finds_rail_w() -> float:
+	return 206.0
+
+
+## Band under the pit kept for reward ribbons and notices, one at a time.
+const RIBBON_BAND_H := 120.0
+## Cells may grow a little taller than the art's base aspect so the pit fills
+## the height between the rails.
+const PIT_STRETCH_MAX := 1.2
 
 const MAT_LOOSE := 0
 const MAT_PACKED := 1
@@ -601,10 +614,11 @@ func shovel_hit_cells(center: Vector2i, radius: float, precision: bool = false) 
 
 func fitted_pit_size() -> Vector2:
 	var footprint: Vector2 = reference_pit_size()
-	var max_w: float = maxf(view_w - 90.0, 160.0)
-	var max_h: float = maxf(view_h - hud_h - find_bar_h - chunk_front - 24.0, 120.0)
-	var scale: float = minf(1.0, minf(max_w / footprint.x, max_h / footprint.y))
-	return footprint * scale
+	var max_w: float = maxf(view_w - hud_rail_w() - finds_rail_w() - chunk_pad * 2.0, 160.0)
+	var max_h: float = maxf(view_h - hud_h - chunk_front - RIBBON_BAND_H - chunk_pad, 120.0)
+	var sx: float = minf(1.0, max_w / footprint.x)
+	var sy: float = minf(sx * PIT_STRETCH_MAX, max_h / footprint.y)
+	return Vector2(footprint.x * sx, footprint.y * sy)
 
 
 func apply_cell_metrics() -> void:
