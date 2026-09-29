@@ -596,6 +596,28 @@ static func tooltip_box():
 	return box
 
 
+## Slim brass scrollbar for dark panels: a dark track and a gold thumb.
+static func style_scrollbar(bar: ScrollBar) -> void:
+	if bar == null:
+		return
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color("1E150E")
+	track.set_corner_radius_all(4)
+	track.content_margin_left = 3
+	track.content_margin_right = 3
+	var thumb := StyleBoxFlat.new()
+	thumb.bg_color = Color("8A6A3A")
+	thumb.set_corner_radius_all(4)
+	var thumb_hot := thumb.duplicate() as StyleBoxFlat
+	thumb_hot.bg_color = Color("E4B75A")
+	bar.add_theme_stylebox_override("scroll", track)
+	bar.add_theme_stylebox_override("scroll_focus", track)
+	bar.add_theme_stylebox_override("grabber", thumb)
+	bar.add_theme_stylebox_override("grabber_highlight", thumb_hot)
+	bar.add_theme_stylebox_override("grabber_pressed", thumb_hot)
+	bar.custom_minimum_size.x = 10
+
+
 static func badge_box():
 	var box = brass_box(GOLD, false)
 	box.border_color = Color("8A6A28")

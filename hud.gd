@@ -33,7 +33,9 @@ const TOOLS_TITLE := "Tools"
 const FINDS_TITLE := "Finds"
 const CHIP_COMFORT_MIN := 232.0
 const CHIP_COMFORT_MAX := 300.0
-const CHIP_MIN_W := 90.0
+const CHIP_MIN_W := 56.0
+## Cards sit inside the Finds frame, clear of its border.
+const FIND_INSET := 10.0
 const CHIP_GAP := 8.0
 ## At this many finds the tray switches to condensed cards (hover for details).
 const CONDENSE_AT := 5
@@ -239,7 +241,9 @@ func set_find_cards(cards: Array) -> void:
 		var chip: Control = FindChipScript.new() as Control
 		_find_box.add_child(chip)
 		_chips.append(chip)
-	var tray_w: float = maxf(160.0, Tuning.pit_grid_size().x)
+	_layout_if_changed()
+	var tray_w: float = maxf(160.0, _find_box.size.x if _find_box.size.x > 1.0 else Tuning.pit_grid_size().x - FIND_INSET * 2.0)
+	var tray_h: float = _find_box.size.y if _find_box.size.y > 1.0 else 70.0
 	var n: int = shown.size()
 	var each: float = _chip_width_for_count(n, tray_w)
 	var crowded: bool = n >= 4 or each < 220.0
@@ -252,7 +256,7 @@ func set_find_cards(cards: Array) -> void:
 		if chip != null and chip.has_method("apply_card"):
 			chip.call("apply_card", card)
 		if chip != null and chip.has_method("fit_tray"):
-			chip.call("fit_tray", each, crowded, condensed)
+			chip.call("fit_tray", each, crowded, condensed, tray_h)
 		if chip != null and not chip.mouse_entered.is_connected(_on_chip_hover):
 			chip.mouse_entered.connect(_on_chip_hover.bind(chip))
 			chip.mouse_exited.connect(_on_chip_unhover.bind(chip))
@@ -281,13 +285,11 @@ func _cards_signature(shown: Array) -> String:
 func _chip_width_for_count(n: int, tray_w: float) -> float:
 	if n <= 0:
 		return CHIP_COMFORT_MIN
-	var row_n: int = n
-	var each: float = (tray_w - CHIP_GAP * float(maxi(row_n - 1, 0))) / float(row_n)
+	## Always one row: the tray only has room for one, and a wrapped second
+	## row would be clipped. Many finds just get narrower (condensed) cards.
+	var each: float = floorf((tray_w - CHIP_GAP * float(maxi(n - 1, 0))) / float(n))
 	if n <= 3:
-		return clampf(each, CHIP_COMFORT_MIN, CHIP_COMFORT_MAX)
-	if each < CHIP_MIN_W:
-		row_n = int(ceili(float(n) * 0.5))
-		each = (tray_w - CHIP_GAP * float(maxi(row_n - 1, 0))) / float(maxi(row_n, 1))
+		return minf(clampf(each, CHIP_COMFORT_MIN, CHIP_COMFORT_MAX), each)
 	return maxf(CHIP_MIN_W, each)
 
 
@@ -900,8 +902,8 @@ func _layout_chrome() -> void:
 	_find_box.anchor_right = 0.0
 	_find_box.anchor_bottom = 0.0
 	_find_box.custom_minimum_size = Vector2(0, 0)
-	_find_box.position = Vector2(finds_band.position.x, finds_top)
-	_find_box.size = Vector2(finds_band.size.x, maxf(find_bottom - finds_top - 6.0, 1.0))
+	_find_box.position = Vector2(finds_band.position.x + FIND_INSET, finds_top)
+	_find_box.size = Vector2(maxf(finds_band.size.x - FIND_INSET * 2.0, 1.0), maxf(find_bottom - finds_top - 8.0, 1.0))
 
 
 func _layout_footer() -> void:

@@ -996,6 +996,10 @@ func brush_stroke(from: Vector2, to: Vector2) -> void:
 		var find: Dictionary = raw
 		if _find_is_fully_exposed(find) and _find_clean(find) >= Tuning.clean_extract_threshold:
 			_finish_cleaning(find)
+			## Fragile and Opal bones stay put (still crumbling) until plastered:
+			## brushing makes them worth more, plaster is what gets them out safely.
+			if Tuning.bone_crumbles(int(find.get("kind", 0))):
+				continue
 			_extract_find(find, true)
 
 
@@ -1213,7 +1217,8 @@ func cast_progress() -> float:
 
 
 func _castable(find: Dictionary) -> bool:
-	## Only bones that crumble can be plastered; it protects, it doesn't collect.
+	## Only bones that crumble can be plastered; plaster locks their stars and
+	## lifts them out as clean as they are right now.
 	if find.is_empty() or bool(find.get("extracted", false)) or bool(find.get("cast", false)):
 		return false
 	return Tuning.bone_crumbles(int(find.get("kind", 0))) and _find_is_fully_exposed(find)
@@ -1248,9 +1253,10 @@ func cast_find(index: int) -> void:
 	var pos: Vector2 = _find_centroid(find)
 	_burst(pos, int(find.get("layer", 0)), true)
 	Sfx.play("buy")
-	## Wrapped bones stay in the pit, safe from crumbling, and are collected
-	## (still dirty) when the shift ends. They can no longer be brushed.
+	## Plaster locks the stars and lifts the bone out as clean as it is now, so
+	## brush first (while it crumbles), then plaster: both matter.
 	bone_cast.emit(index, pos)
+	_extract_find(find, false)
 
 
 func _can_harm_fossil() -> bool:

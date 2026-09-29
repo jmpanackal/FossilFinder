@@ -45,6 +45,10 @@ var _clean_shown: float = 0.0
 ## full card. A colored top strip still says new / duplicate / crumbling.
 var _condensed: bool = false
 var _bar_flash: float = 0.0
+## Brushing raises the price: flash it green so dirt reads as money, not stars.
+var _price_flash: float = 0.0
+var _mini: bool = false
+var _mini_star_y: float = 0.0
 
 
 static func color_for(index: int) -> Color:
@@ -140,6 +144,8 @@ func apply_card(card: Dictionary) -> void:
 	var clean: float = _brush_progress()
 	if clean > _clean_shown + 0.001:
 		_bar_flash = 1.0
+		if _clean_shown > 0.0 or clean < 1.0:
+			_price_flash = 1.0
 	_clean_shown = clean
 	_apply_stat_lines()
 	_refresh_chrome()
@@ -147,6 +153,7 @@ func apply_card(card: Dictionary) -> void:
 	_icon.queue_redraw()
 	_marker.queue_redraw()
 	_bar.queue_redraw()
+	queue_redraw()
 
 
 func set_extra(_text: String) -> void:
@@ -154,13 +161,15 @@ func set_extra(_text: String) -> void:
 	_apply_stat_lines()
 
 
-func fit_tray(width: float, crowded: bool, condensed: bool = false) -> void:
+func fit_tray(width: float, crowded: bool, condensed: bool = false, max_h: float = INF) -> void:
 	_condensed = condensed
 	mouse_filter = Control.MOUSE_FILTER_PASS if condensed else Control.MOUSE_FILTER_IGNORE
-	var w: float = maxf(90.0, width)
+	var w: float = maxf(56.0, width)
 	_tight = w < 140.0
+	## Very narrow condensed cards drop the icon: number, stars and price only.
+	_mini = condensed and w < 118.0
 	var compact: bool = crowded or w < 200.0
-	custom_minimum_size = Vector2(w, 64.0 if _tight else 70.0)
+	custom_minimum_size = Vector2(w, minf(64.0 if _tight else 70.0, maxf(max_h, 40.0)))
 	size = custom_minimum_size
 	_name_size = 11 if _tight else (13 if compact else 16)
 	_meta_size = 10 if _tight else (11 if compact else 12)
@@ -169,11 +178,18 @@ func fit_tray(width: float, crowded: bool, condensed: bool = false) -> void:
 	_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
 	if condensed:
 		## Condensed cards show only stars + price, so give them room.
-		_stars.custom_minimum_size = Vector2(62.0, 11.0)
-		_price_size = 15
+		_stars.custom_minimum_size = Vector2(62.0, 11.0) if not _mini else _mini_stars_size(w)
+		_price_size = 15 if not _mini else (13 if w >= 72.0 else 12)
 		_name_size = 16
 	_apply_fonts()
 	_layout()
+
+
+## StarRating sizes stars from its height; pick a height whose five stars
+## fit the width, so the row stays centered on narrow cards.
+func _mini_stars_size(w: float) -> Vector2:
+	var sw: float = clampf(w - 12.0, 36.0, 60.0)
+	return Vector2(sw, floorf(sw / 5.9) + 1.0)
 
 
 func _apply_fonts() -> void:
@@ -201,6 +217,17 @@ func catch_pos() -> Vector2:
 
 
 func _layout_condensed(w: float, body_h: float) -> void:
+	_icon.visible = not _mini
+	if _mini:
+		var mrow: float = float(_meta_size) + 8.0
+		var my: float = (body_h - mrow * 2.0) * 0.5 + 3.0
+		## Stars are drawn by the card itself here (see _draw), centered exactly.
+		_grade_row.visible = false
+		_mini_star_y = my + mrow * 0.5
+		_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_price_label.position = Vector2(4.0, my + mrow)
+		_price_label.size = Vector2(w - 8.0, mrow)
+		return
 	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 34.0)
 	_icon.position = Vector2(PAD, (body_h - icon_s) * 0.5)
 	_icon.size = Vector2(icon_s, icon_s)
@@ -232,6 +259,7 @@ func _layout() -> void:
 	_marker.size = Vector2(16.0, 16.0)
 	_bar.position = Vector2(0.0, h - BAR_H)
 	_bar.size = Vector2(w, BAR_H)
+	_icon.visible = true
 	if _condensed:
 		_layout_condensed(w, body_h)
 		queue_redraw()
@@ -335,7 +363,7 @@ func _apply_stat_lines() -> void:
 		_stars.call("set_rating", stars)
 	_stars.visible = show_stars
 	_grade_label.visible = not _grade_label.text.is_empty() and not _condensed
-	_grade_row.visible = (_grade_label.visible or show_stars) and not _tight
+	_grade_row.visible = (_grade_label.visible or show_stars) and (not _tight or _condensed) and not _mini
 	_status_label.visible = not _status_label.text.is_empty() and not _tight and not _condensed
 	_name_label.visible = not _condensed
 	_price_label.visible = not _price_label.text.is_empty()
@@ -521,10 +549,34 @@ func status_color() -> Color:
 
 
 func _draw() -> void:
+	if _mini:
+		_draw_mini_stars()
 	## Condensed cards keep their status as a colored strip along the top.
 	if not _condensed or _status_label.text.is_empty():
 		return
 	draw_rect(Rect2(3.0, 2.0, size.x - 6.0, 3.0), _status_color(_status_label.text))
+
+
+func _draw_mini_stars() -> void:
+	var stars: int = int(_card.get("stars", 0))
+	if stars <= 0 or _status == "underground":
+		return
+	var w: float = maxf(size.x, custom_minimum_size.x)
+	var ss: Vector2 = _mini_stars_size(w)
+	var star: float = ss.y - 1.0
+	var gap: float = maxf(1.5, star * 0.22)
+	var row: float = star * 5.0 + gap * 4.0
+	var x0: float = (w - row) * 0.5 + star * 0.5
+	for i in 5:
+		var c := Vector2(x0 + float(i) * (star + gap), _mini_star_y)
+		var pts := PackedVector2Array()
+		for k in 10:
+			var ang: float = -PI * 0.5 + float(k) * PI / 5.0
+			pts.append(c + Vector2.from_angle(ang) * (star * 0.5 if k % 2 == 0 else star * 0.21))
+		if i < stars:
+			draw_colored_polygon(pts, Color("E4B75A"))
+		pts.append(pts[0])
+		draw_polyline(pts, Color("E4B75A") if i < stars else Color("8A7358"), 0.9, true)
 
 
 func _process(delta: float) -> void:
@@ -534,3 +586,6 @@ func _process(delta: float) -> void:
 	if _bar_flash > 0.0:
 		_bar_flash = maxf(0.0, _bar_flash - delta * 3.0)
 		_bar.queue_redraw()
+	if _price_flash > 0.0:
+		_price_flash = maxf(0.0, _price_flash - delta * 2.2)
+		_price_label.add_theme_color_override("font_color", Ui.GOLD.lerp(Color("A8E07A"), _price_flash))

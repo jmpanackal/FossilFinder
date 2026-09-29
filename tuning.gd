@@ -267,7 +267,7 @@ const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Opal"]
 ## Plain-language one-liners shown the first time each kind turns up.
 const BONE_KIND_HINTS: PackedStringArray = [
 	"",
-	"It dries out in open air: loses a star every 10s once uncovered. Dig it out and brush it fast.",
+	"It dries out in open air: loses a star every 10s once uncovered, until it is plastered.",
 	"Bone that turned into opal, a rainbow gemstone. Worth 2.5x, but it cracks as it dries: loses a star every 6s once uncovered.",
 ]
 var bone_kind_weights: PackedFloat32Array = [74.0, 20.0, 6.0]

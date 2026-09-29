@@ -513,9 +513,9 @@ func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
 		return
 	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Worth far more. Get it out before it crumbles!"
 	if first and not Tuning.cast_owned():
-		sub += " A Plaster Cast (Hands upgrade) saves it."
+		sub += " Only a Plaster Cast (Hands upgrade) lifts it out safely."
 	elif first:
-		sub += " Or plaster it (hold Hands) to keep its stars."
+		sub += " Brush it, then plaster it (hold Hands) to lift it out."
 	var title_text: String = "Opal bone!" if kind == Tuning.BONE_OPAL else "Fragile bone!"
 	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
@@ -530,16 +530,16 @@ func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
 
 
 func _on_bone_cast(_index: int, world_pos: Vector2) -> void:
-	_spawn_float("Plastered: stars are safe", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
+	_spawn_float("Plastered: stars locked", world_pos + Vector2(0, -24), Color("F4F0E6"), 20)
 	_ping(world_pos)
 
 
 func _teach_on_reveal() -> String:
 	## Plain-language explainers, each shown once ever, as the ribbon's second line.
 	if GameState.take_hint("condition"):
-		return "Condition = how well it survived underground. Better = more $ and more museum visitors."
+		return "Stars = how well it survived underground. More stars = more $ and museum visitors."
 	if GameState.owns_tool(Tuning.TOOL_BRUSH) and GameState.take_hint("brush"):
-		return "Pick the Brush (4) and sweep over the bone to wipe off each layer of dirt."
+		return "Brush (4): sweep off the dirt. Clean bones sell for more $. Dirt never changes stars."
 	return ""
 
 

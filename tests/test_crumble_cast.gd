@@ -26,6 +26,7 @@ func _run() -> void:
 	_test_cast_needs_the_upgrade()
 	_test_cast_stops_crumbling_and_collects()
 	_test_cast_upgrade_is_faster_per_rank()
+	_test_brushing_alone_does_not_save_a_crumbly_bone()
 	_test_plain_names_and_hints()
 	_reset()
 	print("crumble_cast %d passed, %d failed" % [_passed, _failed])
@@ -156,15 +157,10 @@ func _test_cast_stops_crumbling_and_collects() -> void:
 	site.set("current_tool", TN.TOOL_HANDS)
 	site.call("_tick_cast", float(TN.cast_hold_seconds()) + 0.1, true, cell)
 	_assert(bool(site.finds[0]["cast"]), "holding long enough wraps the bone")
-	_assert(not bool(site.finds[0]["extracted"]), "plaster protects; it does not collect the bone")
-	var rect: Rect2 = site.call("_top_rect", cell.x, cell.y)
-	site.call("brush_stroke", rect.position, rect.end)
-	_assert(float(site.cleanliness.get(cell, 0.0)) == 0.0, "a plastered bone can't be brushed")
+	_assert(bool(site.finds[0]["extracted"]), "plaster lifts the bone out")
 	_assert(cast_events == [0], "the cast is announced")
 	site.call("tick_crumble", 300.0)
 	_assert(int(site.finds[0]["condition"]) == 5, "a cast bone never crumbles")
-	site.call("extract_now", false)
-	_assert(bool(site.finds[0]["extracted"]), "the shift end collects the plastered bone")
 	var solid := _site_with(TN.BONE_SOLID)
 	_expose_all(solid)
 	solid.set("current_tool", TN.TOOL_HANDS)
@@ -185,6 +181,29 @@ func _test_cast_upgrade_is_faster_per_rank() -> void:
 	GS.levels["hands_cast"] = 0
 	GS.apply_upgrades()
 	_assert(str(GS.shop_effect_line("hands_cast")).contains("Wrap"), "shop line explains the wrap in plain words")
+
+
+func _test_brushing_alone_does_not_save_a_crumbly_bone() -> void:
+	## Brushing makes it worth more; only plaster gets it out safely.
+	_reset()
+	GS.levels["hands_cast"] = 1
+	GS.apply_upgrades()
+	var site := _site_with(TN.BONE_FRAGILE, 5)
+	_expose_all(site)
+	for raw in (site.finds[0]["cells"] as Dictionary):
+		var cell: Vector2i = raw
+		var rect: Rect2 = site.call("_top_rect", cell.x, cell.y)
+		for pass_i in 16:
+			for row in int(TN.DUST_ROWS):
+				var y: float = rect.position.y + (float(row) + 0.5) * rect.size.y / float(TN.DUST_ROWS)
+				site.call("brush_stroke", Vector2(rect.position.x, y), Vector2(rect.end.x, y))
+	_assert(float(site.call("_find_clean", site.finds[0])) >= 0.99, "the bone can be brushed clean")
+	_assert(not bool(site.finds[0]["extracted"]), "a clean fragile bone stays in the pit")
+	_assert(float(site.call("crumble_in", site.finds[0])) != INF, "and keeps crumbling")
+	site.call("cast_find", 0)
+	_assert(bool(site.finds[0]["extracted"]) and bool(site.finds[0]["cast"]), "plastering lifts it out")
+	_assert(bool(site.finds[0]["extracted_clean"]), "brushed first, it leaves clean")
+	site.queue_free()
 
 
 func _test_plain_names_and_hints() -> void:

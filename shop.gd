@@ -22,6 +22,7 @@ var _user_picked_tab: bool = false
 var _banner: Label
 var _banner_life: float = 0.0
 var _scroll: ScrollContainer
+const SCROLL_GAP := 12.0
 var _pages_host: VBoxContainer
 var _fitting_pages: bool = false
 var _fit_queued: bool = false
@@ -97,6 +98,7 @@ func _ready() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
 	body.add_child(_scroll)
+	Ui.style_scrollbar(_scroll.get_v_scroll_bar())
 
 	_pages_host = VBoxContainer.new()
 	_pages_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -148,7 +150,8 @@ func _fit_pages() -> void:
 	var bar: VScrollBar = _scroll.get_v_scroll_bar()
 	if bar != null:
 		gutter = maxf(bar.get_combined_minimum_size().x, bar.size.x)
-	var width: float = maxf(_scroll.size.x - gutter, 420.0)
+	## Leave a clear gap so the scrollbar never sits on the panels' borders.
+	var width: float = maxf(_scroll.size.x - gutter - SCROLL_GAP, 420.0)
 	if not is_equal_approx(_pages_host.custom_minimum_size.x, width):
 		_pages_host.custom_minimum_size.x = width
 	_fitting_pages = false

@@ -824,8 +824,8 @@ func _test_find_chips_sit_under_the_pit() -> void:
 	_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "chips sit in the reserved find band")
 	_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "chips stay below the dirt")
 	var pit := _pit_rect()
-	_assert(is_equal_approx(find_box.position.x, pit.position.x), "chips start at the pit's left edge")
-	_assert(is_equal_approx(find_box.size.x, pit.size.x), "chips use the full pit width")
+	_assert(is_equal_approx(find_box.position.x, pit.position.x + 10.0), "chips start at the pit's left edge")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "chips use the full pit width")
 	var tray_rect := Rect2(find_box.position, find_box.size)
 	_assert(not pit.intersects(tray_rect), "chips do not sit on the pit grid")
 	_assert(hud.get("_work_card") == null, "find chips have no working-find card to overlap")
@@ -953,7 +953,7 @@ func _test_find_chips_scale_in_tray() -> void:
 		hud.queue_free()
 		return
 	var pit := _pit_rect()
-	_assert(is_equal_approx(find_box.size.x, pit.size.x), "packed chips still use the 1024 pit band")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "packed chips still use the 1024 pit band")
 	_assert(not pit.intersects(Rect2(find_box.position, find_box.size)), "packed tray does not sit on the pit")
 	var used: float = 0.0
 	var row_y: float = -1.0
