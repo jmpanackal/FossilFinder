@@ -24,6 +24,7 @@ func _run() -> void:
 	_test_cart_cleans_dirtiest_bone_slowly()
 	_test_cart_climbs_one_level_per_interval()
 	_test_cart_ties_go_to_the_pricier_bone_and_stay()
+	_test_cart_is_a_late_game_upgrade()
 	_test_parked_cart_does_nothing()
 	_test_cart_ranks_clean_faster()
 	_test_cart_position_saves()
@@ -101,11 +102,11 @@ func _test_cart_cleans_dirtiest_bone_slowly() -> void:
 	_assert(progress > 0.2 and progress < 0.25, "cleaning is gradual, not instant")
 	_assert(not bool(GS.piece_is_clean("t_rex_jaw")), "a bone is not clean after a few seconds")
 	_assert(is_equal_approx(float(GS.piece_cleanliness("t_rex_skull")), 0.6), "only the target bone is worked on")
-	GS._tick_cleaner(1000.0)
+	GS._tick_cleaner(5000.0)
 	_assert(bool(GS.piece_is_clean("t_rex_jaw")), "it ends up clean")
 	_assert(int(GS.piece_condition("t_rex_jaw")) == 2, "stars do not change")
 	_assert(str(GS.prep_cart_target()) == "t_rex_skull", "the cart moves on to the next dirty bone")
-	GS._tick_cleaner(1000.0)
+	GS._tick_cleaner(5000.0)
 	_assert(bool(GS.piece_is_clean("t_rex_skull")), "every dirty bone gets done")
 	_assert(not bool(GS.stand_is_being_cleaned("t_rex")), "the exhibit reopens on its own once spotless")
 	_assert(float(GS.stand_income("t_rex")) > 0.0, "and earns again")
@@ -145,7 +146,7 @@ func _test_cart_ties_go_to_the_pricier_bone_and_stay() -> void:
 	_assert(str(GS.prep_cart_target()) == "t_rex_skull", "a tie goes to the more valuable bone")
 	var flips: int = 0
 	for _i in 2000:
-		GS._tick_cleaner(0.5)
+		GS._tick_cleaner(2.0)
 		if bool(GS.piece_is_clean("t_rex_skull")):
 			break
 		if str(GS.prep_cart_target()) != "t_rex_skull":
@@ -154,6 +155,33 @@ func _test_cart_ties_go_to_the_pricier_bone_and_stay() -> void:
 	_assert(bool(GS.piece_is_clean("t_rex_skull")), "the pricier bone finishes first")
 	_assert(not bool(GS.piece_is_clean("t_rex_jaw")), "the cheaper one waits")
 	_assert(str(GS.prep_cart_target()) == "t_rex_jaw", "then the cart moves to the cheaper bone")
+
+
+func _max_museum_tier(tier: int) -> void:
+	for item in GS.catalog:
+		if str(item["cat"]) == "Museum" and int(item["tier"]) == tier and not bool(item.get("optional", false)):
+			GS.levels[item["id"]] = int(item["max"])
+
+
+func _test_cart_is_a_late_game_upgrade() -> void:
+	## Masterpieces are a late-game goal, so the cart is too: it is a tier 3
+	## Museum upgrade, priced like the other tier 3 upgrades, and it does not
+	## hold up the tier 4 blockbuster upgrades.
+	_reset()
+	var item: Dictionary = GS._item("workshop")
+	_assert(int(item["tier"]) == 3, "the cart is a tier 3 Museum upgrade")
+	_assert(int(item["cost"]) >= 25000, "the cart is priced for the late game")
+	GS.money = 100000000
+	_assert(not bool(GS.can_buy("workshop")), "the cart is locked at the start, however rich you are")
+	_max_museum_tier(1)
+	_assert(not bool(GS.can_buy("workshop")), "maxing tier 1 alone is not enough")
+	_max_museum_tier(2)
+	_assert(bool(GS.can_buy("workshop")), "maxing tier 1 and 2 unlocks the cart")
+	_max_museum_tier(3)
+	_assert(bool(GS.tier_unlocked("blockbuster_ticket")), "tier 4 opens without buying the cart")
+	_assert(int(GS.levels["workshop"]) == 0, "the cart was never bought")
+	_assert(GS.prep_cart_seconds(1) >= 300, "a rank 1 cart is very slow")
+	_reset()
 
 
 func _test_parked_cart_does_nothing() -> void:
@@ -220,7 +248,7 @@ func _test_cart_can_finish_a_masterpiece() -> void:
 	_own_cart(1)
 	GS.pending_unveils.clear()
 	GS.set_cleaner_stand("velociraptor")
-	GS._tick_cleaner(1000.0)
+	GS._tick_cleaner(5000.0)
 	_assert(bool(GS.stand_is_masterpiece("velociraptor")), "the Cleaning Cart cleaning it completes the Masterpiece")
 	_assert(_masters.size() == 1, "and it is celebrated")
 	piece = GS.pieces[ids[0]]

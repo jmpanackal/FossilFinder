@@ -88,12 +88,12 @@ var catalog: Array[Dictionary] = [
 	{"id": "benches", "cat": "Museum", "tier": 1, "name": "Benches", "desc": "Guests sit, linger, and donate.", "cost": 450, "scale": 2.0, "max": 5},
 	{"id": "unveil_time", "cat": "Museum", "tier": 1, "name": "Opening Hours", "desc": "Unveiling rushes last longer.", "cost": 200, "scale": 1.85, "max": 4},
 	{"id": "unveil_crowd", "cat": "Museum", "tier": 1, "name": "Opening Crowd", "desc": "Unveiling rushes bring more people.", "cost": 220, "scale": 1.85, "max": 4},
-	{"id": "workshop", "cat": "Museum", "tier": 1, "name": "Cleaning Cart", "desc": "The cart climbs each dirt level faster.", "unlock_name": "Cleaning Cart", "unlock_desc": "Drag the cart onto an exhibit to slowly clean its dirty bones. The exhibit is closed and earns nothing while the cart is there. Drag it to the parking bay to reopen everything.", "unlock_action": "Unlock", "cost": 400, "scale": 2.0, "max": 3},
 	{"id": "glass_case", "cat": "Museum", "tier": 2, "name": "Glass Case", "desc": "A better case adds a steady visitor bonus.", "cost": 1000, "scale": 1.85, "max": 6},
 	{"id": "labels", "cat": "Museum", "tier": 2, "name": "Clear Labels", "desc": "People stay longer and pay more.", "cost": 3200, "scale": 2.55, "max": 6},
 	{"id": "gift_shop", "cat": "Museum", "tier": 2, "name": "Gift Counter", "desc": "Small souvenirs raise income.", "cost": 6400, "scale": 2.62, "max": 6},
 	{"id": "crowds", "cat": "Museum", "tier": 3, "name": "Weekend Crowds", "desc": "More foot traffic every second.", "cost": 4000, "scale": 1.95, "max": 6},
 	{"id": "restoration", "cat": "Museum", "tier": 3, "name": "Cleanup Crew", "desc": "Dirty finds still look decent on display.", "cost": 1600, "scale": 1.85, "max": 6},
+	{"id": "workshop", "cat": "Museum", "tier": 3, "name": "Cleaning Cart", "desc": "The cart climbs each dirt level faster.", "unlock_name": "Cleaning Cart", "unlock_desc": "Drag the cart onto an exhibit to slowly clean its dirty bones. The exhibit is closed and earns nothing while the cart is there. Drag it to the parking bay to reopen everything.", "unlock_action": "Unlock", "cost": 30000, "scale": 2.2, "max": 3, "optional": true},
 	{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4, "name": "Box Office", "desc": "Tickets pay more.", "cost": 120000, "scale": 1.90, "max": 6},
 	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors: +20% of your crowd per rank.", "cost": 140000, "scale": 1.75, "max": 5},
 	{"id": "blockbuster_hours", "cat": "Museum", "tier": 4, "name": "Encore Rush", "desc": "Unveiling rushes last longer.", "cost": 130000, "scale": 1.7, "max": 4},
@@ -180,6 +180,8 @@ func tier_unlocked(id: String) -> bool:
 		if str(other.get("cat", "")) != group:
 			continue
 		if int(other.get("tier", 1)) >= tier:
+			continue
+		if bool(other.get("optional", false)):
 			continue
 		if int(levels.get(str(other["id"]), 0)) < int(other["max"]):
 			return false
