@@ -302,13 +302,12 @@ const BONE_KIND_HINTS: PackedStringArray = [
 	"It dries out in open air: once half dug out it loses a star every 10s, until it is plastered.",
 	"Bone turned to opal, a rainbow gem: always Great or Perfect, worth 2.5x. Once half dug out it loses a star every 6s until plastered.",
 ]
-## Solid / Fragile / Opal odds. Before Plaster Cast, crumbly bones (Opal
-## especially) are rare so they don't feel unfair; owning it makes Opal a
-## regular, exciting find.
-## Opal never appears until you own Plaster Cast (nothing to save it with),
-## and is rare after: a real event when one turns up.
+## Solid / Fragile / Opal odds. Crumbling bones (Fragile and Opal) only turn up
+## once you own Plaster Cast: without it there is nothing to save them with, so
+## a bone must never lose stars to something you cannot yet counter. Owning it
+## is what introduces them, and Opal stays a rare, exciting event.
 var bone_kind_weights: PackedFloat32Array = [76.0, 20.0, 4.0]
-var bone_kind_weights_no_cast: PackedFloat32Array = [86.0, 14.0, 0.0]
+var bone_kind_weights_no_cast: PackedFloat32Array = [100.0, 0.0, 0.0]
 ## Opal only forms in the best-kept bone: always Great or Perfect, so it is
 ## always worth the race to plaster it.
 ## Opal comes out Good or Great; quick plaster is what makes it Perfect.

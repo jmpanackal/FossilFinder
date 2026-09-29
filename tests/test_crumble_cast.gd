@@ -66,9 +66,10 @@ func _test_kinds_roll_mostly_solid() -> void:
 	var counts := [0, 0, 0]
 	for i in 3000:
 		counts[int(TN.roll_bone_kind(rng))] += 1
-	_assert(counts[0] > counts[1] and counts[1] >= counts[2], "solid > fragile > opal")
+	_assert(counts[0] == 3000, "every bone is solid before you own Plaster Cast")
+	_assert(counts[1] == 0, "no fragile bones before you can plaster them")
 	_assert(counts[2] == 0, "no opal before you can plaster it")
-	## Opal is rare until you own Plaster Cast, then much more common.
+	## Owning Plaster Cast is what brings crumbling bones: fragile first, opal rare.
 	GS.levels["hands_cast"] = 1
 	GS.apply_upgrades()
 	var with_cast := [0, 0, 0]
@@ -77,6 +78,8 @@ func _test_kinds_roll_mostly_solid() -> void:
 		with_cast[int(TN.roll_bone_kind(rng))] += 1
 	GS.levels["hands_cast"] = 0
 	GS.apply_upgrades()
+	_assert(with_cast[1] > 0, "with Plaster Cast, fragile bones start turning up")
+	_assert(with_cast[0] > with_cast[1], "but most bones are still solid")
 	_assert(with_cast[2] > 0 and with_cast[2] < with_cast[1], "with Plaster Cast, opal turns up but stays rare")
 	var worst: int = 5
 	for i in 200:
