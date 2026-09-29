@@ -1749,10 +1749,36 @@ func _draw() -> void:
 		for x in width:
 			_draw_cell_sides(x, y)
 			_draw_top(x, y)
+	_draw_pit_finish()
 	_drawing = false
 	_draw_bone_pulse()
 	_draw_find_markers()
 	_draw_lucky()
+
+## Finishing touches on the pit's edges: a faint warm wash over the wall faces
+## (never the cells) and a soft inner shadow along all four sides, so the walls
+## sink into the frame instead of ending in hard stripes.
+func _draw_pit_finish() -> void:
+	var cut := _chunk_top()
+	var front: float = Tuning.pit_front_h()
+	var pit := Rect2(cut.position, cut.size + Vector2(0.0, front))
+	var warm := Color(0.30, 0.19, 0.08, 0.16)
+	draw_rect(north_face_rect(), warm)
+	draw_rect(west_face_rect(), warm)
+	draw_rect(east_face_rect(), warm)
+	draw_rect(Rect2(pit.position.x, cut.end.y, pit.size.x, front), warm)
+	var w: float = 16.0
+	var dark := Color(0.06, 0.03, 0.01, 0.42)
+	var clear := Color(0.06, 0.03, 0.01, 0.0)
+	var x0: float = pit.position.x
+	var x1: float = pit.end.x
+	var y0: float = pit.position.y
+	var y1: float = pit.end.y
+	draw_polygon(PackedVector2Array([Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y0 + w), Vector2(x0, y0 + w)]), PackedColorArray([dark, dark, clear, clear]))
+	draw_polygon(PackedVector2Array([Vector2(x0, y1 - w), Vector2(x1, y1 - w), Vector2(x1, y1), Vector2(x0, y1)]), PackedColorArray([clear, clear, dark, dark]))
+	draw_polygon(PackedVector2Array([Vector2(x0, y0), Vector2(x0 + w, y0), Vector2(x0 + w, y1), Vector2(x0, y1)]), PackedColorArray([dark, clear, clear, dark]))
+	draw_polygon(PackedVector2Array([Vector2(x1 - w, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x1 - w, y1)]), PackedColorArray([clear, dark, dark, clear]))
+
 
 
 func _chunk_top() -> Rect2:
@@ -1980,6 +2006,9 @@ func _draw_top(x: int, y: int) -> void:
 	var edge := 0.18
 	if bone:
 		edge += float(cleanliness.get(cell, 0.0)) * 0.22
+	if layer < Tuning.layer_count and not bone:
+		## A soft shade along the bottom edge gives each cell a little thickness.
+		draw_rect(Rect2(rect.position.x + 2.0, rect.end.y - 4.0, rect.size.x - 4.0, 3.0), Color(0.12, 0.07, 0.03, 0.14))
 	draw_rect(rect.grow(-1.0), color.lightened(edge), false, 1.0)
 	if y == 0:
 		_draw_north_cell_shade(rect, color)

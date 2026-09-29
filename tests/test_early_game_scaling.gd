@@ -144,7 +144,7 @@ func _test_chunk_matches_surface_dirt() -> void:
 	var dirt: Color = TN.color_for_layer(0)
 	_assert(TN.chunk_top_color().is_equal_approx(dirt), "chunk top matches surface dirt")
 	_assert(TN.chunk_side_color().is_equal_approx(dirt.darkened(0.32)), "chunk sides are same dirt, darkened")
-	_assert(TN.chunk_line_color().is_equal_approx(Color("241C16")), "chunk outline matches cell outlines")
+	_assert(TN.chunk_line_color().is_equal_approx(TN.cell_line), "chunk outline matches cell outlines")
 	_assert(TN.has_method("chunk_line_width"), "Tuning exposes the pit outline width")
 	if TN.has_method("chunk_line_width"):
 		_assert(float(TN.chunk_line_width()) <= 1.5, "pit outline is a thin crease, not a 3px bar")

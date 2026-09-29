@@ -124,7 +124,7 @@ var front_lip: float = 10.0
 var chunk_pad: float = 18.0
 var chunk_front: float = 64.0
 var cell_side: float = 12.0
-var cell_line: Color = Color("241C16")
+var cell_line: Color = Color(0.17, 0.11, 0.07, 0.78)
 var grid_origin := Vector2(128, 86)
 const DESIGN_W := 1280.0
 const DESIGN_H := 720.0
@@ -686,6 +686,11 @@ func apply_site_layout() -> void:
 func center_grid() -> void:
 	var top := hud_h + chunk_pad
 	grid_origin = Vector2(hud_rail_w() + chunk_pad, top)
+
+
+## How far the pit's visible south wall reaches below the grid (the frame wraps it).
+func pit_front_h() -> float:
+	return chunk_front
 
 
 func pit_face_bottom() -> float:

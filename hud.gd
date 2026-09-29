@@ -31,6 +31,7 @@ const SECTION_TITLE_TOP := 14.0
 const TOOL_ROW := Vector2(DOCK_W, TOOL_CARD_H)
 const CHIP_COPY_W := 100.0
 const HEADER_BTN_H := 36.0
+const RailOrnament := preload("res://rail_ornament.gd")
 const TOOLS_TITLE := "Tools"
 const FINDS_TITLE := "Finds"
 const CHIP_COMFORT_MIN := 232.0
@@ -415,7 +416,7 @@ func ribbon_anchor(index: int) -> Vector2:
 	if _find_box != null:
 		_find_box.notification(Container.NOTIFICATION_SORT_CHILDREN)
 	## Ribbons own the band under the pit, centered on it.
-	return Vector2(Tuning.pit_grid_rect().get_center().x, rails_bottom() + 6.0)
+	return Vector2(Tuning.pit_grid_rect().get_center().x, rails_bottom() + 16.0)
 
 
 func _on_chip_hover(chip: Control) -> void:
@@ -614,6 +615,9 @@ func _make_section_frame(node_name: String) -> Panel:
 	frame.name = node_name
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_theme_stylebox_override("panel", Ui.field_frame_box())
+	var ornament: Control = RailOrnament.new()
+	ornament.name = "Ornament"
+	frame.add_child(ornament)
 	return frame
 
 
@@ -626,6 +630,9 @@ func _place_section_frame(frame: Panel, rect: Rect2) -> void:
 	frame.anchor_bottom = 0.0
 	frame.position = rect.position
 	frame.size = rect.size
+	var ornament: Node = frame.get_node_or_null("Ornament")
+	if ornament != null and ornament.has_method("set_header_y"):
+		ornament.call("set_header_y", SECTION_TITLE_TOP + _section_title_h(maxf(rect.size.x - SECTION_PAD * 2.0, 1.0)) + 3.0)
 	var parent: Node = frame.get_parent()
 	if parent != null:
 		parent.move_child(frame, 0)

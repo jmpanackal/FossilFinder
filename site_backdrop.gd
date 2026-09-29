@@ -140,12 +140,36 @@ func _draw_ground(view: Vector2) -> void:
 		return
 	_fill_around(Rect2(0.0, wash, view.x, ground_h), hole, GROUND)
 	_mottle_ground(view, hole, wash)
-	var packed := Rect2(hole.position.x - 22.0, hole.position.y - 16.0, hole.size.x + 44.0, hole.size.y + 28.0)
-	_fill_around(packed, hole, PACKED.lerp(GROUND, 0.35))
+	_draw_ground_light(view)
+	_draw_pit_shadow(Rect2(hole.position, hole.size + Vector2(0.0, Tuning.pit_front_h())))
 	if _cover_hole:
 		draw_rect(hole, hole_fill_color())
 	else:
 		draw_rect(hole, shaft_back_color())
+
+
+## The ground is not one flat colour: lighter overhead, darker toward the bottom
+## and at the edges, so the pit reads as the bright centre of the scene.
+func _draw_ground_light(view: Vector2) -> void:
+	draw_polygon(
+		PackedVector2Array([Vector2(0, 0), Vector2(view.x, 0), Vector2(view.x, view.y), Vector2(0, view.y)]),
+		PackedColorArray([Color(1.0, 0.95, 0.8, 0.10), Color(1.0, 0.95, 0.8, 0.10), Color(0.25, 0.14, 0.05, 0.11), Color(0.25, 0.14, 0.05, 0.11)])
+	)
+	var edge: float = 230.0
+	var dark := Color(0.16, 0.09, 0.03, 0.20)
+	var clear := Color(0.16, 0.09, 0.03, 0.0)
+	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(edge, 0), Vector2(edge, view.y), Vector2(0, view.y)]), PackedColorArray([dark, clear, clear, dark]))
+	draw_polygon(PackedVector2Array([Vector2(view.x - edge, 0), Vector2(view.x, 0), Vector2(view.x, view.y), Vector2(view.x - edge, view.y)]), PackedColorArray([clear, dark, dark, clear]))
+	var foot: float = 170.0
+	draw_polygon(PackedVector2Array([Vector2(0, view.y - foot), Vector2(view.x, view.y - foot), Vector2(view.x, view.y), Vector2(0, view.y)]), PackedColorArray([clear, clear, dark, dark]))
+
+
+## A soft shadow around the pit, so it sits in the ground instead of on it.
+func _draw_pit_shadow(hole: Rect2) -> void:
+	for i in 16:
+		var grow: float = 3.0 + float(i) * 2.2
+		var area := Rect2(hole.position.x - grow, hole.position.y - grow + 3.0, hole.size.x + grow * 2.0, hole.size.y + grow * 2.0)
+		_fill_around(area, hole, Color(0.13, 0.07, 0.02, 0.04))
 
 
 func _fill_around(area: Rect2, hole: Rect2, color: Color) -> void:
@@ -182,10 +206,35 @@ func _draw_pit_lips() -> void:
 	draw_line(Vector2(cut.position.x, cut.position.y), Vector2(cut.end.x, cut.position.y), LIP_LINE, 2.0)
 	draw_rect(Rect2(cut.position.x - 1.0, cut.position.y, 1.0, cut.size.y), shade)
 	draw_rect(Rect2(cut.end.x, cut.position.y, 1.0, cut.size.y), shade)
-	var near := Rect2(cut.position.x - 3.0, cut.end.y, cut.size.x + 6.0, 6.0)
-	draw_rect(near, GROUND_DEEP.lerp(GROUND, 0.28))
-	draw_line(Vector2(cut.position.x, cut.end.y), Vector2(cut.end.x, cut.end.y), LIP_LINE, 1.5)
+	var pit := Rect2(cut.position, cut.size + Vector2(0.0, Tuning.pit_front_h()))
+	_draw_pit_frame(pit)
 	_draw_grid_tape(cut)
+
+
+## A timber frame around the pit: dark outline, warm wood, a lit top edge and
+## brass rivets. It stays outside the cutout, so it never covers the dig.
+func _draw_pit_frame(cut: Rect2) -> void:
+	var w: float = 5.0
+	var outer: Rect2 = cut.grow(w)
+	_fill_around(outer, cut, Color("4E3927"))
+	var lit := Color("8A6A44")
+	draw_line(Vector2(outer.position.x, outer.position.y + 1.0), Vector2(outer.end.x, outer.position.y + 1.0), lit, 2.0)
+	draw_line(Vector2(outer.position.x + 1.0, outer.position.y), Vector2(outer.position.x + 1.0, outer.end.y), Color(lit, 0.6), 1.5)
+	draw_line(Vector2(outer.position.x, outer.end.y - 1.0), Vector2(outer.end.x, outer.end.y - 1.0), Color("2A1C10"), 2.0)
+	draw_rect(outer, Color("1B120B"), false, 2.0)
+	draw_rect(cut.grow(0.5), Color("1B120B"), false, 1.5)
+	var rivets: Array[Vector2] = [
+		Vector2(outer.position.x + w * 0.5, outer.position.y + w * 0.5),
+		Vector2(outer.end.x - w * 0.5, outer.position.y + w * 0.5),
+		Vector2(outer.position.x + w * 0.5, outer.end.y - w * 0.5),
+		Vector2(outer.end.x - w * 0.5, outer.end.y - w * 0.5),
+		Vector2(outer.get_center().x, outer.position.y + w * 0.5),
+		Vector2(outer.get_center().x, outer.end.y - w * 0.5),
+	]
+	for at in rivets:
+		draw_circle(at, 2.0, Color("1B120B"))
+		draw_circle(at, 1.4, Color("C9A056"))
+		draw_circle(at + Vector2(-0.4, -0.4), 0.6, Color("F2DFA0"))
 
 
 func _draw_grid_tape(cut: Rect2) -> void:
