@@ -125,8 +125,8 @@ func _test_pit_footprint_stays_fixed() -> void:
 	var start_cell_w: float = TN.cell_w
 	var start_cell_h: float = TN.cell_h
 	_assert(TN.grid_w == 5 and TN.grid_h == 4, "start still uses a 5x4 cell count")
-	_assert(is_equal_approx(start_w, TN.fitted_pit_size().x), "start pit uses the full fitted width")
-	_assert(is_equal_approx(start_h, TN.fitted_pit_size().y), "start pit uses the full fitted height")
+	_assert(is_equal_approx(start_w, 16.0 * TN.base_cell_w), "start pit uses the full 1024px width")
+	_assert(is_equal_approx(start_h, 10.0 * TN.base_cell_h), "start pit uses the full 400px height")
 	_assert(start_cell_w > 64.0 and start_cell_h > 40.0, "start cells are larger than late-game cells")
 	TN.site_size_rank = 8
 	TN.apply_site_layout()
@@ -640,7 +640,7 @@ func _test_apex_ranks_add_power() -> void:
 	GS.levels["blockbuster_feature"] = 1
 	GS.apply_upgrades()
 	_assert(float(TN.donation_mult) > donation, "Blockbuster raises the ticket")
-	_assert(int(TN.visitor_flat) > visitors, "Blockbuster draws more visitors")
+	_assert(float(TN.visitor_mult) > 1.0, "Blockbuster draws more visitors")
 	_assert(float(TN.unveil_spike_seconds) > unveil, "Blockbuster lengthens unveil")
 	_assert(float(TN.spotlight_mult) > featured, "Blockbuster raises featured")
 	GS.levels["blockbuster_feature"] = int(_item("blockbuster_feature").get("max", 2))
@@ -729,8 +729,8 @@ func _test_fullscreen_pixels_do_not_become_play_view() -> void:
 	TN.view_h = 1080.0
 	TN.site_size_rank = 0
 	TN.apply_site_layout()
-	_assert(float(TN.grid_w) * TN.cell_w <= 16.0 * TN.base_cell_w + 0.5, "fullscreen never grows past the 1024px pit")
-	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, TN.fitted_pit_size().y), "fullscreen fills the fitted pit height")
+	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "fullscreen keeps the 1024px pit")
+	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "fullscreen keeps the 400px pit")
 	TN.view_w = 1280.0
 	TN.view_h = 720.0
 	TN.apply_site_layout()
@@ -748,10 +748,10 @@ func _test_footer_chrome_stays_below_pit() -> void:
 	var face: float = float(TN.pit_face_bottom())
 	var chunk_end: float = face + float(TN.chunk_front)
 	var footer: float = float(TN.footer_top())
-	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, TN.fitted_pit_size().x), "layout keeps the fitted pit width")
-	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, TN.fitted_pit_size().y), "layout keeps the fitted pit height")
-	_assert(footer >= chunk_end, "the ribbon band starts below the dirt chunk")
-	_assert(footer + 88.0 <= TN.view_h, "a reward ribbon fits under the pit")
+	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "footer layout keeps the 1024px pit")
+	_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "footer layout keeps the 400px pit")
+	_assert(footer >= chunk_end, "find chrome starts below the dirt chunk")
+	_assert(footer + 120.0 <= TN.view_h - 8.0, "find grade/stars fit under the pit")
 
 
 func _test_find_footer_stays_on_screen() -> void:
@@ -770,7 +770,7 @@ func _test_find_footer_stays_on_screen() -> void:
 	_assert(find_top >= float(TN.footer_top()), "find band stays below the pit chunk")
 	_assert(find_bottom - find_top >= 88.0, "find band is tall enough for value, grade, and stars")
 	_assert(find_bottom <= TN.view_h - 4.0, "find band stays above the window bottom")
-	_assert(gutter >= float(TN.hud_rail_w()), "pit sits right of the tools rail")
+	_assert(gutter >= 120.0, "chips stay inset to the pit, not the old Menu gutters")
 	var hud_script: Script = load("res://hud.gd") as Script
 	_assert(hud_script != null, "HUD script loads")
 	if hud_script == null:
@@ -789,11 +789,13 @@ func _test_find_footer_stays_on_screen() -> void:
 		return
 	var finds_label: Label = hud.get("_finds_label") as Label
 	if finds_label != null:
-		_assert(finds_label.position.x >= pit.end.x, "HUD parks the Finds label in the right rail")
+		_assert(is_equal_approx(finds_label.position.y, find_top) or finds_label.position.y >= find_top - 0.5, "HUD parks the Finds label at the reserved band")
 		_assert(find_box.position.y >= finds_label.position.y + finds_label.size.y - 0.5, "chips sit under the Finds label")
-	_assert(find_box.position.x >= pit.end.x, "HUD parks the Finds list beside the pit")
-	_assert(find_box.position.y + find_box.size.y <= TN.view_h - 4.0, "HUD find list stays above the window bottom")
-	_assert(find_box.position.y >= pit.position.y - 0.5, "HUD find list starts level with the pit")
+	_assert(find_box.position.y >= find_top - 0.5, "HUD parks the find footer in the reserved band")
+	_assert(find_box.position.y + find_box.size.y <= TN.view_h - 4.0, "HUD find footer stays above the window bottom")
+	_assert(is_equal_approx(find_box.position.x, pit.position.x + 10.0), "HUD find chips start under the pit")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "HUD find chips use the pit width")
+	_assert(find_box.position.x >= gutter - 0.5, "HUD find text stays pit-aligned")
 	_assert(find_box.position.x + find_box.size.x <= TN.view_w - 4.0, "HUD find chips stay on screen in the slim right field")
 	var content_h: float = find_box.get_combined_minimum_size().y
 	if content_h <= 0.0:
@@ -908,7 +910,7 @@ func _test_find_footer_shows_one_extract_readout() -> void:
 		_assert(body.find("Dust") < 0 and body.find("Clean") < 0, "extract chip does not say Dust or Clean")
 		_assert(icon != null, "extract chip shows the bone doodle")
 	if find_box != null:
-		_assert(find_box.position.x >= float(TN.pit_grid_rect().end.x), "extract readout stays in the Finds rail")
+		_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "extract readout stays in the reserved find band")
 		var content_h: float = find_box.get_combined_minimum_size().y
 		if content_h <= 0.0:
 			content_h = _tray_content_h(find_box)
@@ -976,7 +978,7 @@ func _test_find_chip_keeps_related_stats_together() -> void:
 		if content_h <= 0.0:
 			content_h = _tray_content_h(find_box)
 		_assert(content_h <= find_box.size.y + 1.0, "grouped chips still fit in the find band")
-		_assert(find_box.position.x >= float(TN.pit_grid_rect().end.x), "grouped chips stay off the dirt")
+		_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "grouped chips stay below the dirt")
 	hud.queue_free()
 
 
@@ -1139,8 +1141,11 @@ func _test_find_chips_sit_in_footer_band() -> void:
 	if find_box == null:
 		hud.queue_free()
 		return
+	_assert(find_box.position.y >= float(TN.footer_find_top()) - 0.5, "chips sit in the reserved footer band")
+	_assert(find_box.position.y >= float(TN.pit_face_bottom()) + float(TN.chunk_front) - 0.5, "chips sit below the dirt, not on cells")
 	var pit: Rect2 = TN.pit_grid_rect() if TN.has_method("pit_grid_rect") else Rect2(TN.grid_origin, Vector2(float(TN.grid_w) * TN.cell_w, float(TN.grid_h) * TN.cell_h))
-	_assert(find_box.position.x >= pit.end.x + float(TN.chunk_pad) - 0.5, "chips sit in the right rail, not on cells")
+	_assert(is_equal_approx(find_box.position.x, pit.position.x + 10.0), "chips start at the pit's left edge")
+	_assert(is_equal_approx(find_box.size.x, pit.size.x - 20.0), "chips use the full pit width")
 	_assert(not pit.intersects(Rect2(find_box.position, find_box.size)), "chips do not sit on the pit grid")
 	_assert(hud.get("_work_card") == null, "find chips have no working-find card to overlap")
 	var chips: Array = _hud_chips(hud)
@@ -1174,7 +1179,7 @@ func _test_full_uncover_flies_to_footer_chip() -> void:
 		_assert(hud != null and hud.has_method("find_chip_catch_pos"), "HUD exposes each chip as a fly target")
 		if hud != null and hud.has_method("find_chip_catch_pos"):
 			var pos: Vector2 = hud.call("find_chip_catch_pos", 0)
-			_assert(pos.x >= float(TN.pit_grid_rect().end.x), "fly target is the Finds card, not the wallet")
+			_assert(pos.y >= float(TN.footer_find_top()) - 8.0, "fly target is the footer chip, not the wallet")
 			_assert(pos.y > 200.0, "fly target is not the pouch")
 		if hud != null and hud.has_method("catch_find"):
 			hud.call("catch_find", 0)

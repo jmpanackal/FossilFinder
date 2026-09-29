@@ -66,7 +66,10 @@ func _height() -> float:
 
 func _avg_line() -> String:
 	var total: int = int(info.get("total", 0))
-	return "Average of %d found bone%s: %.1f → %d stars" % [total, "" if total == 1 else "s", float(info.get("avg", 0.0)), int(info.get("stars", 0))]
+	var avg: float = float(info.get("avg", 0.0))
+	var stars: int = int(info.get("stars", 0))
+	var tail: String = " (rounded down)" if absf(avg - float(stars)) > 0.05 else ""
+	return "Average of %d found bone%s: %.1f → %d stars%s" % [total, "" if total == 1 else "s", avg, stars, tail]
 
 
 func _master_line() -> String:
@@ -77,7 +80,7 @@ func _master_line() -> String:
 	for b in _bones:
 		if int(b["cond"]) < need:
 			to_go += 1
-	return "Masterpiece: every bone at %d stars (%d to go)" % [need, to_go]
+	return "Masterpiece: all %d bones at %d stars (%d to go)" % [_bones.size(), need, to_go]
 
 
 func _star(center: Vector2, r: float, on: bool, color: Color = Ui.GOLD) -> void:

@@ -1349,7 +1349,8 @@ func _draw_stand_rate(stand_id: String) -> void:
 
 func stand_condition_stars(stand_id: String) -> int:
 	## Average condition of what is on the stand, as 0-5 stars (0 = empty).
-	return int(round(GameState.stand_condition(stand_id)))
+	## Rounded down, so 5 stars always means every bone is Perfect.
+	return int(floor(GameState.stand_condition(stand_id) + 0.001))
 
 
 func _draw_stand_condition(stand_id: String, chip: Rect2) -> void:

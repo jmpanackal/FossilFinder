@@ -48,8 +48,7 @@ var _bar_flash: float = 0.0
 ## Brushing raises the price: flash it green so dirt reads as money, not stars.
 var _price_flash: float = 0.0
 var _mini: bool = false
-var _mini_star_center: Vector2 = Vector2.ZERO
-var _mini_star_w: float = 44.0
+var _mini_star_y: float = 0.0
 
 
 static func color_for(index: int) -> Color:
@@ -167,11 +166,10 @@ func fit_tray(width: float, crowded: bool, condensed: bool = false, max_h: float
 	mouse_filter = Control.MOUSE_FILTER_PASS if condensed else Control.MOUSE_FILTER_IGNORE
 	var w: float = maxf(56.0, width)
 	_tight = w < 140.0
-	## Condensed = a one-line row: number, icon, name, stars, price.
-	_mini = condensed
+	## Very narrow condensed cards drop the icon: number, stars and price only.
+	_mini = condensed and w < 118.0
 	var compact: bool = crowded or w < 200.0
-	var base_h: float = 64.0 if _tight else 70.0
-	custom_minimum_size = Vector2(w, base_h if max_h == INF else clampf(max_h, 26.0, 84.0))
+	custom_minimum_size = Vector2(w, minf(64.0 if _tight else 70.0, maxf(max_h, 40.0)))
 	size = custom_minimum_size
 	_name_size = 11 if _tight else (13 if compact else 16)
 	_meta_size = 10 if _tight else (11 if compact else 12)
@@ -179,8 +177,10 @@ func fit_tray(width: float, crowded: bool, condensed: bool = false, max_h: float
 	## StarRating resets its own size on _ready; pin the caption size here.
 	_stars.custom_minimum_size = Vector2(40.0 if compact else 46.0, 7.0 if compact else 8.0)
 	if condensed:
-		_name_size = 13
-		_price_size = 12
+		## Condensed cards show only stars + price, so give them room.
+		_stars.custom_minimum_size = Vector2(62.0, 11.0) if not _mini else _mini_stars_size(w)
+		_price_size = 15 if not _mini else (13 if w >= 72.0 else 12)
+		_name_size = 16
 	_apply_fonts()
 	_layout()
 
@@ -188,7 +188,7 @@ func fit_tray(width: float, crowded: bool, condensed: bool = false, max_h: float
 ## StarRating sizes stars from its height; pick a height whose five stars
 ## fit the width, so the row stays centered on narrow cards.
 func _mini_stars_size(w: float) -> Vector2:
-	var sw: float = clampf(w - 12.0, 36.0, 50.0)
+	var sw: float = clampf(w - 12.0, 36.0, 60.0)
 	return Vector2(sw, floorf(sw / 5.9) + 1.0)
 
 
@@ -217,32 +217,29 @@ func catch_pos() -> Vector2:
 
 
 func _layout_condensed(w: float, body_h: float) -> void:
-	## One line: [#] [icon] Name ........ ★★★★☆  $price
-	_grade_row.visible = false
-	var mid: float = body_h * 0.5
-	_marker.position = Vector2(3.0, mid - 8.0)
-	var icon_s: float = clampf(body_h - 6.0, 14.0, 24.0)
-	_icon.visible = true
-	_icon.position = Vector2(22.0, mid - icon_s * 0.5)
+	_icon.visible = not _mini
+	if _mini:
+		var mrow: float = float(_meta_size) + 8.0
+		var my: float = (body_h - mrow * 2.0) * 0.5 + 3.0
+		## Stars are drawn by the card itself here (see _draw), centered exactly.
+		_grade_row.visible = false
+		_mini_star_y = my + mrow * 0.5
+		_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_price_label.position = Vector2(4.0, my + mrow)
+		_price_label.size = Vector2(w - 8.0, mrow)
+		return
+	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 34.0)
+	_icon.position = Vector2(PAD, (body_h - icon_s) * 0.5)
 	_icon.size = Vector2(icon_s, icon_s)
-	var font: Font = Ui.display_font()
-	var price_w: float = 0.0
-	if _price_label.visible:
-		price_w = font.get_string_size(_price_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _price_label.get_theme_font_size("font_size")).x + 2.0
-	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_price_label.position = Vector2(w - PAD - price_w, mid - 10.0)
-	_price_label.size = Vector2(price_w, 20.0)
-	var ss: Vector2 = _mini_stars_size(w)
-	_mini_star_w = ss.x
-	var stars_x: float = w - PAD - price_w - 6.0 - ss.x
-	_mini_star_center = Vector2(stars_x + ss.x * 0.5, mid)
-	var left: float = _icon.position.x + icon_s + 6.0
-	_name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_name_label.clip_text = true
-	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_name_label.position = Vector2(left, mid - 10.0)
-	_name_label.size = Vector2(maxf(stars_x - 6.0 - left, 10.0), 20.0)
+	var left: float = _icon.position.x + icon_s + 4.0
+	var col_w: float = maxf(w - PAD - left, 20.0)
+	var row_h: float = float(_meta_size) + 8.0
+	var y: float = (body_h - row_h * 2.0) * 0.5
+	_grade_row.position = Vector2(left, y)
+	_grade_row.size = Vector2(col_w, row_h)
+	_price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_price_label.position = Vector2(left, y + row_h)
+	_price_label.size = Vector2(col_w, row_h)
 
 
 func _layout() -> void:
@@ -252,7 +249,7 @@ func _layout() -> void:
 	## [brushing bar across the bottom]
 	var w: float = maxf(size.x, custom_minimum_size.x)
 	var h: float = maxf(size.y, custom_minimum_size.y)
-	var body_h: float = h - _bar_h()
+	var body_h: float = h - BAR_H
 	var icon_s: float = clampf(body_h - PAD * 2.0, 18.0, 36.0)
 	if _tight:
 		icon_s = 22.0
@@ -260,12 +257,9 @@ func _layout() -> void:
 	_icon.size = Vector2(icon_s, icon_s)
 	_marker.position = Vector2(2.0, 2.0)
 	_marker.size = Vector2(16.0, 16.0)
-	_bar.position = Vector2(0.0, h - _bar_h())
-	_bar.size = Vector2(w, _bar_h())
+	_bar.position = Vector2(0.0, h - BAR_H)
+	_bar.size = Vector2(w, BAR_H)
 	_icon.visible = true
-	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	_name_label.clip_text = false
 	if _condensed:
 		_layout_condensed(w, body_h)
 		queue_redraw()
@@ -294,14 +288,8 @@ func _layout() -> void:
 	var total: float = name_h
 	if _grade_row.visible:
 		total += line_h
-	## Recomputed every layout: an earlier, shorter pass may have hidden it.
-	_status_label.visible = not _status_label.text.is_empty() and not _tight and not _condensed
 	if _status_label.visible:
 		total += line_h
-		## Short cards drop the status line rather than clip it.
-		if total > body_h - 2.0:
-			_status_label.visible = false
-			total -= line_h
 	var y: float = maxf(1.0, (body_h - total) * 0.5)
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_label.position = Vector2(left, y)
@@ -320,8 +308,8 @@ func _layout() -> void:
 		_status_label.position = Vector2(left, y)
 		_status_label.size = Vector2(col_w, line_h)
 	_grade_row.custom_minimum_size = Vector2(0, 0)
-	_bar.position = Vector2(0.0, h - _bar_h())
-	_bar.size = Vector2(w, _bar_h())
+	_bar.position = Vector2(0.0, h - BAR_H)
+	_bar.size = Vector2(w, BAR_H)
 
 
 func _fit_name(room: float) -> int:
@@ -377,7 +365,7 @@ func _apply_stat_lines() -> void:
 	_grade_label.visible = not _grade_label.text.is_empty() and not _condensed
 	_grade_row.visible = (_grade_label.visible or show_stars) and (not _tight or _condensed) and not _mini
 	_status_label.visible = not _status_label.text.is_empty() and not _tight and not _condensed
-	_name_label.visible = true
+	_name_label.visible = not _condensed
 	_price_label.visible = not _price_label.text.is_empty()
 	_apply_fonts()
 
@@ -573,13 +561,14 @@ func _draw_mini_stars() -> void:
 	var stars: int = int(_card.get("stars", 0))
 	if stars <= 0 or _status == "underground":
 		return
-	var ss: Vector2 = _mini_stars_size(_mini_star_w + 12.0)
+	var w: float = maxf(size.x, custom_minimum_size.x)
+	var ss: Vector2 = _mini_stars_size(w)
 	var star: float = ss.y - 1.0
 	var gap: float = maxf(1.5, star * 0.22)
 	var row: float = star * 5.0 + gap * 4.0
-	var x0: float = _mini_star_center.x - row * 0.5 + star * 0.5
+	var x0: float = (w - row) * 0.5 + star * 0.5
 	for i in 5:
-		var c := Vector2(x0 + float(i) * (star + gap), _mini_star_center.y)
+		var c := Vector2(x0 + float(i) * (star + gap), _mini_star_y)
 		var pts := PackedVector2Array()
 		for k in 10:
 			var ang: float = -PI * 0.5 + float(k) * PI / 5.0
@@ -600,8 +589,3 @@ func _process(delta: float) -> void:
 	if _price_flash > 0.0:
 		_price_flash = maxf(0.0, _price_flash - delta * 2.2)
 		_price_label.add_theme_color_override("font_color", Ui.GOLD.lerp(Color("A8E07A"), _price_flash))
-
-
-## One-line rows get a thinner brushing bar so the text keeps its room.
-func _bar_h() -> float:
-	return 3.0 if _condensed else BAR_H

@@ -23,6 +23,8 @@ var sfx_volume: float = 1.0
 var fullscreen: bool = true
 
 var _overlay: Control
+var _menu_panel: Panel
+var _menu_box: VBoxContainer
 var _nav_bar: HBoxContainer
 var _menu_btn: Button
 var _back_btn: Button
@@ -94,6 +96,7 @@ func open_menu() -> void:
 		return
 	_set_overlay_open(true)
 	_refresh_controls()
+	_fit_menu_panel()
 	if get_tree() != null:
 		get_tree().paused = true
 	menu_toggled.emit(true)
@@ -326,6 +329,7 @@ func _build_ui() -> void:
 	panel.offset_right = 230
 	panel.offset_top = -330
 	panel.offset_bottom = 330
+	_menu_panel = panel
 
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -335,6 +339,7 @@ func _build_ui() -> void:
 	box.offset_bottom = -16
 	box.add_theme_constant_override("separation", 10)
 	panel.add_child(box)
+	_menu_box = box
 
 	var title := Label.new()
 	title.text = "Settings"
@@ -418,6 +423,18 @@ func _build_ui() -> void:
 	quit.pressed.connect(_on_quit_pressed)
 	box.add_child(quit)
 	quit.visible = not OS.has_feature("web")
+	_fit_menu_panel()
+
+
+## The panel hugs its contents (no empty band at the bottom), and re-fits when
+## the erase confirmation opens or closes.
+func _fit_menu_panel() -> void:
+	if _menu_panel == null or _menu_box == null:
+		return
+	var h: float = _menu_box.get_combined_minimum_size().y + 32.0
+	var half: float = ceilf(h * 0.5)
+	_menu_panel.offset_top = -half
+	_menu_panel.offset_bottom = half
 
 
 func _volume_row(caption: String, slider: HSlider, cb: Callable) -> VBoxContainer:
@@ -524,6 +541,7 @@ func _on_new_game_pressed() -> void:
 		_new_game.visible = false
 	if _confirm_wrap != null:
 		_confirm_wrap.visible = true
+	_fit_menu_panel()
 	Sfx.play("ui")
 
 
@@ -532,6 +550,7 @@ func _hide_new_game_confirm() -> void:
 		_confirm_wrap.visible = false
 	if _new_game != null:
 		_new_game.visible = true
+	_fit_menu_panel()
 
 
 func _on_new_game_confirmed() -> void:

@@ -98,9 +98,8 @@ func _layout() -> void:
 	var x: float = _anchor.x - size.x * 0.5
 	var view_w: float = Tuning.view_w
 	x = clampf(x, 8.0, maxf(8.0, view_w - size.x - 8.0))
-	## Sit in the band under the pit: never over the dig cells, never off-screen.
-	var y: float = maxf(_anchor.y, Tuning.pit_face_bottom() + 6.0)
-	y = minf(y, Tuning.view_h - size.y - 4.0)
+	## Straddle the tray's top edge, but never cover the dig cells above it.
+	var y: float = maxf(_anchor.y - size.y * 0.55, Tuning.pit_face_bottom() + 6.0)
 	position = Vector2(x, y)
 
 

@@ -64,14 +64,14 @@ var catalog: Array[Dictionary] = [
 	{"id": "round_time", "cat": "Site", "tier": 1, "name": "Longer Shift", "desc": "More seconds each dig.", "cost": 80, "scale": 1.95, "max": 4},
 	{"id": "dirt_pay", "cat": "Site", "tier": 1, "name": "Soil Bounty", "desc": "Small finds in the soil pay more, especially by hand.", "cost": 50, "scale": 1.9, "max": 5},
 	{"id": "site_size", "cat": "Site", "tier": 1, "name": "Wider Claim", "desc": "The next dig uses a larger pit.", "cost": 100, "scale": 2.1, "max": 3},
-	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Fossils", "desc": "More fossils can hide in the pit.", "unlock_name": "Scattered Fossils", "unlock_desc": "A second small fossil can hide in the pit.", "unlock_action": "Unlock", "cost": 160, "scale": 2.0, "max": 2},
-	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Extra fossils too.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 1400, "scale": 1.9, "max": 3},
+	{"id": "scrap_bed", "cat": "Site", "tier": 1, "name": "Scattered Fossils", "desc": "Better odds of extra fossils. Each one found may mean another is hiding.", "unlock_name": "Scattered Fossils", "unlock_desc": "Extra fossils may hide in the pit. You never know how many: keep digging to find out.", "unlock_action": "Unlock", "cost": 160, "scale": 2.0, "max": 2},
+	{"id": "rich_bed", "cat": "Site", "tier": 2, "name": "Rich Bed", "desc": "Better odds of extra fossils.", "unlock_name": "Rich Bed", "unlock_desc": "Large bones can appear in the pit.", "unlock_action": "Unlock", "cost": 1400, "scale": 1.9, "max": 3},
 	{"id": "site_expand", "cat": "Site", "tier": 2, "name": "Open Ground", "desc": "Stretch the claim much farther.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "rock_pay", "cat": "Site", "tier": 2, "name": "Stone Bounty", "desc": "Nodules and crystals in stone pay more.", "cost": 1000, "scale": 1.85, "max": 6},
 	{"id": "money_mult", "cat": "Site", "tier": 2, "name": "Keen Eye", "desc": "Everything you dig is worth more.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "fossil_value", "cat": "Site", "tier": 2, "name": "Careful Hands", "desc": "Clean fossils sell for more.", "cost": 1400, "scale": 1.85, "max": 6},
 	{"id": "round_marathon", "cat": "Site", "tier": 3, "name": "Marathon Shift", "desc": "Shifts run longer than a full Longer Shift.", "cost": 25000, "scale": 1.74, "max": 6},
-	{"id": "prime_bed", "cat": "Site", "tier": 3, "name": "Prime Bed", "desc": "More fossils can hide in the pit.", "cost": 28000, "scale": 1.7, "max": 4},
+	{"id": "prime_bed", "cat": "Site", "tier": 3, "name": "Prime Bed", "desc": "Better odds of extra fossils. Each one found may mean another is hiding.", "cost": 28000, "scale": 1.7, "max": 4},
 	{"id": "passive_miner", "cat": "Site", "tier": 3, "name": "Hired Hand", "desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_name": "Hired Hand", "unlock_desc": "A helper you can station on the claim before a shift. Placement comes later.", "unlock_action": "Unlock", "cost": 4800, "scale": 1.0, "max": 1, "requires": ["rich_bed", "shovel_super"]},
 	{"id": "lighting", "cat": "Museum", "tier": 1, "name": "Warm Lights", "desc": "The display earns more from visitors.", "cost": 500, "scale": 2.0, "max": 5},
 	{"id": "spotlight", "cat": "Museum", "tier": 1, "name": "Featured exhibit 2x", "desc": "Featured exhibit 3x.", "unlock_name": "Unlock Spotlight", "unlock_desc": "Featured exhibit 2x.", "unlock_action": "Unlock", "cost": 280, "scale": 1.9, "max": 3},
@@ -85,7 +85,7 @@ var catalog: Array[Dictionary] = [
 	{"id": "crowds", "cat": "Museum", "tier": 3, "name": "Weekend Crowds", "desc": "More foot traffic every second.", "cost": 4000, "scale": 1.95, "max": 6},
 	{"id": "restoration", "cat": "Museum", "tier": 3, "name": "Cleanup Crew", "desc": "Dirty finds still look decent on display.", "cost": 1600, "scale": 1.85, "max": 6},
 	{"id": "blockbuster_ticket", "cat": "Museum", "tier": 4, "name": "Box Office", "desc": "Tickets pay more.", "cost": 120000, "scale": 1.90, "max": 6},
-	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors every second.", "cost": 140000, "scale": 1.75, "max": 5},
+	{"id": "blockbuster_crowd", "cat": "Museum", "tier": 4, "name": "Sellout Crowd", "desc": "More visitors: +20% of your crowd per rank.", "cost": 140000, "scale": 1.75, "max": 5},
 	{"id": "blockbuster_hours", "cat": "Museum", "tier": 4, "name": "Encore Rush", "desc": "Unveiling rushes last longer.", "cost": 130000, "scale": 1.7, "max": 4},
 	{"id": "blockbuster_feature", "cat": "Museum", "tier": 4, "name": "Marquee", "desc": "The featured stand pays even more.", "cost": 150000, "scale": 1.65, "max": 2},
 ]
@@ -418,6 +418,7 @@ func _tuning_snapshot() -> Dictionary:
 		"exhibit_flat_income": Tuning.exhibit_flat_income,
 		"donation": Tuning.donation_base * Tuning.donation_mult + Tuning.donation_flat,
 		"visitor_flat": Tuning.visitor_flat,
+		"visitor_mult": Tuning.visitor_mult,
 		"dirty_income_factor": Tuning.dirty_income_factor,
 		"site_size_rank": Tuning.site_size_rank,
 		"extra_find_slots": Tuning.extra_find_slots,
@@ -503,10 +504,9 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			var layout: Vector2i = Tuning.site_layout_for_rank(int(at["site_size_rank"]))
 			return "Pit %d×%d" % [layout.x, layout.y]
 		"scrap_bed", "prime_bed":
-			return _extra_fossil_line(int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"]))))
+			return _extra_fossil_line(float(at["extra_find_chance"]), float(zero["extra_find_chance"]))
 		"rich_bed":
-			var slots: int = int(round(float(at["extra_find_slots"]) - float(zero["extra_find_slots"])))
-			var extra: String = _extra_fossil_line(slots)
+			var extra: String = _extra_fossil_line(float(at["extra_find_chance"]), float(zero["extra_find_chance"]))
 			if bool(at["big_finds_unlocked"]) and not bool(zero["big_finds_unlocked"]):
 				return "Unlocks large bones · %s" % extra if not extra.is_empty() else "Unlocks large bones"
 			return extra
@@ -522,8 +522,16 @@ func _format_shop_effect(id: String, zero: Dictionary, at: Dictionary) -> String
 			return _ticket_this_buy_line(float(at["donation"]) - float(zero["donation"]))
 		"spotlight", "blockbuster_feature":
 			return "Featured exhibit %dx" % int(round(float(at["spotlight_mult"])))
-		"glass_case", "crowds", "blockbuster_crowd":
+		"glass_case", "crowds":
 			return _visitor_this_buy_line(int(at["visitor_flat"]) - int(zero["visitor_flat"]))
+		"blockbuster_crowd":
+			var gain: float = float(at["visitor_mult"]) - float(zero["visitor_mult"])
+			var extra: int = int(round(float(museum_visitors_base()) / maxf(Tuning.visitor_mult, 0.01) * (float(at["visitor_mult"]) - float(zero["visitor_mult"]))))
+			var pct: String = "+%d%% visitors" % int(round(gain * 100.0))
+			var cash: float = _cents_money(float(extra) * museum_donation())
+			if cash < 0.01:
+				return pct
+			return _join_effects(PackedStringArray(["+$%.2f / sec" % cash, pct]))
 		"unveil_time", "blockbuster_hours":
 			return "Crowd surge on unveil +%ds" % int(round(float(at["unveil_spike_seconds"]) - float(zero["unveil_spike_seconds"])))
 		"unveil_crowd":
@@ -571,12 +579,12 @@ func _integrity_line(before: float, after: float) -> String:
 	return "Hits cost %d%% less integrity" % pct
 
 
-func _extra_fossil_line(slots: int) -> String:
-	if slots <= 0:
+func _extra_fossil_line(chance: float, before: float = 0.0) -> String:
+	if chance <= 0.0 or absf(chance - before) < 0.001:
 		return ""
-	if slots == 1:
-		return "+1 fossil in the pit"
-	return "+%d fossils in the pit" % slots
+	if before > 0.0:
+		return "Extra fossil odds %d%% → %d%%" % [int(round(before * 100.0)), int(round(chance * 100.0))]
+	return "Extra fossil odds %d%%" % int(round(chance * 100.0))
 
 
 func _radius_delta_line(zero: Dictionary, at: Dictionary, key: String = "shovel_radius") -> String:
@@ -707,7 +715,7 @@ func shop_hero_stats(cat: String) -> Array:
 			var layout: Vector2i = Tuning.site_layout_for_rank(Tuning.site_size_rank)
 			add.call("Shift", "%ds" % int(round(Tuning.round_seconds)))
 			add.call("Pit size", "%dx%d" % [layout.x, layout.y])
-			add.call("Extra fossils", "up to %d" % Tuning.extra_find_slots)
+			add.call("Extra fossil odds", "%d%%" % int(round(Tuning.extra_find_chance * 100.0)))
 			add.call("Finds pay", "x%.2f" % Tuning.money_mult)
 		"Museum":
 			add.call("Income", UiStyle.money_text(museum_income()) + "/s")
@@ -1067,7 +1075,10 @@ func apply_upgrades() -> void:
 	ticket_cents += _donation_rank_cents("blockbuster_ticket", int(_lv("blockbuster_ticket")))
 	Tuning.donation_mult = 1.0 + float(ticket_cents) / (Tuning.donation_base * 100.0)
 	Tuning.donation_flat = float(_donation_rank_cents("benches", int(_lv("benches")))) / 100.0
-	Tuning.visitor_flat = int(3 * _lv("glass_case") + 8 * _lv("crowds") + 8 * _lv("blockbuster_crowd"))
+	Tuning.visitor_flat = int(3 * _lv("glass_case") + 8 * _lv("crowds"))
+	## Late-game crowds scale with the museum (a flat +8 was a rounding error
+	## next to Box Office by the time you can afford it).
+	Tuning.visitor_mult = 1.0 + 0.20 * _lv("blockbuster_crowd")
 	Tuning.precision_damage_bonus = 0.0
 	Tuning.money_mult = float(_bases["money_mult"]) + 0.06 * _lv("money_mult")
 	Tuning.dirt_money_bonus = 0.35 * _lv("dirt_pay")
@@ -1078,8 +1089,11 @@ func apply_upgrades() -> void:
 	Tuning.exhibit_flat_income = 0.0
 	Tuning.dirty_income_factor = 1.0 + 0.12 * _lv("restoration")
 	Tuning.site_size_rank = int(_lv("site_size") + _lv("site_expand"))
-	Tuning.extra_find_slots = int(_lv("scrap_bed") + _lv("rich_bed") + _lv("prime_bed"))
-	Tuning.extra_find_chance = 0.28 + 0.12 * _lv("scrap_bed") + 0.16 * _lv("rich_bed") + 0.16 * _lv("prime_bed")
+	## Extra fossils are a chain of chances, not a fixed count: each one that
+	## shows up rolls for another, so you never know when the pit is empty.
+	var beds: float = _lv("scrap_bed") + _lv("rich_bed") + _lv("prime_bed")
+	Tuning.extra_find_slots = int(2.0 + beds * 2.0) if beds > 0.0 else 0
+	Tuning.extra_find_chance = minf(0.30 + 0.10 * _lv("scrap_bed") + 0.07 * _lv("rich_bed") + 0.05 * _lv("prime_bed"), 0.85) if beds > 0.0 else 0.0
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
 	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
 	Tuning.integrity_hit_cost = 0.0
@@ -1686,6 +1700,10 @@ func stand_visitors(stand_id: String) -> int:
 
 
 func museum_visitors_base() -> int:
+	return int(round(float(_museum_visitors_raw()) * Tuning.visitor_mult))
+
+
+func _museum_visitors_raw() -> int:
 	var total: int = int(Tuning.visitor_flat)
 	var seen: Dictionary = {}
 	for piece_id in pieces:

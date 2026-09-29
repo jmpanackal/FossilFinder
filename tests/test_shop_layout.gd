@@ -323,7 +323,7 @@ func _test_shop_copy_names_fossils_not_scraps() -> void:
 	_assert(str(item.get("name", "")).find("Fossil") >= 0, "title names fossils")
 	_assert(str(GS.shop_display_name("scrap_bed")).find("Fossil") >= 0, "unlock name names fossils")
 	_assert(str(GS.shop_effect_line("scrap_bed")).find("scrap") < 0, "this-buy does not say scrap")
-	_assert(str(GS.shop_effect_line("scrap_bed")) == "+1 fossil in the pit", "this-buy is +1 fossil in the pit")
+	_assert(str(GS.shop_effect_line("scrap_bed")).begins_with("Extra fossil odds"), "this-buy shows the extra fossil odds")
 	_assert(str(item.get("desc", "")).find("scrap") < 0, "flavor does not say scrap")
 	_assert(str(item.get("unlock_desc", "")).find("scrap") < 0, "unlock flavor does not say scrap")
 	_assert(str(GS.upgrade_feel_line("scrap_bed")).find("scrap") < 0, "feel line does not say scrap")
@@ -334,7 +334,7 @@ func _test_shop_copy_names_fossils_not_scraps() -> void:
 	GS.levels["scrap_bed"] = 1
 	GS.apply_upgrades()
 	_assert(str(GS.shop_display_name("scrap_bed")).find("Fossil") >= 0, "ranked title still names fossils")
-	_assert(str(GS.shop_effect_line("scrap_bed")) == "+1 fossil in the pit", "rank 2 this-buy stays +1 fossil in the pit")
+	_assert(str(GS.shop_effect_line("scrap_bed")).contains("→"), "rank 2 this-buy shows odds before → after")
 
 
 func _test_blunted_point_keeps_a_description() -> void:

@@ -435,10 +435,10 @@ func _place_fossils() -> void:
 		fossil = finds[0]["data"]
 		fossil_origin = finds[0]["origin"]
 		fossil_layer = int(finds[0]["layer"])
+	## A chain of chances: each extra fossil rolls for the next one.
 	var extras: int = 0
-	for _i in Tuning.extra_find_slots:
-		if randf() <= Tuning.extra_find_chance:
-			extras += 1
+	while extras < Tuning.extra_find_slots and randf() < Tuning.extra_find_chance:
+		extras += 1
 	var pool: Array = []
 	for path in Tuning.extra_fossil_paths:
 		var extra: FossilDataScript = load(str(path)) as FossilDataScript
@@ -557,12 +557,15 @@ func _try_place_find(data: FossilDataScript) -> bool:
 		)
 		var blocked := false
 		for offset in offsets:
-			if fossil_cells.has(origin + offset):
+			var at: Vector2i = origin + offset
+			## Keep a one-cell gap above and below other fossils: with the
+			## pit's perspective, a bone right behind another gets hidden.
+			if fossil_cells.has(at) or fossil_cells.has(at + Vector2i(0, -1)) or fossil_cells.has(at + Vector2i(0, 1)):
 				blocked = true
 				break
 		if blocked:
 			continue
-		var layer := randi_range(data.min_layer, data.max_layer)
+		var layer: int = _roll_find_layer(data)
 		var cells := {}
 		for offset in offsets:
 			var cell: Vector2i = origin + offset
@@ -575,7 +578,7 @@ func _try_place_find(data: FossilDataScript) -> bool:
 			"layer": layer,
 			"cells": cells,
 			"integrity": 1.0,
-			"condition": Tuning.roll_condition(),
+			"condition": Tuning.roll_condition(null, Tuning.depth_frac(layer) * Tuning.depth_condition_luck),
 			"kind": Tuning.roll_bone_kind(),
 			"air": 0.0,
 			"crumbled": 0,
@@ -587,6 +590,15 @@ func _try_place_find(data: FossilDataScript) -> bool:
 		})
 		return true
 	return false
+
+
+## Bigger, pricier bones sit deeper in their range, so the best finds wait at
+## the bottom of the pit.
+func _roll_find_layer(data: FossilDataScript) -> int:
+	var cells: int = data.occupied_cells() if data.has_method("occupied_cells") else 1
+	var prize: float = clampf(float(cells - 1) / 4.0 + float(data.base_value) / 120.0, 0.0, 2.0)
+	var t: float = pow(randf(), 1.0 / (1.0 + prize * 1.5))
+	return clampi(int(round(lerpf(float(data.min_layer), float(data.max_layer), t))), data.min_layer, data.max_layer)
 
 
 func _find_at(cell: Vector2i) -> Dictionary:
@@ -1404,6 +1416,12 @@ func _extract_find(find: Dictionary, _require_clean: bool) -> void:
 	var cond: int = int(find.get("condition", Tuning.CONDITION_GOOD))
 	find["extracted"] = true
 	find["extracted_clean"] = clean >= Tuning.clean_extract_threshold
+	## Lifting the bone out uncovers the next dirt layer underneath it.
+	for raw in find.get("cells", {}):
+		var c: Vector2i = raw
+		if _in_bounds(c):
+			_top_layer[c.x][c.y] = mini(maxi(_top_layer[c.x][c.y], int(find.get("layer", 0)) + 1), Tuning.layer_count - 1)
+	_grid_dirty = true
 	_focus_find(find)
 	var data: FossilDataScript = find["data"]
 	var value: int = _find_value(find, data)
@@ -1820,7 +1838,7 @@ func _draw_cell_sides(x: int, y: int) -> void:
 
 func _cell_face_color(x: int, y: int) -> Color:
 	var cell := Vector2i(x, y)
-	if _is_exposed_fossil(cell):
+	if _is_exposed_fossil(cell) and not bool(_find_at(cell).get("extracted", false)):
 		## The side matches what is on top: dirt while it is dirty, bone as it
 		## is brushed clean, so the column never looks two-toned.
 		var bone: Color = _bone_color(cell)
@@ -1844,9 +1862,10 @@ func _draw_top(x: int, y: int) -> void:
 	var color: Color
 	var painted: bool = false
 	var bone: bool = exposed_cells.has(cell)
-	if bone and bool(_find_at(cell).get("extracted", false)):
-		_draw_collected_hollow(rect, cell)
-		return
+	var collected: bool = bone and bool(_find_at(cell).get("extracted", false))
+	if collected:
+		## The bone is gone: show the dirt layer that was under it.
+		bone = false
 	if bone:
 		color = _bone_color(cell)
 		if _bone_pulse > 0.0:
@@ -1870,6 +1889,8 @@ func _draw_top(x: int, y: int) -> void:
 		_draw_inclusion(rect, cell)
 	if not bone and sensed_cells.has(cell):
 		_draw_sensed(rect)
+	if collected:
+		_draw_collected_imprint(rect, cell)
 	if bone:
 		_draw_bone_mark(rect, cell, 1.0)
 		var host := _find_at(cell)
@@ -1879,6 +1900,13 @@ func _draw_top(x: int, y: int) -> void:
 			_draw_plaster(rect, cell)
 		else:
 			_draw_dust(rect, cell)
+
+
+func _draw_collected_imprint(rect: Rect2, cell: Vector2i) -> void:
+	## A faint print of the bone pressed into the dirt below it.
+	var data = _find_at(cell).get("data", null)
+	if data != null and data.has_method("draw_silhouette"):
+		data.draw_silhouette(self, rect.grow(-6.0), Color(0, 0, 0, 0.18))
 
 
 func _draw_collected_hollow(rect: Rect2, cell: Vector2i) -> void:

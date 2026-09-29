@@ -23,21 +23,8 @@ func hotkey_for_tool(tool: int) -> String:
 			return ""
 
 
-## Left rail: slim icon tool cards (descriptions show on hover).
 func hud_rail_w() -> float:
-	return 100.0
-
-
-## Right rail: the Finds list, one card per bone in discovery order.
-func finds_rail_w() -> float:
-	return 260.0
-
-
-## Band under the pit kept free for reward ribbons and toasts.
-const RIBBON_BAND_H := 112.0
-## Cells may grow up to this much taller than the art's base aspect, so the
-## pit fills the space between the rails instead of leaving a gap below it.
-const PIT_STRETCH_MAX := 1.3
+	return 184.0
 
 const MAT_LOOSE := 0
 const MAT_PACKED := 1
@@ -210,6 +197,7 @@ var donation_base: float = 0.02
 var donation_mult: float = 1.0
 var donation_flat: float = 0.0
 var visitor_flat: int = 0
+var visitor_mult: float = 1.0
 var visitor_draw_scrap_clean: int = 4
 var visitor_draw_scrap_dirty: int = 2
 var visitor_draw_exhibit_clean: int = 5
@@ -382,9 +370,17 @@ func condition_odds(luck: float = -1.0) -> PackedFloat32Array:
 	return odds
 
 
-func roll_condition(rng: RandomNumberGenerator = null) -> int:
+## Deeper bones were buried faster and kept safer: extra luck at the bottom.
+var depth_condition_luck: float = 1.2
+
+
+func depth_frac(layer: int) -> float:
+	return clampf(float(layer) / float(maxi(layer_count - 1, 1)), 0.0, 1.0)
+
+
+func roll_condition(rng: RandomNumberGenerator = null, bonus: float = 0.0) -> int:
 	var roll: float = rng.randf() if rng != null else randf()
-	var odds := condition_odds()
+	var odds := condition_odds(condition_luck + bonus)
 	for i in odds.size():
 		roll -= odds[i]
 		if roll <= 0.0:
@@ -605,12 +601,10 @@ func shovel_hit_cells(center: Vector2i, radius: float, precision: bool = false) 
 
 func fitted_pit_size() -> Vector2:
 	var footprint: Vector2 = reference_pit_size()
-	var max_w: float = maxf(view_w - hud_rail_w() - finds_rail_w() - chunk_pad * 2.0 - 8.0, 160.0)
-	var max_h: float = maxf(view_h - hud_h - chunk_front - RIBBON_BAND_H - chunk_pad, 120.0)
-	var sx: float = minf(1.0, max_w / footprint.x)
-	## Height follows width, stretched a little taller when there is room.
-	var sy: float = minf(sx * PIT_STRETCH_MAX, max_h / footprint.y)
-	return Vector2(footprint.x * sx, footprint.y * sy)
+	var max_w: float = maxf(view_w - 90.0, 160.0)
+	var max_h: float = maxf(view_h - hud_h - find_bar_h - chunk_front - 24.0, 120.0)
+	var scale: float = minf(1.0, minf(max_w / footprint.x, max_h / footprint.y))
+	return footprint * scale
 
 
 func apply_cell_metrics() -> void:

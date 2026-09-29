@@ -100,7 +100,7 @@ func _test_pit_cutout_matches_chunk() -> void:
 	_assert(cut.end.x >= TN.grid_origin.x + float(TN.grid_w) * TN.cell_w + pad - 0.5, "cutout still includes the east pad")
 	_assert(cut.position.y < cells_top - pad + 0.5, "cutout starts at or above the north pad")
 	_assert(is_equal_approx(cut.end.y, cells_top + cells_h), "cutout south edge still meets the grid")
-	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, TN.fitted_pit_size().x), "cutout uses the fitted pit")
+	_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "cutout still uses the 1024px pit")
 	_assert(Site.has_method("horizon_y"), "backdrop still exposes horizon_y")
 	if Site.has_method("horizon_y"):
 		_assert(is_equal_approx(float(Site.horizon_y()), 0.0), "no far-edge sky wash — ground fills the window")
@@ -439,8 +439,8 @@ func _test_north_pad_is_shaft_dark_not_field() -> void:
 		var face: Rect2 = site.call("north_face_rect")
 		_assert(face.position.y <= pad.position.y + 0.5, "north face starts at the pad")
 		_assert(face.end.y >= pad.end.y - 0.5, "north face fills down to row 0")
-		_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, TN.fitted_pit_size().x), "play cells fill the fitted width")
-		_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, TN.fitted_pit_size().y), "play cells fill the fitted height")
+		_assert(is_equal_approx(float(TN.grid_w) * TN.cell_w, 16.0 * TN.base_cell_w), "play cells stay 1024 wide")
+		_assert(is_equal_approx(float(TN.grid_h) * TN.cell_h, 10.0 * TN.base_cell_h), "play cells stay 400 tall")
 	site.free()
 
 
