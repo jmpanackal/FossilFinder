@@ -19,7 +19,7 @@ func _run() -> void:
 	TN = root.get_node("Tuning")
 	_test_new_skull_is_pending_unveil()
 	_test_scraps_mount_in_small_finds()
-	_test_first_amber_speck_fills_the_hall_cell()
+	_test_amber_speck_never_becomes_an_exhibit()
 	_test_every_extractable_has_a_stand()
 	_test_old_save_piece_is_not_pending()
 	_test_empty_stands_never_pending()
@@ -81,44 +81,13 @@ func _test_scraps_mount_in_small_finds() -> void:
 	_assert(float(GS.piece_income("tooth")) < float(TN.piece_income_exhibit), "a tooth stays on scrap income")
 
 
-func _test_first_amber_speck_fills_the_hall_cell() -> void:
+func _test_amber_speck_never_becomes_an_exhibit() -> void:
+	## A sifted agate chip is cash only. The Amber Insect exhibit has to be dug up.
 	_reset()
-	_assert(GS.has_method("try_mount_matrix_find"), "matrix juice can claim a hall cell")
-	if not GS.has_method("try_mount_matrix_find"):
-		return
-	var mounted: bool = bool(GS.call("try_mount_matrix_find", {
-		"name": "amber speck",
-		"amount": 8,
-		"rarity": 2,
-	}))
-	_assert(mounted, "the first amber speck is the hall Amber")
-	_assert(GS.has_piece("amber_insect"), "Amber Insect is now in the collection")
-	_assert(GS.stand_for_piece("amber_insect") == "small_finds", "that Amber sits in Small Finds")
-	_assert(GS.stand_is_filled("small_finds"), "the case fills once Amber is collected")
-	_assert(GS.stand_has_pending_unveil("small_finds"), "new Amber waits under a ribbon")
-	var exhibit: Node2D = Node2D.new()
-	exhibit.set_script(load("res://museum_exhibit.gd"))
-	root.add_child(exhibit)
-	_assert(exhibit.has_method("case_owned"), "the case can say which scraps are on display")
-	if exhibit.has_method("case_owned"):
-		_assert(bool(exhibit.call("case_owned", "amber_insect")), "the Amber cell is filled")
-		_assert(not bool(exhibit.call("case_owned", "trilobite")), "the empty trilobite cell stays empty")
-	var extra: bool = bool(GS.call("try_mount_matrix_find", {
-		"name": "amber speck",
-		"amount": 5,
-		"rarity": 2,
-	}))
-	_assert(not extra, "later amber specks stay juice, not a second mount")
-	_assert(int(GS.piece_count("amber_insect")) == 1, "the hall keeps one Amber")
-	_assert(not bool(GS.call("try_mount_matrix_find", {
-		"name": "tiny toothlet",
-		"amount": 3,
-		"rarity": 1,
-	})), "a toothlet still does not become a museum tooth")
-	_assert(not GS.has_piece("tooth") and not GS.has_piece("t_rex_tooth"), "matrix toothlet stays off the mounts")
+	_assert(not GS.has_method("try_mount_matrix_find"), "sifted finds cannot claim a hall cell")
+	_assert(not GS.has_piece("amber_insect"), "no Amber Insect without digging one up")
 	var main_src: String = FileAccess.get_file_as_string("res://main.gd")
-	_assert(main_src.find("try_mount_matrix_find") >= 0, "layer juice offers Amber to the hall")
-	exhibit.free()
+	_assert(main_src.find("try_mount_matrix_find") < 0, "layer juice no longer offers Amber to the hall")
 
 
 func _test_every_extractable_has_a_stand() -> void:

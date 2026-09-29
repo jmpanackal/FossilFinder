@@ -499,8 +499,6 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 	Hints.teach("sifted")
 	for i in juice.size():
 		var find: Dictionary = juice[i]
-		if GameState.has_method("try_mount_matrix_find"):
-			GameState.try_mount_matrix_find(find)
 		var origin: Vector2 = _find_origin(find, world_pos)
 		var offset := Vector2((float(i) - float(juice.size() - 1) * 0.5) * 18.0, float(i) * -10.0)
 		var color := Color("E4B75A")
@@ -558,6 +556,8 @@ static func condition_tier(condition: int) -> int:
 			return 2
 		_:
 			return 3
+
+
 ## Which bone a find banner is about: its name and piece id (empty if unknown).
 func _find_identity(index: int) -> Dictionary:
 	if dig_site != null and index >= 0 and index < dig_site.finds.size():
@@ -565,8 +565,6 @@ func _find_identity(index: int) -> Dictionary:
 		var data: Variant = find.get("data", null)
 		return {"name": str(data.name) if data != null else "", "piece": str(find.get("piece_id", ""))}
 	return {"name": "", "piece": ""}
-
-
 
 
 func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> void:

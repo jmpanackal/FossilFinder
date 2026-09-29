@@ -1231,23 +1231,6 @@ func _duplicate_sale(cleanliness: float, set_bonus: bool, condition: int = Tunin
 	return int(round(bonus))
 
 
-func try_mount_matrix_find(find: Dictionary) -> bool:
-	var piece_id: String = _matrix_hall_piece(find)
-	if piece_id.is_empty() or has_piece(piece_id):
-		return false
-	var data: FossilData = fossil_data_for(piece_id)
-	var display_name: String = data.name if data != null else "Amber Insect"
-	install_find(piece_id, display_name, 0.35, false)
-	return true
-
-
-func _matrix_hall_piece(find: Dictionary) -> String:
-	var key: String = str(find.get("name", "")).to_lower()
-	if key.find("amber") >= 0:
-		return "amber_insect"
-	return ""
-
-
 func install_find(piece_id: String, display_name: String, cleanliness: float, clean: bool, condition: int = Tuning.CONDITION_GOOD) -> String:
 	var stand_id: String = stand_for_piece(piece_id)
 	var was_complete: bool = stand_id != "" and stand_is_complete(stand_id)
