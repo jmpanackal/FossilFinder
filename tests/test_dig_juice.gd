@@ -101,8 +101,9 @@ func _test_cracks_read_on_damaged_dirt() -> void:
 
 func _test_pick_shake_kicks() -> void:
 	_assert(bool(TN.shake_enabled), "pick shake stays on the existing camera hook")
-	_assert(float(TN.shake_strength) >= 7.0, "pick shake is a real kick")
-	_assert(float(TN.shake_time) >= 0.16, "pick shake lasts long enough to feel")
+	## Toned down for late game (fast picks shake often); still noticeable.
+	_assert(float(TN.shake_strength) >= 4.0 and float(TN.shake_strength) <= 6.0, "pick shake is a noticeable but gentle kick")
+	_assert(float(TN.shake_time) >= 0.12, "pick shake lasts long enough to feel")
 
 
 func _test_money_floats_are_loud() -> void:

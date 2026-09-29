@@ -490,7 +490,9 @@ func _condition_line(card: Dictionary) -> String:
 func _meter_line(card: Dictionary) -> String:
 	var left: float = float(card.get("crumble_in", INF))
 	if left != INF and not bool(card.get("extracted", false)):
-		return "%s · -1 star in %ds" % [str(card.get("kind_name", "Fragile")), int(ceil(left))]
+		## Plain words: it is crumbling, and plaster (hold Hands) saves it.
+		var lead: String = "Plaster it!" if Tuning.cast_owned() else "Crumbling"
+		return "%s -1 star in %ds" % [lead, int(ceil(left))]
 	if bool(card.get("cast", false)) and not bool(card.get("extracted", false)):
 		return "Plastered · stars safe"
 	if _status == "bagged" or bool(card.get("extracted", false)):

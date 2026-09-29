@@ -39,6 +39,7 @@ var _income_accum: float = 0.0
 var _bases: Dictionary = {}
 var _fossil_by_id: Dictionary = {}
 var _stand_ids_cache: Dictionary = {}
+var _stand_scale_cache: Dictionary = {}
 
 var catalog: Array[Dictionary] = [
 	{"id": "hands_click", "cat": "Hands", "tier": 1, "name": "Calloused Fingers", "desc": "A careful one-cell harvest. Better finds and more $. Weaker dirt than a shovel, and they do not chip bone.", "cost": 8, "scale": 1.65, "max": 5},
@@ -47,13 +48,13 @@ var catalog: Array[Dictionary] = [
 	{"id": "hands_cast", "cat": "Hands", "tier": 1, "name": "Plaster Cast", "desc": "Wrap crumbling bones faster, before they lose stars.", "unlock_name": "Plaster Cast", "unlock_desc": "Hold Hands on a dug-out Fragile or Opal bone to wrap it in plaster, like a cast on a broken arm, and lift it out. Its stars stop dropping. Brush it first: it leaves as clean as it is.", "unlock_action": "Unlock", "cost": 140, "scale": 2.2, "max": 3},
 	{"id": "hands_craft", "cat": "Hands", "tier": 2, "name": "Fieldcraft", "desc": "Better finds and more $. With Bone Sense, a much wider feel for buried bone.", "cost": 1500, "scale": 1.85, "max": 6},
 	{"id": "hands_swift", "cat": "Hands", "tier": 2, "name": "Quick Hands", "desc": "Hold harvests faster.", "cost": 1800, "scale": 1.8, "max": 5},
-	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt harder.", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
+	{"id": "shovel_click", "cat": "Shovel", "tier": 1, "name": "Heavy Swings", "desc": "Clicks hit dirt much harder (holding a bit harder too).", "unlock_name": "Shovel", "unlock_desc": "A rusty shovel. Barely better than your hands.", "cost": 24, "scale": 2.0, "max": 6},
 	{"id": "shovel_hold", "cat": "Shovel", "tier": 1, "name": "Steady Shoveling", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep digging.", "unlock_action": "Unlock", "cost": 75, "scale": 2.0, "max": 5, "requires": "shovel_click"},
 	{"id": "shovel_radius", "cat": "Shovel", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The shovel covers more than one cell.", "unlock_action": "Unlock", "cost": 120, "scale": 2.05, "max": 4, "requires": "shovel_click"},
 	{"id": "shovel_super", "cat": "Shovel", "tier": 2, "name": "Super Shovel", "desc": "A heavier class of shovel. Hits harder and covers more.", "cost": 4000, "scale": 1.95, "max": 6},
 	{"id": "shovel_soft", "cat": "Shovel", "tier": 2, "name": "Gentle Digging", "desc": "Digging gently means more bones come up in great shape.", "cost": 2200, "scale": 1.95, "max": 5},
 	{"id": "shovel_titan", "cat": "Shovel", "tier": 3, "name": "Titan Shovel", "desc": "The heaviest shovel. Hits harder and covers more.", "cost": 80000, "scale": 1.7, "max": 6},
-	{"id": "pick_click", "cat": "Pickaxe", "tier": 1, "name": "Sharp Strikes", "desc": "Clicks hit clay and rock harder.", "unlock_name": "Pickaxe", "unlock_desc": "Needed for clay and stone. Weak on dirt.", "cost": 145, "scale": 1.8, "max": 6, "requires": "shovel_click"},
+	{"id": "pick_click", "cat": "Pickaxe", "tier": 1, "name": "Sharp Strikes", "desc": "Clicks hit clay and rock much harder (holding a bit harder too).", "unlock_name": "Pickaxe", "unlock_desc": "Needed for clay and stone. Weak on dirt.", "cost": 145, "scale": 1.8, "max": 6, "requires": "shovel_click"},
 	{"id": "pick_hold", "cat": "Pickaxe", "tier": 1, "name": "Relentless Picking", "desc": "Hold digs faster.", "unlock_name": "Hold to Dig", "unlock_desc": "Click and hold to keep striking.", "unlock_action": "Unlock", "cost": 175, "scale": 1.8, "max": 5, "requires": "pick_click"},
 	{"id": "pick_radius", "cat": "Pickaxe", "tier": 1, "name": "Wider Scoop", "desc": "Covers more ground.", "unlock_name": "Wider Scoop", "unlock_desc": "The pickaxe cracks a wider patch of stone.", "unlock_action": "Unlock", "cost": 150, "scale": 1.9, "max": 4, "requires": "pick_click"},
 	{"id": "pick_super", "cat": "Pickaxe", "tier": 2, "name": "Super Pick", "desc": "A heavier pick. Clay and rock give faster.", "cost": 4500, "scale": 1.95, "max": 6},
@@ -1053,13 +1054,17 @@ func apply_upgrades() -> void:
 	Tuning.matrix_hands_quality = 0.10 * _lv("hands_click") + 0.045 * _lv("dirt_pay") + 0.08 * _lv("hands_craft")
 	Tuning.matrix_hands_pay = 1.0 + 0.12 * _lv("hands_click") + 0.06 * _lv("dirt_pay") + 0.10 * _lv("hands_craft")
 	Tuning.matrix_clear_pay = 0.50
-	Tuning.shovel_click_mult = float(_bases["shovel_click_mult"]) + 0.20 * shovel_ranks + 0.32 * _lv("shovel_super") + 0.32 * _lv("shovel_titan")
+	## Click ranks hit much harder than hold ranks speed up, and half of the
+	## click bonus carries into held digging, so they help every play style.
+	Tuning.shovel_click_mult = float(_bases["shovel_click_mult"]) + 0.40 * shovel_ranks + 0.32 * _lv("shovel_super") + 0.32 * _lv("shovel_titan")
+	Tuning.shovel_hold_mult = 1.0 + 0.5 * 0.40 * shovel_ranks
 	Tuning.shovel_hold_tick_rate = float(_bases["shovel_hold_tick_rate"]) + 0.55 * _lv("hands_hold") + 0.55 * _lv("hands_swift") + 0.85 * _lv("shovel_hold") + 0.70 * _lv("shovel_super") + 0.70 * _lv("shovel_titan")
 	# Unlock is one cell of reach (a plus). Rank 2 is a 3-wide scoop.
 	# Old 0.40/rank stayed under 1.0 through rank 2, so neighbors were skipped.
 	var scoop: float = _lv("shovel_radius")
 	Tuning.shovel_radius = 0.0 if scoop <= 0.0 else (0.5 + 0.5 * scoop + 0.5 * _lv("shovel_super") + 0.5 * _lv("shovel_titan"))
-	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.20 * pick_ranks + 0.32 * _lv("pick_super") + 0.32 * _lv("pick_titan")
+	Tuning.pickaxe_click_mult = float(_bases["pickaxe_click_mult"]) + 0.30 * pick_ranks + 0.32 * _lv("pick_super") + 0.32 * _lv("pick_titan")
+	Tuning.pickaxe_hold_mult = 1.0 + 0.5 * 0.30 * pick_ranks
 	Tuning.pickaxe_hold_tick_rate = float(_bases["pickaxe_hold_tick_rate"]) + 0.70 * _lv("pick_hold") + 0.55 * _lv("pick_super") + 0.55 * _lv("pick_titan")
 	Tuning.pickaxe_radius = 1.0 + 0.35 * _lv("pick_radius") + 0.35 * _lv("pick_super") + 0.35 * _lv("pick_titan")
 	Tuning.brush_clean_per_pixel = float(_bases["brush_clean_per_pixel"]) + 0.00055 * brush_ranks + 0.0007 * _lv("brush_master")
@@ -1092,8 +1097,12 @@ func apply_upgrades() -> void:
 	## Extra fossils are a chain of chances, not a fixed count: each one that
 	## shows up rolls for another, so you never know when the pit is empty.
 	var beds: float = _lv("scrap_bed") + _lv("rich_bed") + _lv("prime_bed")
-	Tuning.extra_find_slots = int(2.0 + beds * 2.0) if beds > 0.0 else 0
-	Tuning.extra_find_chance = minf(0.30 + 0.10 * _lv("scrap_bed") + 0.07 * _lv("rich_bed") + 0.05 * _lv("prime_bed"), 0.85) if beds > 0.0 else 0.0
+	## Bigger pits hold a little more too: each pit size step adds to the odds
+	## and the cap, so a big pit can surprise you even before the bed upgrades.
+	var pit_steps: float = float(Tuning.site_size_rank)
+	Tuning.extra_find_slots = int(2.0 + beds * 2.0 + pit_steps) if beds > 0.0 else int(pit_steps)
+	var bed_odds: float = 0.30 + 0.10 * _lv("scrap_bed") + 0.07 * _lv("rich_bed") + 0.05 * _lv("prime_bed") if beds > 0.0 else 0.0
+	Tuning.extra_find_chance = minf(bed_odds + 0.04 * pit_steps, 0.85)
 	Tuning.big_finds_unlocked = _lv("rich_bed") > 0.0
 	Tuning.passive_miner_owned = _lv("passive_miner") > 0.0
 	Tuning.integrity_hit_cost = 0.0
@@ -1235,7 +1244,11 @@ func stand_is_masterpiece(stand_id: String) -> bool:
 
 
 func masterpiece_bonus(stand_id: String) -> int:
-	return int(round(float(skeleton_bonus(stand_id)) * Tuning.masterpiece_bonus_mult))
+	## The hardest goal in the game pays like it: a big multiple of the bones'
+	## worth, or several minutes of museum income, whichever is larger.
+	var from_bones: float = float(skeleton_bonus(stand_id)) * Tuning.masterpiece_bonus_mult
+	var from_income: float = museum_income() * Tuning.masterpiece_income_seconds
+	return int(round(maxf(from_bones, from_income)))
 
 
 func _award_masterpiece(stand_id: String) -> void:
@@ -1681,7 +1694,26 @@ func piece_visitors(piece_id: String) -> int:
 	var draw: int = clean_draw if clean else clampi(int(round(float(dirty_draw) * Tuning.dirty_income_factor)), dirty_draw, clean_draw)
 	## Better-condition bones draw more visitors (Good = 1x).
 	var cond_mult: float = Tuning.condition_visitors(int(piece.get("condition", Tuning.CONDITION_GOOD)))
-	return int(round(float(draw * count) * cond_mult))
+	var scale: float = stand_size_scale(stand_for_piece(piece_id)) if exhibit else 1.0
+	return int(round(float(draw * count) * cond_mult * scale))
+
+
+## Dino skeletons need different bone counts (Velociraptor 6, T. rex 11).
+## Each bone's draw is scaled so a finished skeleton is worth about the same
+## whichever dino it is, with only a slight edge for the bigger ones.
+func stand_size_scale(stand_id: String) -> float:
+	if stand_id.is_empty():
+		return 1.0
+	if _stand_scale_cache.has(stand_id):
+		return float(_stand_scale_cache[stand_id])
+	var units: int = 0
+	for piece_id in stand_piece_ids(stand_id):
+		units += piece_need(str(piece_id))
+	units = maxi(units, 1)
+	var edge: float = 1.0 + Tuning.stand_size_edge * clampf(float(units - 6) / 5.0, 0.0, 1.0)
+	var scale: float = Tuning.stand_target_units / float(units) * edge
+	_stand_scale_cache[stand_id] = scale
+	return scale
 
 
 func stand_visitors(stand_id: String) -> int:
@@ -1845,13 +1877,29 @@ func reset_progress(path: String = SAVE_PATH) -> void:
 		levels[item["id"]] = 0
 	levels.erase("precision")
 	apply_upgrades()
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	_erase_save(path)
 	money_changed.emit()
 	collection_changed.emit()
 	upgrades_changed.emit()
 	hall_changed.emit()
 	progress_reset.emit()
+
+
+## A New game must never come back from disk. Deleting through a globalized
+## absolute path can silently fail (web builds keep user:// in browser
+## storage), which let an old save, finds and all, reload on the next launch.
+## Delete through user:// directly, and if the file is somehow still there,
+## overwrite it with the fresh, empty game.
+func _erase_save(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		return
+	var dir: DirAccess = DirAccess.open(path.get_base_dir())
+	if dir != null:
+		dir.remove(path.get_file())
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if FileAccess.file_exists(path):
+		save_game(path)
 
 
 func has_save(path: String = SAVE_PATH) -> bool:

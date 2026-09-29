@@ -193,8 +193,8 @@ var unbrushed_value: float = 0.5
 var clean_extract_threshold: float = 0.96
 
 var shake_enabled: bool = true
-var shake_strength: float = 8.0
-var shake_time: float = 0.18
+var shake_strength: float = 5.0
+var shake_time: float = 0.14
 
 var fossil_path: String = "res://triceratops_skull.tres"
 var precision_damage_bonus: float = 0.0
@@ -226,8 +226,15 @@ var skeleton_bonus_mult: float = 2.0
 ## pace with the museum. Explained in-game as "collectors pay more".
 var fame_per_income: float = 0.5
 var masterpiece_min_condition: int = 5
-var masterpiece_mult: float = 1.5
-var masterpiece_bonus_mult: float = 2.0
+var masterpiece_mult: float = 2.5
+var masterpiece_bonus_mult: float = 8.0
+## Masterpiece cash is also at least this many seconds of museum income, so
+## it stays huge late in the game.
+var masterpiece_income_seconds: float = 300.0
+## Full dino skeletons all draw about this many bones' worth of visitors,
+## plus up to this much extra for the biggest ones.
+var stand_target_units: float = 9.0
+var stand_size_edge: float = 0.15
 ## Repair Workshop never repairs past this condition (Perfect only comes from the ground).
 var workshop_max_condition: int = 4
 var extra_complete_set_chance: float = 0.22
@@ -287,8 +294,18 @@ const BONE_KIND_HINTS: PackedStringArray = [
 ## Solid / Fragile / Opal odds. Before Plaster Cast, crumbly bones (Opal
 ## especially) are rare so they don't feel unfair; owning it makes Opal a
 ## regular, exciting find.
-var bone_kind_weights: PackedFloat32Array = [72.0, 20.0, 8.0]
-var bone_kind_weights_no_cast: PackedFloat32Array = [85.0, 13.5, 1.5]
+## Opal never appears until you own Plaster Cast (nothing to save it with),
+## and is rare after: a real event when one turns up.
+var bone_kind_weights: PackedFloat32Array = [76.0, 20.0, 4.0]
+var bone_kind_weights_no_cast: PackedFloat32Array = [86.0, 14.0, 0.0]
+## Opal only forms in the best-kept bone: always Great or Perfect, so it is
+## always worth the race to plaster it.
+var opal_perfect_chance: float = 0.4
+
+
+func roll_opal_condition(rng: RandomNumberGenerator = null) -> int:
+	var roll: float = rng.randf() if rng != null else randf()
+	return CONDITION_PERFECT if roll < opal_perfect_chance else CONDITION_PERFECT - 1
 ## Seconds in open air before the first crumble, then between crumbles.
 var crumble_first: PackedFloat32Array = [0.0, 12.0, 6.0]
 var crumble_step: PackedFloat32Array = [0.0, 10.0, 6.0]

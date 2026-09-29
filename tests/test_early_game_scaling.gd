@@ -196,14 +196,17 @@ func _test_pick_scales_like_the_shovel() -> void:
 	GS.levels["shovel_click"] = 2
 	GS.levels["pick_click"] = 2
 	GS.apply_upgrades()
-	_assert(is_equal_approx(TN.shovel_click_mult - shovel_base, 0.20), "one shovel rank is +0.20 click")
-	_assert(is_equal_approx(TN.pickaxe_click_mult - pick_base, 0.20), "one pick rank matches shovel click")
+	## Click ranks are strong enough to compete with hold upgrades.
+	_assert(is_equal_approx(TN.shovel_click_mult - shovel_base, 0.40), "one shovel rank is +0.40 click")
+	_assert(is_equal_approx(TN.pickaxe_click_mult - pick_base, 0.30), "one pick rank is +0.30 click")
+	_assert(float(TN.shovel_hold_mult) > 1.0, "click ranks also help held digging")
 	GS.levels["pick_click"] = 6
 	GS.levels["pick_hold"] = 5
 	GS.levels["shovel_click"] = 6
 	GS.levels["shovel_hold"] = 5
 	GS.apply_upgrades()
-	_assert(is_equal_approx(TN.pickaxe_click_mult - pick_base, TN.shovel_click_mult - shovel_base), "maxed pick click ranks match the shovel")
+	## Pick ranks are a bit smaller so a maxed pick still can't tear loose dirt.
+	_assert(TN.pickaxe_click_mult - pick_base >= 0.7 * (TN.shovel_click_mult - shovel_base), "maxed pick click ranks stay close to the shovel's")
 	_assert(TN.pickaxe_hold_tick_rate >= 5.0, "maxed pick hold is in the shovel neighborhood")
 	var clay_hit: float = float(TN.damage_for(TN.TOOL_PICKAXE, 12)) * TN.pickaxe_click_mult
 	var rock_hit: float = float(TN.damage_for(TN.TOOL_PICKAXE, 18)) * TN.pickaxe_click_mult

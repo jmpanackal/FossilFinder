@@ -23,6 +23,8 @@ var round_active: bool = false
 var debug_on: bool = false
 var screen: String = "dig"
 var _shake_left: float = 0.0
+var _last_pick_shake: float = -10.0
+const PICK_SHAKE_GAP := 0.35
 var _timer_armed: bool = false
 var _last_fossil_line: String = ""
 var _last_fossil_stars: int = 0
@@ -324,7 +326,9 @@ func _process(delta: float) -> void:
 		return
 	if _shake_left > 0.0 and Tuning.shake_enabled:
 		_shake_left -= delta
-		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * Tuning.shake_strength
+		## Fades out as it ends, so hits feel punchy without rattling the screen.
+		var fade: float = clampf(_shake_left / 0.12, 0.35, 1.0)
+		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * Tuning.shake_strength * fade
 		if _shake_left <= 0.0:
 			camera.offset = Vector2.ZERO
 	if round_active and screen == "dig":
@@ -459,7 +463,7 @@ func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
 		toast.show_toast(title_text, sub, 5)
 	Sfx.play("unveil")
 	if Tuning.shake_enabled:
-		_shake_left = Tuning.shake_time * 2.5
+		_shake_left = Tuning.shake_time * 1.8
 	if screen == "dig" and dig_site != null and dig_site.visible:
 		var center: Vector2 = Tuning.pit_grid_rect().get_center()
 		_spawn_float("+$%d" % bonus, center + Vector2(0, 14), Color("E4B75A"), 26)
@@ -625,8 +629,14 @@ func _extract_fate_for(piece_id: String, note: String) -> String:
 func _on_pickaxe() -> void:
 	if not Tuning.shake_enabled:
 		return
+	## Fast late-game pickaxes hit many times a second: shake at most every
+	## so often, or the screen never stops moving.
+	var now: float = float(Time.get_ticks_msec()) / 1000.0
+	if now - _last_pick_shake < PICK_SHAKE_GAP:
+		return
+	_last_pick_shake = now
 	var boosted: bool = _boosted_tools.has(Tuning.TOOL_PICKAXE)
-	_shake_left = Tuning.shake_time * (1.7 if boosted else 1.0)
+	_shake_left = Tuning.shake_time * (1.3 if boosted else 1.0)
 
 
 func _arm_upgrade_notices() -> void:

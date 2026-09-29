@@ -566,6 +566,7 @@ func _try_place_find(data: FossilDataScript) -> bool:
 		if blocked:
 			continue
 		var layer: int = _roll_find_layer(data)
+		var kind: int = Tuning.roll_bone_kind()
 		var cells := {}
 		for offset in offsets:
 			var cell: Vector2i = origin + offset
@@ -578,8 +579,8 @@ func _try_place_find(data: FossilDataScript) -> bool:
 			"layer": layer,
 			"cells": cells,
 			"integrity": 1.0,
-			"condition": Tuning.roll_condition(null, Tuning.depth_frac(layer) * Tuning.depth_condition_luck),
-			"kind": Tuning.roll_bone_kind(),
+			"condition": Tuning.roll_opal_condition() if kind == Tuning.BONE_OPAL else Tuning.roll_condition(null, Tuning.depth_frac(layer) * Tuning.depth_condition_luck),
+			"kind": kind,
 			"air": 0.0,
 			"crumbled": 0,
 			"cast": false,
@@ -2230,8 +2231,10 @@ func _draw_fx(c: CanvasItem) -> void:
 
 
 func _draw_crumble_timers(c: CanvasItem) -> void:
-	## Over each crumbling bone: a plate reading "-1 [star] 6s" with a draining
-	## bar, red when close. With Plaster Cast owned, a prompt says how to save it.
+	## Over each crumbling bone, in plain words:
+	##   [ Hold Hands to plaster ]      <- what to do (or how to unlock it)
+	##   [ Crumbling: -1* in 6s  ]      <- what is happening, with a draining bar
+	## Cracks also spread across the bone itself as the next star gets close.
 	var font: Font = UiStyle.display_font()
 	for find in finds:
 		var left: float = crumble_in(find)
@@ -2240,32 +2243,64 @@ func _draw_crumble_timers(c: CanvasItem) -> void:
 		var kind: int = int(find.get("kind", 0))
 		var span: float = Tuning.crumble_step[kind] if float(find.get("air", 0.0)) >= Tuning.crumble_first[kind] else Tuning.crumble_first[kind]
 		var frac: float = clampf(left / maxf(span, 0.1), 0.0, 1.0)
+		_draw_spreading_cracks(c, find, 1.0 - frac)
 		var urgent: bool = left <= 3.0
 		var color := Color("FF6A4A") if urgent else (Color("9FE3F0") if kind == Tuning.BONE_OPAL else Color("F2E6C4"))
 		var anchor: Vector2 = _find_centroid(find) + Vector2(0, -Tuning.cell_h * 0.5 - 16.0)
-		var secs: String = "%ds" % int(ceil(left))
+		var lead: String = "Crumbling: -1"
+		var tail: String = "in %ds" % int(ceil(left))
 		var fs: int = 13
-		var minus_w: float = font.get_string_size("-1", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var secs_w: float = font.get_string_size(secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var lead_w: float = font.get_string_size(lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var tail_w: float = font.get_string_size(tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var star_w: float = 14.0
-		var w: float = minus_w + star_w + secs_w + 22.0
+		var w: float = lead_w + star_w + tail_w + 20.0
 		var plate := Rect2(anchor - Vector2(w * 0.5, 11.0), Vector2(w, 22.0))
-		c.draw_rect(plate, Color(0.1, 0.07, 0.05, 0.85))
+		c.draw_rect(plate, Color(0.1, 0.07, 0.05, 0.9))
 		c.draw_rect(plate, color, false, 1.5)
 		c.draw_rect(Rect2(plate.position.x + 2.0, plate.end.y - 4.0, (plate.size.x - 4.0) * frac, 2.0), color)
-		var x: float = plate.position.x + 6.0
-		c.draw_string(font, Vector2(x, anchor.y + 4.5), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
-		x += minus_w + 2.0
+		var x: float = plate.position.x + 7.0
+		c.draw_string(font, Vector2(x, anchor.y + 4.5), lead, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		x += lead_w + 1.0
 		_fx_star(c, Vector2(x + star_w * 0.5, anchor.y - 0.5), 6.0, color)
-		x += star_w + 4.0
-		c.draw_string(font, Vector2(x, anchor.y + 4.5), secs, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
-		if Tuning.cast_owned() and _castable(find):
-			## Short prompt ABOVE the timer so it never hides the bone itself.
-			var tip := "Hold to plaster" if _using_hands() else "Hands (1): plaster"
-			var tw: float = font.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-			var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.position.y - 21.0), Vector2(tw + 12.0, 18.0))
-			c.draw_rect(tip_rect, Color(PLASTER, 0.92))
-			c.draw_string(font, Vector2(tip_rect.position.x + 6.0, tip_rect.end.y - 5.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("3A2A1C"))
+		x += star_w + 3.0
+		c.draw_string(font, Vector2(x, anchor.y + 4.5), tail, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
+		## The action strip sits ABOVE the plate so it never hides the bone.
+		var tip: String = ""
+		var owned: bool = Tuning.cast_owned()
+		if owned and _castable(find):
+			tip = "Hold Hands to plaster" if _using_hands() else "Press 1, hold to plaster"
+		elif owned:
+			tip = "Dig it all out to plaster"
+		else:
+			tip = "Plaster Cast would save it"
+		var tw: float = font.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		var tip_rect := Rect2(Vector2(anchor.x - tw * 0.5 - 6.0, plate.position.y - 20.0), Vector2(tw + 12.0, 18.0))
+		var tip_fill: Color = Color(PLASTER, 0.94) if owned else Color(0.1, 0.07, 0.05, 0.75)
+		var tip_ink: Color = Color("3A2A1C") if owned else Color("D8C8A8")
+		c.draw_rect(tip_rect, tip_fill)
+		c.draw_string(font, Vector2(tip_rect.position.x + 6.0, tip_rect.end.y - 5.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tip_ink)
+
+
+func _draw_spreading_cracks(c: CanvasItem, find: Dictionary, amount: float) -> void:
+	## Hairline cracks grow across the bone as the next lost star approaches.
+	if amount <= 0.05:
+		return
+	var ink := Color(0.12, 0.07, 0.04, 0.25 + 0.55 * amount)
+	for raw in find.get("cells", {}):
+		var cell: Vector2i = raw
+		if not exposed_cells.has(cell):
+			continue
+		var r: Rect2 = _drawn_rect(cell.x, cell.y).grow(-4.0)
+		var seed: int = cell.x * 37 + cell.y * 91 + 5
+		for k in 3:
+			var a := r.position + Vector2(_hash01(seed, k * 4) * r.size.x, _hash01(seed, k * 4 + 1) * r.size.y)
+			var dir := Vector2(_hash01(seed, k * 4 + 2) - 0.5, _hash01(seed, k * 4 + 3) - 0.5).normalized()
+			var len: float = r.size.length() * 0.35 * amount
+			var mid: Vector2 = a + dir * len * 0.5 + dir.orthogonal() * 3.0
+			var b: Vector2 = a + dir * len
+			b = Vector2(clampf(b.x, r.position.x, r.end.x), clampf(b.y, r.position.y, r.end.y))
+			mid = Vector2(clampf(mid.x, r.position.x, r.end.x), clampf(mid.y, r.position.y, r.end.y))
+			c.draw_polyline(PackedVector2Array([a, mid, b]), ink, 1.2)
 
 
 func _fx_star(c: CanvasItem, center: Vector2, r: float, color: Color) -> void:

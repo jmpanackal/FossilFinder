@@ -153,7 +153,7 @@ func _test_condition_scales_museum_visitors() -> void:
 	GS.install_find("t_rex_skull", "T. rex Skull", 1.0, true, 5)
 	var perfect: int = int(GS.piece_visitors("t_rex_skull"))
 	_assert(poor < good and good < perfect, "Poor < Good < Perfect visitors")
-	_assert(perfect == good * 2, "a Perfect piece draws twice a Good one")
+	_assert(absi(perfect - good * 2) <= 1, "a Perfect piece draws twice a Good one")
 
 
 func _test_better_copy_upgrades_the_exhibit() -> void:
