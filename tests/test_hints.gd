@@ -82,7 +82,7 @@ func _test_tip_wording_stays_short_everywhere() -> void:
 	_assert(too_long.is_empty(), "they fit on one line too (%s)" % too_long)
 	var main_hold: RegEx = RegEx.create_from_string("const HINT_HOLD := ([0-9.]+)")
 	var hold: RegExMatch = main_hold.search(main_src)
-	_assert(hold != null and float(hold.get_string(1)) >= 10.0, "tips stay up long enough to read")
+	_assert(hold != null and float(hold.get_string(1)) >= 8.5 and float(hold.get_string(1)) <= 10.5, "tips stay up long enough to read, but not so long they linger")
 
 
 func _test_teach_queues_once_and_in_order() -> void:

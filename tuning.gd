@@ -299,8 +299,8 @@ const BONE_KIND_NAMES: PackedStringArray = ["Solid", "Fragile", "Opal"]
 ## Plain-language one-liners shown the first time each kind turns up.
 const BONE_KIND_HINTS: PackedStringArray = [
 	"",
-	"It dries out in open air: once half dug out it loses a star every 10s, until it is plastered.",
-	"Bone turned to opal, a rainbow gem: always Great or Perfect, worth 2.5x. Once half dug out it loses a star every 6s until plastered.",
+	"It crumbles in open air. Brush it, then plaster it with Hands.",
+	"Opal bones are worth 2.5x. Plaster it fast!",
 ]
 ## Solid / Fragile / Opal odds. Crumbling bones (Fragile and Opal) only turn up
 ## once you own Plaster Cast: without it there is nothing to save them with, so

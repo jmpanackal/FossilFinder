@@ -395,7 +395,7 @@ func catch_find(index: int) -> void:
 
 
 ## Celebrate a find on the Finds tray border, centered over its chip.
-func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0, tier: int = 1, hold: float = 0.0) -> void:
+func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0, tier: int = 1, hold: float = 0.0, subject: String = "", piece_id: String = "") -> void:
 	if _ribbon == null:
 		return
 	if not _ribbon.get("anchor_for").is_valid():
@@ -403,7 +403,7 @@ func celebrate(index: int, title: String, subtitle: String = "", stars: int = 0,
 	var chip: Control = _chip_for_find(index) if index >= 0 else null
 	if chip != null and chip.has_method("light_up"):
 		chip.call("light_up")
-	_ribbon.call("show_reward", title, subtitle, stars, tier, ribbon_anchor(index), index, hold)
+	_ribbon.call("show_reward", title, subtitle, stars, tier, ribbon_anchor(index), index, hold, subject, piece_id)
 
 
 ## True while a ribbon is on screen (tips wait for it to clear).

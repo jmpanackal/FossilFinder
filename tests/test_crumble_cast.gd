@@ -312,7 +312,7 @@ func _catalog_cost(id: String) -> int:
 func _test_plain_names_and_hints() -> void:
 	_assert(str(TN.bone_kind_name(TN.BONE_FRAGILE)) == "Fragile", "fragile bones are just called Fragile")
 	_assert(str(TN.bone_kind_name(TN.BONE_OPAL)) == "Opal", "gem bones are called Opal")
-	_assert(str(TN.BONE_KIND_HINTS[TN.BONE_FRAGILE]).contains("loses a star"), "the fragile hint says it loses stars")
+	_assert(str(TN.BONE_KIND_HINTS[TN.BONE_FRAGILE]).contains("crumbles") and str(TN.BONE_KIND_HINTS[TN.BONE_FRAGILE]).contains("plaster"), "the fragile hint says it crumbles and how to save it")
 	var item: Dictionary = {}
 	for entry in GS.catalog:
 		if str(entry["id"]) == "hands_cast":

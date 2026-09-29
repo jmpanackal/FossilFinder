@@ -36,7 +36,9 @@ var _pending_tool_notices: Dictionary = {}
 var _boosted_tools: Array[int] = []
 ## Tips wait for a quiet moment; this is the pause between two of them.
 var _hint_gap: float = 0.0
-const HINT_HOLD := 11.0
+const HINT_HOLD := 9.5
+## First-time explainers on find banners: one line, held long enough to read.
+const TEACH_HOLD := 7.0
 const HINT_PUMP_STEP := 0.25
 
 
@@ -514,7 +516,7 @@ func _on_layer_cleared(amount: int, world_pos: Vector2) -> void:
 func _on_masterpiece_ready(stand_id: String) -> void:
 	## Finished and flawless: it now waits in the museum for its unveiling.
 	var title_text: String = "%s is a Masterpiece!" % GameState.stand_title(stand_id)
-	var sub: String = "Every bone Perfect and clean. Open the museum and click it to unveil."
+	var sub: String = "Every bone Perfect: open the museum to unveil it."
 	if hud != null and hud.visible and hud.has_method("celebrate"):
 		hud.celebrate(-1, title_text, sub, 5, 3)
 	elif toast != null and toast.has_method("show_toast"):
@@ -556,6 +558,15 @@ static func condition_tier(condition: int) -> int:
 			return 2
 		_:
 			return 3
+## Which bone a find banner is about: its name and piece id (empty if unknown).
+func _find_identity(index: int) -> Dictionary:
+	if dig_site != null and index >= 0 and index < dig_site.finds.size():
+		var find: Dictionary = dig_site.finds[index]
+		var data: Variant = find.get("data", null)
+		return {"name": str(data.name) if data != null else "", "piece": str(find.get("piece_id", ""))}
+	return {"name": "", "piece": ""}
+
+
 
 
 func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> void:
@@ -567,10 +578,11 @@ func _on_condition_revealed(index: int, condition: int, world_pos: Vector2) -> v
 	if index >= 0 and index < dig_site.finds.size():
 		crumbled = int(dig_site.finds[index].get("crumbled", 0))
 	if sub.is_empty() and crumbled > 0:
-		sub = "It crumbled from %s in the open air." % Tuning.condition_name(cond + crumbled)
+		sub = "It crumbled in open air: %s → %s" % [Tuning.condition_name(cond + crumbled), Tuning.condition_name(cond)]
 	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
-		hud.celebrate(index, title_text, sub, cond, condition_tier(cond))
+		var who: Dictionary = _find_identity(index)
+		hud.celebrate(index, title_text, sub, cond, condition_tier(cond), TEACH_HOLD if not sub.is_empty() else 0.0, str(who["name"]), str(who["piece"]))
 	if cond >= 4:
 		_ping(world_pos)
 
@@ -592,15 +604,12 @@ func _on_bone_kind_seen(index: int, kind: int, _world_pos: Vector2) -> void:
 	var first: bool = GameState.take_hint("kind_%d" % kind)
 	if kind != Tuning.BONE_OPAL and not first:
 		return
-	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Always Great or Perfect, worth 2.5x. Brush, then plaster it before it crumbles!"
-	if first and not Tuning.cast_owned():
-		sub += " Only a Plaster Cast (Hands upgrade) lifts it out safely."
-	elif first:
-		sub += " Brush it, then plaster it (hold Hands) to lift it out."
+	var sub: String = Tuning.BONE_KIND_HINTS[kind] if first else "Opal again! Brush it, then plaster it before it crumbles."
 	var title_text: String = "Opal bone!" if kind == Tuning.BONE_OPAL else "Fragile bone!"
 	_refresh_find_cards()
 	if hud != null and hud.has_method("celebrate"):
-		hud.celebrate(index, title_text, sub, 0, 2 if kind == Tuning.BONE_OPAL else 1)
+		var who: Dictionary = _find_identity(index)
+		hud.celebrate(index, title_text, sub, 0, 2 if kind == Tuning.BONE_OPAL else 1, TEACH_HOLD, str(who["name"]), str(who["piece"]))
 
 
 func _on_bone_crumbled(index: int, condition: int, world_pos: Vector2) -> void:
@@ -627,9 +636,9 @@ func _on_bone_cast(index: int, world_pos: Vector2) -> void:
 func _teach_on_reveal() -> String:
 	## Plain-language explainers, each shown once ever, as the ribbon's second line.
 	if GameState.take_hint("condition"):
-		return "Stars = how well it survived underground. More stars = more $ and museum visitors."
+		return "Stars show how well it survived. More stars pay more."
 	if GameState.owns_tool(Tuning.TOOL_BRUSH) and GameState.take_hint("brush"):
-		return "Brush (4): sweep off the dirt. Clean bones sell for more $. Dirt never changes stars."
+		return "Brush cleans the fossil. Clean fossils are worth more."
 	return ""
 
 
@@ -672,7 +681,7 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 	GameState.install_find(id, fossil_name, cleanliness, clean, condition)
 	if upgrading and hud != null and hud.has_method("celebrate"):
 		var idx: int = int(dig_site.find_index_for(id)) if dig_site.has_method("find_index_for") else -1
-		hud.celebrate(idx, "Exhibit upgraded!", "%s: %s → %s (old one sold)" % [fossil_name, Tuning.condition_name(old_condition), Tuning.condition_name(condition)], condition, 3)
+		hud.celebrate(idx, "Exhibit upgraded!", "%s → %s · old copy sold" % [Tuning.condition_name(old_condition), Tuning.condition_name(condition)], condition, 3, 0.0, "", id)
 	_round_fossil_pay += GameState.money - before
 	var grade := Tuning.condition_label(condition)
 	var stars := condition

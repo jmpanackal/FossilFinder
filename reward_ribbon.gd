@@ -6,6 +6,7 @@ extends Control
 ## the tray border (below the pit), never blocks clicks, and queues if busy.
 
 const Ui := preload("res://ui_style.gd")
+const ArtCatalogScript := preload("res://art_catalog.gd")
 
 const TIER_QUIET := 0
 const TIER_GOOD := 1
@@ -18,9 +19,18 @@ const STAR_R := 9.0
 const STAR_GAP := 22.0
 const PAD := Vector2(22, 8)
 const STAR_STEP := 0.11
+## A find banner can say which bone it is about: its picture on the left and its
+## name under the title.
+const ICON_W := 46.0
+const ICON_H := 40.0
+const ICON_GAP := 12.0
+const SUBJECT_SIZE := 17
 
 var title: String = ""
 var subtitle: String = ""
+var subject: String = ""
+var _piece_id: String = ""
+var _icon_w: float = 0.0
 ## Subtitle wrapped to at most SUB_MAX_W wide so explanations never stretch
 ## the ribbon across the whole screen.
 var _sub_lines: PackedStringArray = PackedStringArray()
@@ -48,8 +58,8 @@ func is_showing() -> bool:
 
 
 ## anchor = where the ribbon's bottom-center should sit (the tray's top edge).
-func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2, index: int = -1, hold: float = 0.0) -> void:
-	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor, "index": index, "hold": hold}
+func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2, index: int = -1, hold: float = 0.0, new_subject: String = "", new_piece_id: String = "") -> void:
+	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor, "index": index, "hold": hold, "subject": new_subject, "piece": new_piece_id}
 	if is_showing():
 		## Let the current one finish quickly, then show this one.
 		_life = minf(_life, 0.6)
@@ -61,6 +71,8 @@ func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_ti
 func _start(entry: Dictionary) -> void:
 	title = str(entry["title"])
 	subtitle = str(entry["subtitle"])
+	subject = str(entry.get("subject", ""))
+	_piece_id = str(entry.get("piece", ""))
 	stars = clampi(int(entry["stars"]), 0, 5)
 	tier = int(entry["tier"])
 	_anchor = entry["anchor"]
@@ -88,13 +100,20 @@ func _layout() -> void:
 	_sub_lines = _wrap(subtitle, font)
 	for line in _sub_lines:
 		w = maxf(w, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x)
+	if not subject.is_empty():
+		w = maxf(w, font.get_string_size(subject, HORIZONTAL_ALIGNMENT_LEFT, -1, SUBJECT_SIZE).x)
 	if stars > 0:
 		w = maxf(w, STAR_GAP * 5.0)
 	var h: float = float(TITLE_SIZE) + 6.0
+	if not subject.is_empty():
+		h += float(SUBJECT_SIZE) + 4.0
 	if stars > 0:
 		h += STAR_R * 2.0 + 6.0
 	h += float(_sub_lines.size()) * (float(SUB_SIZE) + 5.0) + (1.0 if _sub_lines.size() > 0 else 0.0)
-	size = Vector2(w, h) + PAD * 2.0
+	_icon_w = (ICON_W + ICON_GAP) if not _piece_id.is_empty() else 0.0
+	if _icon_w > 0.0:
+		h = maxf(h, ICON_H)
+	size = Vector2(w + _icon_w, h) + PAD * 2.0
 	var x: float = _anchor.x - size.x * 0.5
 	var view_w: float = Tuning.view_w
 	x = clampf(x, 8.0, maxf(8.0, view_w - size.x - 8.0))
@@ -200,14 +219,22 @@ func _draw() -> void:
 				Vector2(sx, 0), Vector2(sx + 18.0, 0), Vector2(sx - 2.0, size.y), Vector2(sx - 20.0, size.y),
 			]), Color(1, 1, 1, 0.18))
 	var font: Font = Ui.display_font()
+	## The text block is centred in the space to the right of the bone picture.
+	var cx: float = PAD.x + _icon_w + (size.x - PAD.x * 2.0 - _icon_w) * 0.5
+	if _icon_w > 0.0:
+		_draw_bone_icon(accent)
 	var y: float = PAD.y + float(TITLE_SIZE)
 	var tw: float = font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE).x
-	draw_string_outline(font, Vector2((size.x - tw) * 0.5, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, 4, Color(0.08, 0.05, 0.03, 0.9))
-	draw_string(font, Vector2((size.x - tw) * 0.5, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, accent)
+	draw_string_outline(font, Vector2(cx - tw * 0.5, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, 4, Color(0.08, 0.05, 0.03, 0.9))
+	draw_string(font, Vector2(cx - tw * 0.5, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, accent)
 	y += 6.0
+	if not subject.is_empty():
+		var nw: float = font.get_string_size(subject, HORIZONTAL_ALIGNMENT_LEFT, -1, SUBJECT_SIZE).x
+		draw_string(font, Vector2(cx - nw * 0.5, y + float(SUBJECT_SIZE)), subject, HORIZONTAL_ALIGNMENT_LEFT, -1, SUBJECT_SIZE, Ui.INK)
+		y += float(SUBJECT_SIZE) + 4.0
 	if stars > 0:
 		var row_w: float = STAR_GAP * 4.0
-		var x0: float = (size.x - row_w) * 0.5
+		var x0: float = cx - row_w * 0.5
 		for i in 5:
 			var on: bool = i < _shown_stars
 			var pop: float = 1.0
@@ -217,8 +244,22 @@ func _draw() -> void:
 		y += STAR_R * 2.0 + 6.0
 	for line in _sub_lines:
 		var sw: float = font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE).x
-		draw_string(font, Vector2((size.x - sw) * 0.5, y + float(SUB_SIZE)), line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE, Ui.INK)
+		draw_string(font, Vector2(cx - sw * 0.5, y + float(SUB_SIZE)), line, HORIZONTAL_ALIGNMENT_LEFT, -1, SUB_SIZE, Ui.INK)
 		y += float(SUB_SIZE) + 5.0
+
+
+## The bone's own picture (its art, or its silhouette until there is art), on a
+## small dark plate at the left of the banner.
+func _draw_bone_icon(accent: Color) -> void:
+	var dest := Rect2(PAD.x, (size.y - ICON_H) * 0.5, ICON_W, ICON_H)
+	draw_rect(dest, Color("22170D"))
+	draw_rect(dest, Color(accent, 0.55), false, 1.0)
+	var art: Rect2 = dest.grow(-3.0)
+	if ArtCatalogScript.draw_if_present(self, "bones", _piece_id, art):
+		return
+	var data: FossilData = GameState.fossil_data_for(_piece_id)
+	if data != null:
+		data.draw_silhouette(self, dest.grow(-5.0), Color("F7E9C6"))
 
 
 func _draw_star(center: Vector2, r: float, on: bool, accent: Color) -> void:
