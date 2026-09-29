@@ -44,14 +44,14 @@ func _ready() -> void:
 	_box.add_child(_stars)
 
 
-func show_toast(title: String, subtitle: String = "", stars: int = 0) -> void:
+func show_toast(title: String, subtitle: String = "", stars: int = 0, hold: float = 0.0) -> void:
 	_title.text = title
 	_subtitle.text = subtitle
 	_subtitle.visible = not subtitle.is_empty()
 	if _stars.has_method("set_rating"):
 		_stars.set_rating(stars)
 	_stars.visible = stars > 0
-	_life = 3.4 if stars > 0 or not subtitle.is_empty() else 2.2
+	_life = maxf(3.4 if stars > 0 or not subtitle.is_empty() else 2.2, hold)
 	_layout_footer()
 	_box.modulate.a = 1.0
 	_box.pivot_offset = Vector2(_box.size.x * 0.5, _box.size.y * 0.5)

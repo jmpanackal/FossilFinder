@@ -21,6 +21,8 @@ const WALLET_RIGHT_PAD := 20.0
 var master_volume: float = 0.8
 var sfx_volume: float = 1.0
 var fullscreen: bool = true
+## Teach-as-you-play tips (see hints.gd).
+var tips_enabled: bool = true
 
 var _overlay: Control
 var _menu_panel: Panel
@@ -36,6 +38,7 @@ var _nav_context: String = "dig"
 var _master: HSlider
 var _sfx: HSlider
 var _full: CheckButton
+var _tips: CheckButton
 var _load: Button
 var _new_game: Button
 var _title_btn: Button
@@ -294,6 +297,7 @@ func load_settings() -> void:
 	master_volume = clampf(float(cfg.get_value("audio", "master", master_volume)), 0.0, 1.0)
 	sfx_volume = clampf(float(cfg.get_value("audio", "sfx", sfx_volume)), 0.0, 1.0)
 	fullscreen = bool(cfg.get_value("display", "fullscreen", fullscreen))
+	tips_enabled = bool(cfg.get_value("game", "tips", tips_enabled))
 
 
 func save_settings() -> void:
@@ -301,6 +305,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "master", master_volume)
 	cfg.set_value("audio", "sfx", sfx_volume)
 	cfg.set_value("display", "fullscreen", fullscreen)
+	cfg.set_value("game", "tips", tips_enabled)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -372,6 +377,20 @@ func _build_ui() -> void:
 	Ui.apply_check(_full)
 	_full.toggled.connect(_on_fullscreen_toggled)
 	box.add_child(_full)
+
+	var tips_row := HBoxContainer.new()
+	tips_row.add_theme_constant_override("separation", 10)
+	box.add_child(tips_row)
+	_tips = CheckButton.new()
+	_tips.text = "Show tips"
+	_tips.focus_mode = Control.FOCUS_NONE
+	_tips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	Ui.apply_check(_tips)
+	_tips.toggled.connect(_on_tips_toggled)
+	tips_row.add_child(_tips)
+	var again := _action_button("Show tips again", _on_tips_again_pressed)
+	again.size_flags_horizontal = Control.SIZE_SHRINK_END
+	tips_row.add_child(again)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -471,6 +490,7 @@ func _refresh_controls() -> void:
 	_master.value = master_volume * 100.0
 	_sfx.value = sfx_volume * 100.0
 	_full.button_pressed = fullscreen
+	_tips.button_pressed = tips_enabled
 	_load.disabled = not GameState.has_save()
 	_refreshing = false
 
@@ -502,6 +522,24 @@ func _on_fullscreen_toggled(on: bool) -> void:
 	if _refreshing:
 		return
 	set_fullscreen(on)
+
+
+func _on_tips_toggled(on: bool) -> void:
+	if _refreshing:
+		return
+	tips_enabled = on
+	if not on:
+		Hints.pending.clear()
+	save_settings()
+
+
+func _on_tips_again_pressed() -> void:
+	Hints.reset_seen()
+	if not tips_enabled:
+		tips_enabled = true
+		_refresh_controls()
+		save_settings()
+	_flash_status("Tips will show again as you play")
 
 
 func _on_save_pressed() -> void:

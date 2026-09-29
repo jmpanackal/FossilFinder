@@ -34,11 +34,23 @@ var _round_fossil_pay: int = 0
 var _extract_fate: String = ""
 var _pending_tool_notices: Dictionary = {}
 var _boosted_tools: Array[int] = []
+## Tips wait for a quiet moment; this is the pause between two of them.
+var _hint_gap: float = 0.0
+const HINT_HOLD := 11.0
+const HINT_PUMP_STEP := 0.25
 
 
 func _ready() -> void:
 	randomize()
 	GameState.load_game()
+	## The shop and museum pause the tree; tips (and their toast) must keep running.
+	toast.process_mode = Node.PROCESS_MODE_ALWAYS
+	var hint_timer := Timer.new()
+	hint_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	hint_timer.wait_time = HINT_PUMP_STEP
+	hint_timer.timeout.connect(func() -> void: _pump_hints(HINT_PUMP_STEP))
+	add_child(hint_timer)
+	hint_timer.start()
 	get_viewport().size_changed.connect(_sync_view)
 	Settings.menu_toggled.connect(_on_settings_toggled)
 	GameState.progress_reset.connect(_on_progress_reset)
@@ -152,6 +164,7 @@ func start_round() -> void:
 	_last_fossil_stars = 0
 	dig_site.start_round()
 	_arm_upgrade_notices()
+	_teach_at_shift_start()
 
 
 func show_screen(next: String) -> void:
@@ -183,6 +196,7 @@ func show_screen(next: String) -> void:
 		shop.refresh()
 	if next == "museum" and museum.has_method("_refresh"):
 		museum._refresh()
+	_teach_for_screen(next)
 	_sync_shift_pause()
 
 
@@ -205,6 +219,7 @@ func _open_shift_overlay(next: String) -> void:
 		shop.refresh()
 	if next == "museum" and museum.has_method("_refresh"):
 		museum._refresh()
+	_teach_for_screen(next)
 	_sync_shift_pause()
 
 
@@ -371,6 +386,68 @@ func _unhandled_input(event: InputEvent) -> void:
 			start_round()
 
 
+## Show the next waiting tip once nothing else is on screen: as a ribbon under
+## the pit during a dig (never over the cells), as a toast on other screens.
+func _pump_hints(delta: float) -> void:
+	_hint_gap = maxf(0.0, _hint_gap - delta)
+	if _hint_gap > 0.0 or Hints.pending.is_empty() or screen == "title" or Settings.is_open():
+		return
+	var digging: bool = screen == "dig" and round_active and hud != null and hud.visible
+	## The shift-over card sits above the toast layer, so its tips go inside it.
+	var on_summary: bool = screen == "dig" and not round_active and summary != null and summary.visible and summary.has_method("show_tip")
+	if digging:
+		if hud.has_method("ribbon_busy") and hud.ribbon_busy():
+			return
+	elif on_summary:
+		pass
+	elif toast == null or not toast.has_method("show_toast") or toast.is_showing():
+		return
+	var tip: Dictionary = Hints.next_tip()
+	if tip.is_empty():
+		return
+	if digging:
+		hud.celebrate(-1, str(tip["title"]), str(tip["text"]), 0, 1, HINT_HOLD)
+	elif on_summary:
+		summary.show_tip(str(tip["title"]), str(tip["text"]))
+		_hint_gap = HINT_HOLD
+		return
+	else:
+		toast.show_toast(str(tip["title"]), str(tip["text"]), 0, HINT_HOLD)
+	_hint_gap = 1.5
+
+
+## Tips that depend on what the player owns, asked for at the start of a shift.
+func _teach_at_shift_start() -> void:
+	Hints.teach("dig")
+	if GameState.owned_tool_ids().size() > 1:
+		Hints.teach("tools")
+	if GameState.hold_unlocked():
+		Hints.teach("hold")
+	if Tuning.hands_sense_radius > 0.0:
+		Hints.teach("sense")
+
+
+## Tips for a screen the player has just opened.
+func _teach_for_screen(next: String) -> void:
+	if next == "shop":
+		Hints.teach("shop")
+	elif next == "museum":
+		Hints.teach("museum")
+		if GameState.has_any_pending_unveil():
+			Hints.teach("ribbon")
+		for piece_id in GameState.pieces:
+			if not GameState.piece_is_clean(str(piece_id)):
+				if GameState.owns_tool(Tuning.TOOL_BRUSH):
+					Hints.teach("dirty", "Dirty bones earn less. Brush them clean (key 4).")
+				else:
+					Hints.teach("dirty")
+				break
+		if int(GameState.levels.get("spotlight", 0)) > 0:
+			Hints.teach("feature")
+		if GameState.prep_cart_owned():
+			Hints.teach("cart")
+
+
 func _end_round() -> void:
 	if not round_active:
 		return
@@ -401,6 +478,7 @@ func _show_summary() -> void:
 		if site_backdrop.has_method("set_covers_chunk_hole"):
 			site_backdrop.call("set_covers_chunk_hole", false)
 	summary.show_summary(_round_fossil_pay, _round_finds_pay, _last_fossil_line, _last_fossil_stars, _round_finds)
+	Hints.teach("summary")
 	if hud != null:
 		hud.visible = false
 	_sync_menu_chrome()
@@ -456,6 +534,7 @@ func _on_skeleton_completed(stand_id: String, bonus: int) -> void:
 	elif toast != null and toast.has_method("show_toast"):
 		toast.show_toast(title_text, sub, 5)
 	Sfx.play("unveil")
+	Hints.teach("complete")
 	if Tuning.shake_enabled:
 		_shake_left = Tuning.shake_time * 1.8
 	if screen == "dig" and dig_site != null and dig_site.visible:
@@ -562,6 +641,10 @@ func _on_fossil_exposed(world_pos: Vector2, first: bool) -> void:
 
 
 func _on_ready_to_dust(find_index: int = -1) -> void:
+	if GameState.owns_tool(Tuning.TOOL_BRUSH):
+		Hints.teach("collect", "Brush it clean (key 4): clean bones sell for more.")
+	else:
+		Hints.teach("collect")
 	if hud != null and hud.has_method("set_find_cards") and dig_site.has_method("live_find_cards"):
 		hud.set_find_cards(dig_site.live_find_cards())
 	dig_site.pulse_bones()
@@ -600,11 +683,15 @@ func _on_fossil_extracted(fossil_name: String, value: int, condition: int, clean
 		grade = "%s (was %s)" % [grade, Tuning.condition_name(condition + lost_to_air)]
 	var owns_brush: bool = GameState.owns_tool(Tuning.TOOL_BRUSH)
 	var dirt := Tuning.summary_dirt_line(cleanliness, owns_brush)
+	var stand_id: String = GameState.stand_for_piece(id)
+	var progress: Vector2i = GameState.stand_progress(stand_id)
 	_round_finds.append({
 		"name": fossil_name,
 		"piece_id": id,
 		"grade": grade,
 		"stars": stars,
+		"condition": condition,
+		"cleanliness": cleanliness,
 		"dirt": dirt,
 		"fate": _extract_fate,
 	})

@@ -22,6 +22,7 @@ Tuning="*res://tuning.gd"
 Sfx="*res://sfx.gd"
 GameState="*res://game_state.gd"
 Settings="*res://settings.gd"
+Hints="*res://hints.gd"
 
 [display]
 

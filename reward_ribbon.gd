@@ -48,8 +48,8 @@ func is_showing() -> bool:
 
 
 ## anchor = where the ribbon's bottom-center should sit (the tray's top edge).
-func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2, index: int = -1) -> void:
-	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor, "index": index}
+func show_reward(new_title: String, new_subtitle: String, new_stars: int, new_tier: int, anchor: Vector2, index: int = -1, hold: float = 0.0) -> void:
+	var entry := {"title": new_title, "subtitle": new_subtitle, "stars": new_stars, "tier": new_tier, "anchor": anchor, "index": index, "hold": hold}
 	if is_showing():
 		## Let the current one finish quickly, then show this one.
 		_life = minf(_life, 0.6)
@@ -68,7 +68,7 @@ func _start(entry: Dictionary) -> void:
 	_follow_anchor()
 	_age = 0.0
 	_shown_stars = 0
-	_life = 2.6 + (1.8 if not subtitle.is_empty() else 0.0) + (0.6 if tier >= TIER_BEST else 0.0)
+	_life = maxf(2.6 + (1.8 if not subtitle.is_empty() else 0.0) + (0.6 if tier >= TIER_BEST else 0.0), float(entry.get("hold", 0.0)))
 	_layout()
 	visible = true
 	modulate.a = 1.0
