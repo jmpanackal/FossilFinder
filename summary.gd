@@ -14,8 +14,8 @@ const PANEL_W := 600.0
 ## The finds table needs room for its columns.
 const WIDE_PANEL_W := 860.0
 const BOX_PAD := 14.0
-const PANEL_MAX_H := 620.0
-const FINDS_MAX_H := 280.0
+const PANEL_MAX_H := 660.0
+const FINDS_MAX_H := 420.0
 
 var _dim: ColorRect
 var _panel: Panel
@@ -297,6 +297,10 @@ func _apply_finds(finds: Array, fossil_line: String) -> void:
 
 func _fit_panel() -> void:
 	_panel_w = WIDE_PANEL_W if not _find_rows.is_empty() else PANEL_W
+	## With a table to show, the header slims down so the finds get the room.
+	var slim: bool = not _find_rows.is_empty()
+	_rule.visible = not slim
+	_pay.add_theme_font_size_override("font_size", 36 if slim else 46)
 	_fit_copy(_title)
 	_fit_copy(_pay)
 	_fit_copy(_breakdown)
